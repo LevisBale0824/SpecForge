@@ -28,6 +28,7 @@ OpenSpec 工作流（explore → propose → apply → archive）目前通过 CL
 | 文件监听 | notify (Rust) |
 | 序列化 | serde (Rust) |
 | 打包 | Windows (.msi/.exe), Linux (.deb/.AppImage) |
+| Linux 兼容 | glibc ≥ 2.28（CentOS 7 / RHEL 7 / Ubuntu 18.04 等老系统） |
 
 ### 整体架构
 
@@ -327,6 +328,24 @@ openspec-workbench/
 ├── tailwind.config.ts
 └── tsconfig.json
 ```
+
+## Constraints
+
+### Linux glibc 2.28 兼容性
+
+目标 Linux 环境的 glibc 版本最低为 2.28（CentOS 7 / RHEL 7 / Ubuntu 18.04）。影响：
+
+- Tauri 2 默认 Rust 编译目标使用 `manylinux` 兼容策略
+- 需要在 CI 中使用 `centos:7` 或 equivalent 容器构建 Linux 包，确保链接的 glibc 版本 ≤ 2.28
+- 避免使用 glibc 2.29+ 才有的函数（如 `statx` 系统调用）
+- 如果使用 AppImage，需要验证在 glibc 2.28 系统上的运行时兼容性
+- Rust 的 `reqwest`、`tokio`、`notify` 等库在 glibc 2.28 上兼容性良好，无已知问题
+
+### 构建策略
+
+- Windows: 在 Windows runner 上构建
+- Linux: 在 CentOS 7 Docker 容器中构建 .deb 和 .AppImage
+- 发布时附上 glibc 版本要求和兼容性说明
 
 ## Non-goals
 
