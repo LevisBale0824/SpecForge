@@ -1,9 +1,21 @@
+import { useEffect } from "react";
+import { listen } from "@tauri-apps/api/event";
 import { useWorkflowStore } from "../stores/workflow";
 import { StepNav } from "../components/layout/StepNav";
 import { WorkflowStep } from "../components/workflow/WorkflowStep";
 
 export function WorkbenchPage() {
   const { currentStep } = useWorkflowStore();
+
+  // Listen for Tauri file change events from the Rust FileWatcher service
+  useEffect(() => {
+    const unlisten = listen<string[]>("file:changed", (event) => {
+      console.log("Files changed:", event.payload);
+    });
+    return () => {
+      unlisten.then((fn) => fn());
+    };
+  }, []);
 
   return (
     <div className="h-screen flex flex-col bg-slate-950 text-slate-200">
