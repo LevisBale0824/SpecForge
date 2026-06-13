@@ -24,7 +24,12 @@ import {
 } from "../backends/registry";
 import { StorageKeys, storageGet, storageSet } from "../utils/storageKeys";
 import type { BackendKind } from "../backends/types";
-import type { SessionInfo } from "../types/sse";
+import type {
+  FileDiff,
+  MessageUpdatedPacket,
+  SessionInfo,
+  SessionStatusPacket,
+} from "../types/sse";
 
 export type { ConnectionState } from "./useBackendActivation";
 
@@ -53,6 +58,19 @@ function t(key: string): string {
 
 function toErrorMessage(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
+}
+
+function toRecord(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === "object"
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
+
+function normalizeFileDiffs(value: unknown): FileDiff[] {
+  if (Array.isArray(value)) return value as FileDiff[];
+  const rec = toRecord(value);
+  const diff = rec?.diff ?? rec?.diffs;
+  return Array.isArray(diff) ? (diff as FileDiff[]) : [];
 }
 
 // ── Sub-composable instances ──────────────────────────────────────────────
@@ -120,6 +138,23 @@ ge.on("session.deleted", (payload) => {
   if (info?.id) sessionsStore.remove(info.id);
 });
 
+ge.on("message.updated", (payload) => {
+  const info = (payload as MessageUpdatedPacket).info;
+  if (!info || info.role !== "assistant") return;
+  if (info.time?.completed === undefined && !info.finish && !info.error) return;
+  scheduleDiffRefresh(info.sessionID);
+});
+
+ge.on("file.edited", () => {
+  if (selectedSessionId.value) scheduleDiffRefresh(selectedSessionId.value, 800);
+});
+
+ge.on("session.status", (payload) => {
+  const packet = payload as SessionStatusPacket;
+  if (packet.status?.type !== "idle") return;
+  scheduleDiffRefresh(packet.sessionID, 250);
+});
+
 // Pull the persisted session list from the backend so previously-created
 // conversations appear in the sidebar (not just ones created this run).
 async function refreshSessions(): Promise<void> {
@@ -153,6 +188,30 @@ const messageSend = useBackendMessageSend({
 const msgStore = useMessages();
 const acc = useDeltaAccumulator();
 const sessionStatus = useSessionStatus();
+const pendingDiffRefresh = new Map<string, number>();
+
+function scheduleDiffRefresh(sessionId: string, delayMs = 500): void {
+  if (!sessionId) return;
+  const existing = pendingDiffRefresh.get(sessionId);
+  if (existing !== undefined) window.clearTimeout(existing);
+
+  const timer = window.setTimeout(async () => {
+    pendingDiffRefresh.delete(sessionId);
+    try {
+      const adapter = getActiveBackendAdapter();
+      if (!adapter.getSessionDiff) return;
+      const result = await adapter.getSessionDiff({
+        sessionID: sessionId,
+        directory: activeDirectory.value || undefined,
+      });
+      msgStore.setSessionDiffs(sessionId, normalizeFileDiffs(result));
+    } catch (error) {
+      console.error("[useBackend] refresh session diff failed:", error);
+    }
+  }, delayMs);
+
+  pendingDiffRefresh.set(sessionId, timer);
+}
 
 // Bind SSE scope to message store when session changes
 watch(selectedSessionId, (newId) => {
@@ -162,6 +221,7 @@ watch(selectedSessionId, (newId) => {
   msgStore.bindScope(scope);
   acc.listen(scope);
   sessionStatus.bindScope(scope);
+  scheduleDiffRefresh(newId, 0);
 });
 
 // Sync project directory → activeDirectory

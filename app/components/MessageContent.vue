@@ -2,7 +2,6 @@
 import { computed, ref } from "vue";
 import { stripSystemReminder, useMessages } from "../composables/useMessages";
 import { renderMarkdown } from "../composables/useMarkdown";
-import MessageFileChanges from "./MessageFileChanges.vue";
 
 type DisplayBlock =
   | { kind: "text"; id: string; text: string; html?: string }
@@ -40,32 +39,11 @@ const inlineBlocks = computed<DisplayBlock[]>(() => {
 });
 
 const hasInlineContent = computed(() => inlineBlocks.value.length > 0);
-const patchFiles = computed(() => {
-  const files = new Set<string>();
-  for (const part of msgStore.getParts(props.messageId)) {
-    if (part.type !== "patch") continue;
-    for (const file of part.files) files.add(file);
-  }
-  return [...files];
-});
-const messageDiffs = computed(() => {
-  const direct = msgStore.getDiffs(props.messageId);
-  if (direct?.length) return direct;
-
-  const info = message.value;
-  if (!info || info.role !== "assistant") return undefined;
-  if (msgStore.getLatestAssistantMessageId(info.sessionID) !== info.id) return undefined;
-  return msgStore.getSessionDiffs(info.sessionID);
-});
-const hasFileChanges = computed(
-  () => Boolean(messageDiffs.value?.length) || patchFiles.value.length > 0,
-);
 const showThinking = computed(
   () =>
     isStreaming.value &&
     !isUser.value &&
-    !hasInlineContent.value &&
-    !hasFileChanges.value,
+    !hasInlineContent.value,
 );
 
 const expandedReasoning = ref<Record<string, boolean>>({});
@@ -110,11 +88,6 @@ function toggleReasoning(id: string) {
       <span class="thinking-dot" />
       <span class="ml-1 text-[11px] text-surface-400">正在思考...</span>
     </div>
-
-    <MessageFileChanges
-      :diffs="messageDiffs"
-      :patch-files="patchFiles"
-    />
 
     <div v-if="isError" class="mt-1 text-xs text-accent-rose">
       {{ error?.message || "An error occurred" }}

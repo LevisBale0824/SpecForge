@@ -559,6 +559,12 @@ function getSessionDiffs(sessionId: string): MessageDiffEntry[] | undefined {
   return result.length > 0 ? result : undefined;
 }
 
+function setSessionDiffs(sessionId: string, diffs: FileDiff[]) {
+  if (!sessionId) return;
+  sessionDiffs.value.set(sessionId, diffs);
+  triggerRef(sessionDiffs);
+}
+
 function getLatestAssistantMessageId(sessionId: string): string | undefined {
   const assistants = list()
     .filter((message) => message.sessionID === sessionId && message.role === "assistant")
@@ -831,6 +837,7 @@ export function useMessages() {
     isDisplayable,
     getDiffs,
     getSessionDiffs,
+    setSessionDiffs,
     getLatestAssistantMessageId,
     getModelPath,
     getProviderId,

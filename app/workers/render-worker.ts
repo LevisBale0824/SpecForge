@@ -143,7 +143,13 @@ async function resolveLanguage(highlighter: Highlighter, lang: string) {
   return "text";
 }
 
-type LanguageLoader = () => Promise<{ default: unknown }>;
+type LanguageLoader = () => Promise<unknown>;
+
+function getLoadedLanguageModule(value: unknown): unknown {
+  if (!value || typeof value !== "object") return value;
+  if ("default" in value) return (value as { default?: unknown }).default;
+  return value;
+}
 
 async function tryLoadLanguage(
   highlighter: Highlighter,
@@ -158,7 +164,8 @@ async function tryLoadLanguage(
   try {
     if (typeof loader === "function") {
       const module = await (loader as LanguageLoader)();
-      const language = module?.default;
+      const language = getLoadedLanguageModule(module);
+      if (!language) throw new Error(`missing language module: ${candidate}`);
       await highlighter.loadLanguage(language as never);
     } else {
       await highlighter.loadLanguage(candidate as never);

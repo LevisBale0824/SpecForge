@@ -1,14 +1,24 @@
 <script setup lang="ts">
-import { ref, watch } from "vue";
+import { computed, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import SessionTree from "./SessionTree.vue";
 import FileTree from "./FileTree.vue";
+import MessageFileChanges from "./MessageFileChanges.vue";
 import { useProject } from "../composables/useProject";
+import { useMessages } from "../composables/useMessages";
 import type { SessionInfo } from "../types/sse";
 
 const { t } = useI18n();
 const { state: projectState } = useProject();
-const activeTab = ref<"sessions" | "files">("sessions");
+const msgStore = useMessages();
+type SideTab = "sessions" | "files" | "diff";
+const activeTab = ref<SideTab>("sessions");
+const tabs: SideTab[] = ["sessions", "files", "diff"];
+const tabLabels: Record<SideTab, string> = {
+  sessions: t("sidebar.sessions"),
+  files: t("sidebar.files"),
+  diff: "Diff",
+};
 
 // Auto-switch to files tab when a project is opened
 watch(
@@ -29,6 +39,17 @@ const props = withDefaults(
   },
 );
 
+const activeDiffs = computed(() => {
+  if (!props.activeSessionId) return undefined;
+  return msgStore.getSessionDiffs(props.activeSessionId);
+});
+
+const activeDiffCount = computed(() => activeDiffs.value?.length ?? 0);
+
+watch(activeDiffCount, (count) => {
+  if (count > 0) activeTab.value = "diff";
+});
+
 const emit = defineEmits<{
   "select-session": [sessionId: string];
   "delete-session": [sessionId: string];
@@ -42,7 +63,7 @@ const emit = defineEmits<{
     <!-- Tab Header -->
     <div class="flex border-b border-surface-800">
       <button
-        v-for="tab in (['sessions', 'files'] as const)"
+        v-for="tab in tabs"
         :key="tab"
         class="flex-1 py-2 text-xs font-medium transition-colors"
         :class="activeTab === tab
@@ -50,7 +71,13 @@ const emit = defineEmits<{
           : 'text-surface-500 hover:text-surface-300'"
         @click="activeTab = tab"
       >
-        {{ t(`sidebar.${tab}`) }}
+        {{ tabLabels[tab] }}
+        <span
+          v-if="tab === 'diff' && activeDiffCount > 0"
+          class="ml-1 rounded bg-accent-cyan/15 px-1.5 py-0.5 text-[10px] text-accent-cyan"
+        >
+          {{ activeDiffCount }}
+        </span>
       </button>
     </div>
 
@@ -64,7 +91,7 @@ const emit = defineEmits<{
           @delete="emit('delete-session', $event)"
         />
       </template>
-      <template v-else>
+      <template v-else-if="activeTab === 'files'">
         <div v-if="projectState.loading" class="px-2 py-4 text-xs text-surface-600 text-center">
           Loading...
         </div>
@@ -79,6 +106,15 @@ const emit = defineEmits<{
         />
         <div v-else class="text-center py-8 text-surface-600 text-sm">
           {{ t("welcome.openProject") }}
+        </div>
+      </template>
+      <template v-else>
+        <MessageFileChanges
+          v-if="activeDiffCount > 0"
+          :diffs="activeDiffs"
+        />
+        <div v-else class="px-2 py-8 text-center text-sm text-surface-600">
+          No file changes
         </div>
       </template>
     </div>
