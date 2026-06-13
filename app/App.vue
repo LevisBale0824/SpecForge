@@ -5,6 +5,7 @@ import SidePanel from "./components/SidePanel.vue";
 import StatusBar from "./components/StatusBar.vue";
 import InputPanel from "./components/InputPanel.vue";
 import FloatingWindow from "./components/FloatingWindow.vue";
+import SettingsPanel from "./components/SettingsPanel.vue";
 import { useRoute } from "vue-router";
 import { useFloatingWindows } from "./composables/useFloatingWindows";
 
@@ -63,6 +64,9 @@ function onWindowClose(key: string) {
 
     <!-- Status Bar -->
     <StatusBar />
+
+    <!-- Settings Modal -->
+    <SettingsPanel v-model="showSettings" />
 
     <!-- Floating Window Overlay -->
     <div

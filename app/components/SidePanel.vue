@@ -1,11 +1,22 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import SessionTree from "./SessionTree.vue";
+import FileTree from "./FileTree.vue";
+import { useProject } from "../composables/useProject";
 import type { SessionInfo } from "../types/sse";
 
 const { t } = useI18n();
+const { state: projectState } = useProject();
 const activeTab = ref<"sessions" | "files">("sessions");
+
+// Auto-switch to files tab when a project is opened
+watch(
+  () => projectState.directoryName,
+  (name) => {
+    if (name) activeTab.value = "files";
+  },
+);
 
 const props = withDefaults(
   defineProps<{
@@ -21,6 +32,7 @@ const props = withDefaults(
 const emit = defineEmits<{
   "select-session": [sessionId: string];
   "new-session": [];
+  "open-file": [path: string];
 }>();
 </script>
 
@@ -51,7 +63,19 @@ const emit = defineEmits<{
         />
       </template>
       <template v-else>
-        <div class="text-center py-8 text-surface-600 text-sm">
+        <div v-if="projectState.loading" class="px-2 py-4 text-xs text-surface-600 text-center">
+          Loading...
+        </div>
+        <div v-else-if="projectState.error" class="px-2 py-2 text-xs text-accent-rose">
+          {{ projectState.error }}
+        </div>
+        <FileTree
+          v-else-if="projectState.root"
+          :node="projectState.root"
+          :depth="0"
+          @open-file="emit('open-file', $event)"
+        />
+        <div v-else class="text-center py-8 text-surface-600 text-sm">
           {{ t("welcome.openProject") }}
         </div>
       </template>
