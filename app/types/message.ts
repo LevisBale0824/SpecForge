@@ -47,6 +47,8 @@ export type MessageDiffEntry = {
   diff: string;
   before?: string;
   after?: string;
+  additions?: number;
+  deletions?: number;
 };
 
 // ── Message ───────────────────────────────────────────────────────────────

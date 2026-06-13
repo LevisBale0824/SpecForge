@@ -31,6 +31,12 @@ const hasChanges = computed(
 );
 
 function fileStats(diff: MessageDiffEntry) {
+  if (typeof diff.additions === "number" || typeof diff.deletions === "number") {
+    return {
+      additions: diff.additions ?? 0,
+      deletions: diff.deletions ?? 0,
+    };
+  }
   const source = diff.diff || "";
   let additions = 0;
   let deletions = 0;

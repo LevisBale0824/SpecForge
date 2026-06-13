@@ -538,6 +538,8 @@ function getDiffs(id: string): MessageDiffEntry[] | undefined {
       diff: diff.patch ?? "",
       before: diff.before,
       after: diff.after,
+      additions: diff.additions,
+      deletions: diff.deletions,
     });
   }
   return result.length > 0 ? result : undefined;
@@ -554,6 +556,8 @@ function getSessionDiffs(sessionId: string): MessageDiffEntry[] | undefined {
       diff: diff.patch ?? "",
       before: diff.before,
       after: diff.after,
+      additions: diff.additions,
+      deletions: diff.deletions,
     });
   }
   return result.length > 0 ? result : undefined;

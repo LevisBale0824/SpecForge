@@ -6,6 +6,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
   selectDirectory: () => ipcRenderer.invoke("selectDirectory"),
   readDirectory: (rootPath, relPath) =>
     ipcRenderer.invoke("readDirectory", rootPath, relPath || ""),
+  readWorkspaceDiff: (rootPath) => ipcRenderer.invoke("readWorkspaceDiff", rootPath),
   getServerStatus: () => ipcRenderer.invoke("getServerStatus"),
   restartServer: () => ipcRenderer.invoke("restartServer"),
   // Native menu → renderer. Returns an unsubscribe function.

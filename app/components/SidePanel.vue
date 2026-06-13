@@ -6,7 +6,8 @@ import FileTree from "./FileTree.vue";
 import MessageFileChanges from "./MessageFileChanges.vue";
 import { useProject } from "../composables/useProject";
 import { useMessages } from "../composables/useMessages";
-import type { SessionInfo } from "../types/sse";
+import type { MessageDiffEntry } from "../types/message";
+import type { FileDiff, SessionInfo } from "../types/sse";
 
 const { t } = useI18n();
 const { state: projectState } = useProject();
@@ -32,14 +33,30 @@ const props = withDefaults(
   defineProps<{
     sessions?: SessionInfo[];
     activeSessionId?: string;
+    workspaceDiffs?: readonly FileDiff[];
   }>(),
   {
     sessions: () => [],
     activeSessionId: "",
+    workspaceDiffs: () => [],
   },
 );
 
+const workspaceDiffEntries = computed<MessageDiffEntry[]>(() =>
+  props.workspaceDiffs
+    .filter((diff) => diff.file)
+    .map((diff) => ({
+      file: diff.file,
+      diff: diff.patch ?? "",
+      before: diff.before,
+      after: diff.after,
+      additions: diff.additions,
+      deletions: diff.deletions,
+    })),
+);
+
 const activeDiffs = computed(() => {
+  if (workspaceDiffEntries.value.length > 0) return workspaceDiffEntries.value;
   if (!props.activeSessionId) return undefined;
   return msgStore.getSessionDiffs(props.activeSessionId);
 });

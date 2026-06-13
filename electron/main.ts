@@ -21,6 +21,16 @@ type DirEntry = {
   path: string;
 };
 
+type WorkspaceFileDiff = {
+  file: string;
+  before?: string;
+  after?: string;
+  patch?: string;
+  additions: number;
+  deletions: number;
+  status?: "added" | "deleted" | "modified";
+};
+
 const IGNORED_DIRS = new Set([
   "node_modules",
   ".git",
@@ -49,6 +59,152 @@ async function readDirectoryEntries(dirPath: string): Promise<DirEntry[]> {
     return a.name.localeCompare(b.name);
   });
   return result;
+}
+
+function runGit(
+  directory: string,
+  args: string[],
+): Promise<{ stdout: Buffer; stderr: Buffer; code: number }> {
+  return new Promise((resolve, reject) => {
+    const proc = spawn("git", args, {
+      cwd: directory,
+      shell: false,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    const stdout: Buffer[] = [];
+    const stderr: Buffer[] = [];
+    proc.stdout?.on("data", (chunk: Buffer) => stdout.push(chunk));
+    proc.stderr?.on("data", (chunk: Buffer) => stderr.push(chunk));
+    proc.on("error", reject);
+    proc.on("close", (code) => {
+      resolve({
+        stdout: Buffer.concat(stdout),
+        stderr: Buffer.concat(stderr),
+        code: code ?? 0,
+      });
+    });
+  });
+}
+
+function parsePorcelainStatus(output: Buffer): Array<{
+  path: string;
+  status: "added" | "deleted" | "modified";
+}> {
+  const chunks = output.toString("utf8").split("\0").filter(Boolean);
+  const result: Array<{
+    path: string;
+    status: "added" | "deleted" | "modified";
+  }> = [];
+
+  for (let i = 0; i < chunks.length; i++) {
+    const item = chunks[i];
+    const xy = item.slice(0, 2);
+    let file = item.slice(3);
+    if (xy[0] === "R" || xy[0] === "C") {
+      file = chunks[i + 1] ?? file;
+      i += 1;
+    }
+    if (!file) continue;
+    const status =
+      xy.includes("?") || xy.includes("A")
+        ? "added"
+        : xy.includes("D")
+          ? "deleted"
+          : "modified";
+    result.push({ path: file.replace(/\\/g, "/"), status });
+  }
+
+  return result;
+}
+
+function isPathInside(rootPath: string, filePath: string): boolean {
+  const root = path.resolve(rootPath);
+  const target = path.resolve(rootPath, ...filePath.split("/"));
+  return target === root || target.startsWith(root + path.sep);
+}
+
+function readTextFile(rootPath: string, relPath: string): string | undefined {
+  if (!isPathInside(rootPath, relPath)) return undefined;
+  const abs = path.resolve(rootPath, ...relPath.split("/"));
+  if (!fs.existsSync(abs)) return undefined;
+  const stat = fs.statSync(abs);
+  if (!stat.isFile() || stat.size > 1024 * 1024) return undefined;
+  const content = fs.readFileSync(abs);
+  if (content.includes(0)) return undefined;
+  return content.toString("utf8");
+}
+
+async function readGitHeadFile(
+  rootPath: string,
+  relPath: string,
+): Promise<string | undefined> {
+  const result = await runGit(rootPath, ["show", `HEAD:${relPath}`]);
+  if (result.code !== 0) return undefined;
+  if (result.stdout.length > 1024 * 1024) return undefined;
+  if (result.stdout.includes(0)) return undefined;
+  return result.stdout.toString("utf8");
+}
+
+function countPatchStats(patchText: string): {
+  additions: number;
+  deletions: number;
+} {
+  let additions = 0;
+  let deletions = 0;
+  for (const line of patchText.split("\n")) {
+    if (line.startsWith("+") && !line.startsWith("+++")) additions += 1;
+    if (line.startsWith("-") && !line.startsWith("---")) deletions += 1;
+  }
+  return { additions, deletions };
+}
+
+async function readWorkspaceDiffs(rootPath: string): Promise<WorkspaceFileDiff[]> {
+  const status = await runGit(rootPath, [
+    "-c",
+    "core.quotepath=false",
+    "status",
+    "--porcelain=v1",
+    "--untracked-files=all",
+    "-z",
+  ]);
+  if (status.code !== 0) return [];
+
+  const files = parsePorcelainStatus(status.stdout);
+  const diffs: WorkspaceFileDiff[] = [];
+  for (const item of files) {
+    const before =
+      item.status === "added" ? undefined : await readGitHeadFile(rootPath, item.path);
+    const after =
+      item.status === "deleted" ? undefined : readTextFile(rootPath, item.path);
+    const patch =
+      item.status === "added"
+        ? ""
+        : (
+            await runGit(rootPath, [
+              "-c",
+              "core.quotepath=false",
+              "diff",
+              "--",
+              item.path,
+            ])
+          ).stdout.toString("utf8");
+    const stats =
+      item.status === "added" && after
+        ? { additions: after.split("\n").length, deletions: 0 }
+        : countPatchStats(patch);
+    if (before === undefined && after === undefined && !patch.trim()) continue;
+    diffs.push({
+      file: item.path,
+      before,
+      after,
+      patch,
+      additions: stats.additions,
+      deletions: stats.deletions,
+      status: item.status,
+    });
+  }
+
+  return diffs;
 }
 
 // ESM-compatible __dirname
@@ -186,6 +342,15 @@ function registerIpcHandlers() {
       }
     },
   );
+
+  ipcMain.handle("readWorkspaceDiff", async (_e, rootPath: string) => {
+    try {
+      return await readWorkspaceDiffs(rootPath);
+    } catch (err) {
+      console.error("[electron] readWorkspaceDiff failed:", err);
+      return [];
+    }
+  });
 
   ipcMain.handle("getServerStatus", async () => {
     return serverStatus;

@@ -15,7 +15,10 @@ import { useDeltaAccumulator } from "./useDeltaAccumulator";
 import { useSessionStatus } from "./useSessionStatus";
 import { useSessions } from "./useSessions";
 import { useProject } from "./useProject";
-import { isElectron as detectElectron } from "../utils/electronBridge";
+import {
+  isElectron as detectElectron,
+  readWorkspaceDiff,
+} from "../utils/electronBridge";
 import {
   getActiveBackendKind,
   getActiveBackendAdapter,
@@ -51,6 +54,7 @@ const agent = ref("general");
 const modelId = ref("");
 const providerId = ref("");
 const variant = ref("");
+const workspaceDiffs = ref<FileDiff[]>([]);
 
 function t(key: string): string {
   return key;
@@ -147,6 +151,7 @@ ge.on("message.updated", (payload) => {
 
 ge.on("file.edited", () => {
   if (selectedSessionId.value) scheduleDiffRefresh(selectedSessionId.value, 800);
+  else scheduleWorkspaceDiffRefresh(800);
 });
 
 ge.on("session.status", (payload) => {
@@ -189,6 +194,33 @@ const msgStore = useMessages();
 const acc = useDeltaAccumulator();
 const sessionStatus = useSessionStatus();
 const pendingDiffRefresh = new Map<string, number>();
+let pendingWorkspaceDiffRefresh: number | undefined;
+
+async function refreshWorkspaceDiffs(): Promise<FileDiff[]> {
+  if (!activeDirectory.value) {
+    workspaceDiffs.value = [];
+    return [];
+  }
+  try {
+    const diffs = ((await readWorkspaceDiff(activeDirectory.value)) ?? []) as FileDiff[];
+    workspaceDiffs.value = diffs;
+    return diffs;
+  } catch (error) {
+    console.error("[useBackend] refresh workspace diff failed:", error);
+    workspaceDiffs.value = [];
+    return [];
+  }
+}
+
+function scheduleWorkspaceDiffRefresh(delayMs = 250): void {
+  if (pendingWorkspaceDiffRefresh !== undefined) {
+    window.clearTimeout(pendingWorkspaceDiffRefresh);
+  }
+  pendingWorkspaceDiffRefresh = window.setTimeout(() => {
+    pendingWorkspaceDiffRefresh = undefined;
+    void refreshWorkspaceDiffs();
+  }, delayMs);
+}
 
 function scheduleDiffRefresh(sessionId: string, delayMs = 500): void {
   if (!sessionId) return;
@@ -197,17 +229,24 @@ function scheduleDiffRefresh(sessionId: string, delayMs = 500): void {
 
   const timer = window.setTimeout(async () => {
     pendingDiffRefresh.delete(sessionId);
-    try {
-      const adapter = getActiveBackendAdapter();
-      if (!adapter.getSessionDiff) return;
-      const result = await adapter.getSessionDiff({
-        sessionID: sessionId,
-        directory: activeDirectory.value || undefined,
-      });
-      msgStore.setSessionDiffs(sessionId, normalizeFileDiffs(result));
-    } catch (error) {
-      console.error("[useBackend] refresh session diff failed:", error);
+    let sessionDiffs: FileDiff[] = [];
+    const adapter = getActiveBackendAdapter();
+    if (adapter.getSessionDiff) {
+      try {
+        const result = await adapter.getSessionDiff({
+          sessionID: sessionId,
+          directory: activeDirectory.value || undefined,
+        });
+        sessionDiffs = normalizeFileDiffs(result);
+      } catch (error) {
+        console.error("[useBackend] refresh session diff failed:", error);
+      }
     }
+    const workspace = await refreshWorkspaceDiffs();
+    msgStore.setSessionDiffs(
+      sessionId,
+      workspace.length > 0 ? workspace : sessionDiffs,
+    );
   }, delayMs);
 
   pendingDiffRefresh.set(sessionId, timer);
@@ -234,7 +273,13 @@ const project = useProject();
 watch(
   () => project.state.directoryPath,
   (path) => {
-    if (path && isAbsolutePath(path)) activeDirectory.value = path;
+    if (path && isAbsolutePath(path)) {
+      activeDirectory.value = path;
+      scheduleWorkspaceDiffRefresh(0);
+    }
+    if (path && selectedSessionId.value) {
+      scheduleDiffRefresh(selectedSessionId.value, 0);
+    }
   },
   { immediate: true },
 );
@@ -371,6 +416,7 @@ export function useBackend() {
     isRetrying: sessionStatus.isRetrying,
     sessionStatus: sessionStatus.status,
     sessions: sessionsStore.sortedSessions,
+    workspaceDiffs: readonly(workspaceDiffs),
     isElectron: electronMode,
 
     // Actions

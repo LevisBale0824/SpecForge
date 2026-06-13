@@ -84,6 +84,7 @@ function onNewSession() {
         class="flex-shrink-0 border-r border-surface-800"
         :sessions="backend.sessions.value"
         :active-session-id="backend.selectedSessionId.value"
+        :workspace-diffs="backend.workspaceDiffs.value"
         @select-session="onSelectSession"
         @delete-session="onDeleteSession"
         @new-session="onNewSession"

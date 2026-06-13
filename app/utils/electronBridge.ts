@@ -27,6 +27,15 @@ export async function readDirectory(
   return null;
 }
 
+export async function readWorkspaceDiff(
+  rootPath: string,
+): Promise<import("../types/electron").WorkspaceFileDiff[] | null> {
+  if (window.electronAPI) {
+    return window.electronAPI.readWorkspaceDiff(rootPath);
+  }
+  return null;
+}
+
 export function onOpenFolder(
   callback: (path: string) => void,
 ): (() => void) | null {
