@@ -29,8 +29,6 @@ export default {
     agent: {
       opencode: "OpenCode",
       zero: "Zero",
-      opencodeDesc: "原生 OpenCode 服务器",
-      zeroDesc: "Zero(opencode 兼容分支)",
     },
   },
   chat: {

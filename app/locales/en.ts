@@ -29,8 +29,6 @@ export default {
     agent: {
       opencode: "OpenCode",
       zero: "Zero",
-      opencodeDesc: "Native OpenCode server",
-      zeroDesc: "Zero (opencode-compatible fork)",
     },
   },
   chat: {
