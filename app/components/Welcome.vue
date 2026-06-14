@@ -71,8 +71,11 @@ function submitManualPath() {
     <div class="text-center max-w-md">
       <!-- Logo -->
       <div class="mb-6 flex justify-center">
-        <div
-          class="w-16 h-16 rounded-2xl bg-gradient-to-br from-accent-cyan via-accent-indigo to-accent-emerald opacity-80"
+        <img
+          src="/specforge-icon.svg"
+          alt="SpecForge"
+          class="w-16 h-16 rounded-2xl"
+          draggable="false"
         />
       </div>
 

@@ -1,0 +1,35 @@
+<svg width="256" height="256" title="SpecForge" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg" id="specforge">
+  <style>
+    #specforge {
+      rect.bg { fill: #0b0e14; }
+      path.bracket { stroke: #f1f5f9; }
+      circle.dot-cyan { fill: #22d3ee; }
+      circle.dot-indigo { fill: #6366f1; }
+      circle.dot-emerald { fill: #10b981; }
+      circle.dot-amber { fill: #f59e0b; }
+
+      @media (prefers-color-scheme: light) {
+        rect.bg { fill: #f4f2ed; }
+        path.bracket { stroke: #1e293b; }
+        circle.dot-cyan { fill: #0891b2; }
+        circle.dot-indigo { fill: #4f46e5; }
+        circle.dot-emerald { fill: #059669; }
+        circle.dot-amber { fill: #d97706; }
+      }
+    }
+  </style>
+
+  <!-- Background -->
+  <rect class="bg" width="256" height="256" rx="48" />
+
+  <!-- Main element: code bracket pair framing the icon -->
+  <path class="bracket" d="M88 68 L40 128 L88 188" stroke-width="16" stroke-linecap="round" stroke-linejoin="round" />
+  <path class="bracket" d="M168 68 L216 128 L168 188" stroke-width="16" stroke-linecap="round" stroke-linejoin="round" />
+
+  <!-- Auxiliary element: 4 ascending dots representing the OpenSpec
+       workflow (Explore → Propose → Apply → Archive) passing through code -->
+  <circle class="dot-cyan"    cx="98"  cy="172" r="8"  />
+  <circle class="dot-indigo"  cx="116" cy="148" r="9"  />
+  <circle class="dot-emerald" cx="134" cy="124" r="10" />
+  <circle class="dot-amber"   cx="152" cy="96"  r="11" />
+</svg>
