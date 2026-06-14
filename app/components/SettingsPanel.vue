@@ -35,7 +35,12 @@ function changeLocale(lang: string) {
 const urlInput = ref(backend.baseUrl.value);
 const authInput = ref(backend.authHeader.value ?? "");
 
-watch(() => backend.baseUrl.value, (v) => { urlInput.value = v; });
+watch(
+  () => backend.baseUrl.value,
+  (v) => {
+    urlInput.value = v;
+  },
+);
 
 function applyUrl() {
   backend.setBaseUrl(urlInput.value.trim());
@@ -83,7 +88,9 @@ function close() {
       <div class="absolute inset-0 bg-black/60" @click="close" />
 
       <!-- Panel -->
-      <div class="relative w-full max-w-md bg-surface-900 border border-surface-700 rounded-xl shadow-2xl p-6">
+      <div
+        class="relative w-full max-w-md bg-surface-900 border border-surface-700 rounded-xl shadow-2xl p-6"
+      >
         <!-- Header -->
         <div class="flex items-center justify-between mb-6">
           <h2 class="text-lg font-semibold text-surface-200">{{ t("settings.title") }}</h2>
@@ -92,7 +99,12 @@ function close() {
             @click="close"
           >
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M6 18L18 6M6 6l12 12"
+              />
             </svg>
           </button>
         </div>
@@ -101,12 +113,24 @@ function close() {
         <div class="mb-5">
           <label class="block text-sm text-surface-400 mb-2">{{ t("settings.backend") }}</label>
           <div class="flex items-center gap-2">
-            <span class="w-2 h-2 rounded-full" :class="statusColor[backend.connectionState.value] ?? 'bg-surface-600'" />
-            <span class="text-sm" :class="backend.connectionState.value === 'ready' ? 'text-accent-emerald' : 'text-surface-400'">
+            <span
+              class="w-2 h-2 rounded-full"
+              :class="statusColor[backend.connectionState.value] ?? 'bg-surface-600'"
+            />
+            <span
+              class="text-sm"
+              :class="
+                backend.connectionState.value === 'ready'
+                  ? 'text-accent-emerald'
+                  : 'text-surface-400'
+              "
+            >
               {{ t(statusText[backend.connectionState.value] ?? "status.disconnected") }}
             </span>
           </div>
-          <p v-if="backend.errorMessage.value" class="text-xs text-accent-rose mt-1">{{ backend.errorMessage.value }}</p>
+          <p v-if="backend.errorMessage.value" class="text-xs text-accent-rose mt-1">
+            {{ backend.errorMessage.value }}
+          </p>
         </div>
 
         <!-- OpenCode Server URL -->
@@ -122,12 +146,19 @@ function close() {
             />
             <button
               class="px-3 py-2 text-xs font-medium rounded-lg transition-colors"
-              :class="backend.connectionState.value === 'ready'
-                ? 'bg-accent-rose/15 text-accent-rose hover:bg-accent-rose/25'
-                : 'bg-accent-cyan/15 text-accent-cyan hover:bg-accent-cyan/25'"
-              @click="applyUrl(); toggleConnection()"
+              :class="
+                backend.connectionState.value === 'ready'
+                  ? 'bg-accent-rose/15 text-accent-rose hover:bg-accent-rose/25'
+                  : 'bg-accent-cyan/15 text-accent-cyan hover:bg-accent-cyan/25'
+              "
+              @click="
+                applyUrl();
+                toggleConnection();
+              "
             >
-              {{ backend.connectionState.value === "ready" ? t("chat.abort") : t("settings.backend") }}
+              {{
+                backend.connectionState.value === "ready" ? t("chat.abort") : t("settings.backend")
+              }}
             </button>
           </div>
         </div>
@@ -152,9 +183,11 @@ function close() {
               v-for="lang in languages"
               :key="lang.value"
               class="px-3 py-1.5 text-sm rounded-lg transition-colors"
-              :class="selectedLang === lang.value
-                ? 'bg-accent-cyan/15 text-accent-cyan border border-accent-cyan/30'
-                : 'bg-surface-800 text-surface-400 hover:text-surface-200 border border-transparent'"
+              :class="
+                selectedLang === lang.value
+                  ? 'bg-accent-cyan/15 text-accent-cyan border border-accent-cyan/30'
+                  : 'bg-surface-800 text-surface-400 hover:text-surface-200 border border-transparent'
+              "
               @click="changeLocale(lang.value)"
             >
               {{ lang.label }}

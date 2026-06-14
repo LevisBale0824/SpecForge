@@ -12,7 +12,6 @@ const props = defineProps<{ messageId: string }>();
 const msgStore = useMessages();
 
 const status = computed(() => msgStore.getStatus(props.messageId));
-const message = computed(() => msgStore.get(props.messageId));
 const isUser = computed(() => msgStore.get(props.messageId)?.role === "user");
 const isStreaming = computed(() => status.value === "streaming");
 const isError = computed(() => status.value === "error");
@@ -39,12 +38,7 @@ const inlineBlocks = computed<DisplayBlock[]>(() => {
 });
 
 const hasInlineContent = computed(() => inlineBlocks.value.length > 0);
-const showThinking = computed(
-  () =>
-    isStreaming.value &&
-    !isUser.value &&
-    !hasInlineContent.value,
-);
+const showThinking = computed(() => isStreaming.value && !isUser.value && !hasInlineContent.value);
 
 const expandedReasoning = ref<Record<string, boolean>>({});
 function toggleReasoning(id: string) {
@@ -55,15 +49,10 @@ function toggleReasoning(id: string) {
 <template>
   <div>
     <template v-for="block in inlineBlocks" :key="block.id">
-      <div
-        v-if="block.kind === 'text' && block.html"
-        class="md-content"
-        v-html="block.html"
-      />
-      <div
-        v-else-if="block.kind === 'text'"
-        class="whitespace-pre-wrap break-words"
-      >{{ block.text }}</div>
+      <div v-if="block.kind === 'text' && block.html" class="md-content" v-html="block.html" />
+      <div v-else-if="block.kind === 'text'" class="whitespace-pre-wrap break-words">
+        {{ block.text }}
+      </div>
 
       <div v-else-if="block.kind === 'reasoning'" class="my-1">
         <button
@@ -78,7 +67,9 @@ function toggleReasoning(id: string) {
         <div
           v-if="expandedReasoning[block.id]"
           class="mt-1 whitespace-pre-wrap border-l border-surface-700 pl-2 text-[12px] italic text-surface-400"
-        >{{ block.text }}</div>
+        >
+          {{ block.text }}
+        </div>
       </div>
     </template>
 

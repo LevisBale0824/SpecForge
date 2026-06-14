@@ -13,7 +13,6 @@ import type {
   MessagePartUpdatedPacket,
   MessagePartDeltaPacket,
   ToolPart,
-  TextPart,
   ReasoningPart,
 } from "../types/sse";
 
@@ -62,9 +61,7 @@ function resolveToolComponent(toolName: string): Component {
   }
 }
 
-function resolveToolVariant(
-  toolName: string,
-): "code" | "diff" | "message" | "term" | "plain" {
+function resolveToolVariant(toolName: string): "code" | "diff" | "message" | "term" | "plain" {
   switch (toolName) {
     case "edit":
     case "multiedit":
@@ -97,11 +94,7 @@ export function useStreamingWindowManager() {
     return entries;
   }
 
-  function makeWindowKey(
-    sessionId: string,
-    _messageId: string,
-    partId: string,
-  ): string {
+  function makeWindowKey(sessionId: string, _messageId: string, partId: string): string {
     return `tool:${sessionId.slice(0, 8)}:${partId}`;
   }
 
@@ -120,8 +113,7 @@ export function useStreamingWindowManager() {
         const key = makeWindowKey(sessionId, part.messageID, part.id);
         const component = resolveToolComponent(toolName);
         const variant = resolveToolVariant(toolName);
-        const color =
-          getFloatingWindowColor(key) ?? toolColor(toolName);
+        const color = getFloatingWindowColor(key) ?? toolColor(toolName);
 
         const state = toolPart.state;
 
@@ -131,16 +123,12 @@ export function useStreamingWindowManager() {
           formatReadLikeToolTitle(state.input) ??
           toolName;
 
-        const lang = guessLanguageFromPath(
-          state.input?.filePath as string | undefined,
-        );
+        const lang = guessLanguageFromPath(state.input?.filePath as string | undefined);
 
         if (state.status === "pending" || state.status === "running") {
           // Tool started or still running
           const content =
-            state.status === "running"
-              ? (state.metadata?.output as string) ?? ""
-              : "";
+            state.status === "running" ? ((state.metadata?.output as string) ?? "") : "";
 
           fw.open(key, {
             component,

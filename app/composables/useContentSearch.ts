@@ -26,8 +26,7 @@ function getHighlightRegistry(): HighlightRegistryLike {
 }
 
 function getHighlightConstructor(): HighlightConstructorLike {
-  return (globalThis as unknown as { Highlight: HighlightConstructorLike })
-    .Highlight;
+  return (globalThis as unknown as { Highlight: HighlightConstructorLike }).Highlight;
 }
 
 function clearHighlights(registry: HighlightRegistryLike): void {
@@ -35,10 +34,7 @@ function clearHighlights(registry: HighlightRegistryLike): void {
   registry.delete(CURRENT_HIGHLIGHT_NAME);
 }
 
-function collectMatchRanges(
-  container: HTMLElement,
-  queryText: string,
-): Range[] {
+function collectMatchRanges(container: HTMLElement, queryText: string): Range[] {
   const ranges: Range[] = [];
   const query = queryText.toLocaleLowerCase();
   const queryLength = query.length;
@@ -68,9 +64,7 @@ function collectMatchRanges(
   return ranges;
 }
 
-export function useContentSearch(
-  containerEl: Ref<HTMLElement | undefined>,
-) {
+export function useContentSearch(containerEl: Ref<HTMLElement | undefined>) {
   const owner = Symbol("content-search-owner");
   const isSearching = ref(false);
   const query = ref("");
@@ -111,10 +105,7 @@ export function useContentSearch(
     if (activeSearchOwner !== owner) return;
     clearHighlights(registry);
     if (matchRanges.length === 0) return;
-    registry.set(
-      SEARCH_HIGHLIGHT_NAME,
-      new HighlightImpl(...matchRanges),
-    );
+    registry.set(SEARCH_HIGHLIGHT_NAME, new HighlightImpl(...matchRanges));
     updateCurrentHighlight();
   }
 
@@ -169,10 +160,7 @@ export function useContentSearch(
   function next(): void {
     activeSearchOwner = owner;
     if (matchRanges.length === 0) return;
-    const nextIndex =
-      currentIndex.value < 0
-        ? 0
-        : (currentIndex.value + 1) % matchRanges.length;
+    const nextIndex = currentIndex.value < 0 ? 0 : (currentIndex.value + 1) % matchRanges.length;
     currentIndex.value = nextIndex;
     updateCurrentHighlight();
   }

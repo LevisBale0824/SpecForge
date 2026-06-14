@@ -91,21 +91,12 @@ function nextZIndex(manualTier: boolean): number {
   return ++zIndexCounter + (manualTier ? MANUAL_ZINDEX_OFFSET : 0);
 }
 
-function getAxisBounds(
-  extentSize: number,
-  windowSize: number,
-  visibleSize: number,
-) {
-  const keepVisible = Math.max(
-    1,
-    Math.min(visibleSize, windowSize, extentSize),
-  );
+function getAxisBounds(extentSize: number, windowSize: number, visibleSize: number) {
+  const keepVisible = Math.max(1, Math.min(visibleSize, windowSize, extentSize));
   return { min: keepVisible - windowSize, max: extentSize - keepVisible };
 }
 
-function variantToGutterMode(
-  variant?: string,
-): "none" | "single" | "double" {
+function variantToGutterMode(variant?: string): "none" | "single" | "double" {
   switch (variant) {
     case "diff":
       return "double";
@@ -132,15 +123,11 @@ function resolveExpiresAt(
 ): number {
   if (typeof opts.expiresAt === "number") return opts.expiresAt;
   if (typeof opts.expiry === "number") {
-    return opts.expiry === Infinity
-      ? Number.MAX_SAFE_INTEGER
-      : Date.now() + opts.expiry;
+    return opts.expiry === Infinity ? Number.MAX_SAFE_INTEGER : Date.now() + opts.expiry;
   }
   const status = opts.status;
-  if (status === "completed" || status === "error")
-    return Date.now() + TOOL_COMPLETED_TTL_MS;
-  if (existing && typeof existing.expiresAt === "number")
-    return existing.expiresAt;
+  if (status === "completed" || status === "error") return Date.now() + TOOL_COMPLETED_TTL_MS;
+  if (existing && typeof existing.expiresAt === "number") return existing.expiresAt;
   return Date.now() + TOOL_RUNNING_TTL_MS;
 }
 
@@ -172,10 +159,7 @@ export function useFloatingWindows() {
     return extent;
   }
 
-  function getRandomPosition(
-    targetWidth = 600,
-    targetHeight = 400,
-  ): { x: number; y: number } {
+  function getRandomPosition(targetWidth = 600, targetHeight = 400): { x: number; y: number } {
     const padding = 20;
     const maxX = Math.max(0, extent.width - targetWidth - padding);
     const maxY = Math.max(0, extent.height - targetHeight - padding);
@@ -214,10 +198,7 @@ export function useFloatingWindows() {
 
   // ── open() ───────────────────────────────────────────────────────────
 
-  async function open(
-    key: string,
-    opts: Partial<FloatingWindowEntry>,
-  ): Promise<void> {
+  async function open(key: string, opts: Partial<FloatingWindowEntry>): Promise<void> {
     const existing = entriesMap.get(key);
 
     const merged: FloatingWindowEntry = {
@@ -243,10 +224,7 @@ export function useFloatingWindows() {
 
     const windowWidth = merged.width ?? 600;
     const xBounds = getAxisBounds(extent.width, windowWidth, TITLEBAR_VISIBLE_PX);
-    const keepVisibleY = Math.max(
-      1,
-      Math.min(TITLEBAR_VISIBLE_PX, extent.height),
-    );
+    const keepVisibleY = Math.max(1, Math.min(TITLEBAR_VISIBLE_PX, extent.height));
     merged.x = Math.max(xBounds.min, Math.min(merged.x, xBounds.max));
     merged.y = Math.max(0, Math.min(merged.y, extent.height - keepVisibleY));
 
@@ -264,9 +242,7 @@ export function useFloatingWindows() {
 
       if (typeof merged.content === "function") {
         try {
-          entry.resolvedHtml = await (
-            merged.content as () => Promise<string>
-          )();
+          entry.resolvedHtml = await (merged.content as () => Promise<string>)();
         } catch (e) {
           entry.resolvedHtml = String(e);
         }
@@ -306,9 +282,7 @@ export function useFloatingWindows() {
 
     if (merged.afterOpen) {
       nextTick(() => {
-        const el = document.querySelector(
-          `[data-floating-key="${key}"]`,
-        );
+        const el = document.querySelector(`[data-floating-key="${key}"]`);
         if (el) merged.afterOpen!(el as HTMLElement);
       });
     }
@@ -325,10 +299,7 @@ export function useFloatingWindows() {
 
   // ── updateOptions() ──────────────────────────────────────────────────
 
-  function updateOptions(
-    key: string,
-    partialOpts: Partial<FloatingWindowEntry>,
-  ): void {
+  function updateOptions(key: string, partialOpts: Partial<FloatingWindowEntry>): void {
     const existing = entriesMap.get(key);
     if (!existing) return;
 
@@ -338,10 +309,7 @@ export function useFloatingWindows() {
     }
 
     if (partialOpts.status && !partialOpts.expiresAt) {
-      if (
-        partialOpts.status === "completed" ||
-        partialOpts.status === "error"
-      ) {
+      if (partialOpts.status === "completed" || partialOpts.status === "error") {
         merged.expiresAt = Date.now() + TOOL_COMPLETED_TTL_MS;
       }
     }
@@ -349,21 +317,14 @@ export function useFloatingWindows() {
     entriesMap.set(key, sanitizeEntry(merged));
     rebuildEntries();
 
-    if (
-      partialOpts.status === "completed" ||
-      partialOpts.status === "error"
-    ) {
+    if (partialOpts.status === "completed" || partialOpts.status === "error") {
       scheduleExpiry(key, merged.expiresAt);
     }
   }
 
   // ── setContent / appendContent ───────────────────────────────────────
 
-  async function setContent(
-    key: string,
-    text: string,
-    lang?: string,
-  ): Promise<void> {
+  async function setContent(key: string, text: string, lang?: string): Promise<void> {
     const entry = entriesMap.get(key);
     if (!entry) return;
 
@@ -390,11 +351,7 @@ export function useFloatingWindows() {
     }
   }
 
-  async function appendContent(
-    key: string,
-    text: string,
-    lang?: string,
-  ): Promise<void> {
+  async function appendContent(key: string, text: string, lang?: string): Promise<void> {
     const entry = entriesMap.get(key);
     if (!entry) return;
 
@@ -428,10 +385,7 @@ export function useFloatingWindows() {
     if (entry) entry.title = title;
   }
 
-  function setStatus(
-    key: string,
-    status: "running" | "completed" | "error",
-  ): void {
+  function setStatus(key: string, status: "running" | "completed" | "error"): void {
     const entry = entriesMap.get(key);
     if (entry) {
       entry.status = status;
@@ -445,9 +399,7 @@ export function useFloatingWindows() {
   function bringToFront(key: string): void {
     const entry = entriesMap.get(key);
     if (entry) {
-      entry.zIndex = nextZIndex(
-        isManualTier(entry.key, entry.closable),
-      );
+      entry.zIndex = nextZIndex(isManualTier(entry.key, entry.closable));
     }
   }
 
@@ -474,10 +426,7 @@ export function useFloatingWindows() {
 
   // ── close / closeAll ─────────────────────────────────────────────────
 
-  async function close(
-    key: string,
-    skipRebuild = false,
-  ): Promise<void> {
+  async function close(key: string, skipRebuild = false): Promise<void> {
     const entry = entriesMap.get(key);
     if (!entry) return;
 
@@ -488,9 +437,7 @@ export function useFloatingWindows() {
     }
 
     if (entry.beforeClose) {
-      const el = document.querySelector(
-        `[data-floating-key="${key}"]`,
-      );
+      const el = document.querySelector(`[data-floating-key="${key}"]`);
       await entry.beforeClose(el as HTMLElement);
     }
 
@@ -501,9 +448,7 @@ export function useFloatingWindows() {
     if (entry.afterClose) entry.afterClose();
   }
 
-  function closeAll(options?: {
-    exclude?: (key: string) => boolean;
-  }): void {
+  function closeAll(options?: { exclude?: (key: string) => boolean }): void {
     const exclude = options?.exclude;
     for (const [key, timerId] of timerMap.entries()) {
       if (exclude?.(key)) continue;
@@ -525,10 +470,18 @@ export function useFloatingWindows() {
     return entriesMap.get(key);
   }
 
+  // 轻量级就地 patch:不触发 sanitizeEntry / rebuildEntries,
+  // 适合拖拽、resize 等高频更新场景。与直接修改字段行为等价。
+  function patchEntry(key: string, patch: Partial<FloatingWindowEntry>): void {
+    const entry = entriesMap.get(key);
+    if (entry) Object.assign(entry, patch);
+  }
+
   return {
     entries,
     open,
     updateOptions,
+    patchEntry,
     setContent,
     appendContent,
     setTitle,

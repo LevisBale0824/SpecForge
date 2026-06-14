@@ -29,6 +29,7 @@ OpenSpec Workbench 是一个基于 Vue 3 + Electron 的现代化 AI 辅助开发
 ### 1. 前端应用 (app/)
 
 #### 组件 (components/)
+
 - `App.vue` - 应用根组件
 - `TopBar.vue` - 顶部导航栏
 - `SidePanel.vue` - 侧边栏（会话列表）
@@ -45,20 +46,24 @@ OpenSpec Workbench 是一个基于 Vue 3 + Electron 的现代化 AI 辅助开发
   - `Default.vue` - 默认窗口
 
 #### 组合式函数 (composables/)
+
 - `useBackend.ts` - 后端通信管理
 - `useProject.ts` - 项目状态管理
 - `useFloatingWindows.ts` - 浮动窗口管理
 
 #### 后端适配器 (backends/)
+
 - `openCodeAdapter.ts` - OpenCode API 适配器
 - `registry.ts` - 后端注册表
 - `types.ts` - 后端类型定义
 
 #### 工具函数 (utils/)
+
 - `electronBridge.ts` - Electron IPC 桥接
 - `httpClient.ts` - HTTP 客户端
 
 #### 类型定义 (types/)
+
 - `backend.ts` - 后端类型
 - `electron.ts` - Electron 类型
 - `frontend.ts` - 前端类型
@@ -91,11 +96,13 @@ OpenSpec Workbench 是一个基于 Vue 3 + Electron 的现代化 AI 辅助开发
 ### 文件浏览流程
 
 **Web 模式:**
+
 ```
 用户选择 → File System API → useProject → FileTree
 ```
 
 **Electron 模式:**
+
 ```
 用户选择 → IPC → Electron Main → 文件系统 → IPC → useProject → FileTree
 ```
@@ -244,19 +251,19 @@ Vite Build + Electron Build → NSIS/AppImage → 用户安装
 ### 前端日志
 
 ```typescript
-console.log('[component]', message)
-console.warn('[warning]', message)
-console.error('[error]', message)
+console.log("[component]", message);
+console.warn("[warning]", message);
+console.error("[error]", message);
 ```
 
 ### Electron 日志
 
 ```typescript
 // 主进程
-console.log('[electron]', message)
+console.log("[electron]", message);
 
 // 传输到渲染进程
-mainWindow.webContents.send('log', { level, message })
+mainWindow.webContents.send("log", { level, message });
 ```
 
 ## 未来规划

@@ -32,11 +32,7 @@ function handleRendered() {
       class="reasoning-entry"
       :class="{ 'reasoning-entry-separator': index > 0 }"
     >
-      <CodeContent
-        :html="entry.text"
-        variant="message"
-        @vue:mounted="handleRendered"
-      />
+      <CodeContent :html="entry.text" variant="message" @vue:mounted="handleRendered" />
     </div>
   </div>
 </template>

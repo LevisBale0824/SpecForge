@@ -21,10 +21,7 @@ type CredentialsBinding = {
 };
 
 export type SessionScope = {
-  on<K extends EventKey>(
-    event: K,
-    listener: (payload: GlobalEventMap[K]) => void,
-  ): () => void;
+  on<K extends EventKey>(event: K, listener: (payload: GlobalEventMap[K]) => void): () => void;
   on(event: string, listener: (payload: unknown) => void): () => void;
   dispose(): void;
 };
@@ -119,10 +116,7 @@ export function useGlobalEvents(credentials: CredentialsBinding) {
   function routePacket(packet: SsePacket) {
     const type = packet.payload.type;
     if (!isKnownEventType(type)) return;
-    emitter.emit(
-      type,
-      packet.payload.properties as GlobalEventMap[typeof type],
-    );
+    emitter.emit(type, packet.payload.properties as GlobalEventMap[typeof type]);
   }
 
   const connection = createSseConnection({
@@ -223,14 +217,8 @@ export function useGlobalEvents(credentials: CredentialsBinding) {
     event: K,
     listener: (payload: GlobalEventMap[K]) => void,
   ): () => void;
-  function on(
-    event: string,
-    listener: (payload: unknown) => void,
-  ): () => void;
-  function on(
-    event: string,
-    listener: (payload: unknown) => void,
-  ): () => void {
+  function on(event: string, listener: (payload: unknown) => void): () => void;
+  function on(event: string, listener: (payload: unknown) => void): () => void {
     if (!isKnownEventType(event)) return () => {};
     return emitter.on(event, listener);
   }
@@ -245,14 +233,8 @@ export function useGlobalEvents(credentials: CredentialsBinding) {
       event: K,
       listener: (payload: GlobalEventMap[K]) => void,
     ): () => void;
-    function scopedOn(
-      event: string,
-      listener: (payload: unknown) => void,
-    ): () => void;
-    function scopedOn(
-      event: string,
-      listener: (payload: unknown) => void,
-    ): () => void {
+    function scopedOn(event: string, listener: (payload: unknown) => void): () => void;
+    function scopedOn(event: string, listener: (payload: unknown) => void): () => void {
       if (!isKnownEventType(event)) return () => {};
       const off = on(event, (payload) => {
         const sessionId = extractSessionId(payload);
@@ -276,23 +258,15 @@ export function useGlobalEvents(credentials: CredentialsBinding) {
     return { on: scopedOn, dispose };
   }
 
-  function mainSession(
-    selectedSessionId: Ref<string>,
-  ): MainSessionScope {
+  function mainSession(selectedSessionId: Ref<string>): MainSessionScope {
     const disposers = new Set<() => void>();
 
     function scopedOn<K extends EventKey>(
       event: K,
       listener: (payload: GlobalEventMap[K]) => void,
     ): () => void;
-    function scopedOn(
-      event: string,
-      listener: (payload: unknown) => void,
-    ): () => void;
-    function scopedOn(
-      event: string,
-      listener: (payload: unknown) => void,
-    ): () => void {
+    function scopedOn(event: string, listener: (payload: unknown) => void): () => void;
+    function scopedOn(event: string, listener: (payload: unknown) => void): () => void {
       if (!isKnownEventType(event)) return () => {};
       const off = on(event, (payload) => {
         const sessionId = extractSessionId(payload);

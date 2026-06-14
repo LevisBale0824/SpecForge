@@ -46,9 +46,7 @@ const THEME_COLORS: Record<FloatingWindowThemeType, string> = {
   debug: "#6b7280",
 };
 
-export function getFloatingWindowTheme(
-  key: string,
-): FloatingWindowThemeType {
+export function getFloatingWindowTheme(key: string): FloatingWindowThemeType {
   for (const [prefix, type] of KEY_PREFIX_MAP) {
     if (key.startsWith(prefix)) return type;
   }

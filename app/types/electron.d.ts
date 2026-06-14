@@ -17,10 +17,7 @@ export type WorkspaceFileDiff = {
 
 export interface ElectronAPI {
   selectDirectory: () => Promise<string | null>;
-  readDirectory: (
-    rootPath: string,
-    relPath: string,
-  ) => Promise<DirEntry[] | null>;
+  readDirectory: (rootPath: string, relPath: string) => Promise<DirEntry[] | null>;
   readWorkspaceDiff: (rootPath: string) => Promise<WorkspaceFileDiff[]>;
   getServerStatus: () => Promise<{
     running: boolean;

@@ -1,0 +1,8 @@
+dist/
+dist-electron/
+release/
+cli-bridge/
+node_modules/
+pnpm-lock.yaml
+**/*.snap
+app/workers/render-worker.ts

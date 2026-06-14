@@ -3,7 +3,12 @@
 // ---------------------------------------------------------------------------
 
 export type TabToWorkerMessage =
-  | { type: "connect"; baseUrl: string; authorization?: string; errorMessages?: Record<string, string> }
+  | {
+      type: "connect";
+      baseUrl: string;
+      authorization?: string;
+      errorMessages?: Record<string, string>;
+    }
   | { type: "disconnect" };
 
 export type WorkerToTabMessage =

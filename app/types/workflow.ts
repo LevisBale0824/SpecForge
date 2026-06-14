@@ -9,20 +9,10 @@
 export type StepName = "explore" | "propose" | "apply" | "archive";
 
 /** Phase within a single workflow step. */
-export type StepPhase =
-  | "idle"
-  | "input"
-  | "executing"
-  | "reviewing"
-  | "done";
+export type StepPhase = "idle" | "input" | "executing" | "reviewing" | "done";
 
 /** Fixed step order — matches the canonical sequence. */
-export const STEP_ORDER: StepName[] = [
-  "explore",
-  "propose",
-  "apply",
-  "archive",
-];
+export const STEP_ORDER: StepName[] = ["explore", "propose", "apply", "archive"];
 
 /** State for a single workflow step. */
 export type StepState = {
@@ -42,10 +32,7 @@ export type WorkflowState = {
 
 /** Create a default workflow state. */
 export function createDefaultWorkflowState(): WorkflowState {
-  const steps: Record<StepName, StepState> = {} as Record<
-    StepName,
-    StepState
-  >;
+  const steps: Record<StepName, StepState> = {} as Record<StepName, StepState>;
   for (const name of STEP_ORDER) {
     steps[name] = { name, phase: "idle" };
   }

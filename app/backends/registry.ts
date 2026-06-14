@@ -39,9 +39,7 @@ export function setActiveBackendKind(kind: BackendKind) {
   for (const listener of listeners) listener(kind);
 }
 
-export function onActiveBackendKindChange(
-  listener: (kind: BackendKind) => void,
-) {
+export function onActiveBackendKindChange(listener: (kind: BackendKind) => void) {
   listeners.add(listener);
   return () => {
     listeners.delete(listener);
@@ -66,10 +64,7 @@ export function getActiveBackendAdapter(): BackendAdapter {
 
 // ── Configure helpers ────────────────────────────────────────────────────
 
-export function configureOpenCodeBackend(options: {
-  baseUrl?: string;
-  authorization?: string;
-}) {
+export function configureOpenCodeBackend(options: { baseUrl?: string; authorization?: string }) {
   getBackendAdapter("opencode").configure?.(options);
 }
 
@@ -78,9 +73,7 @@ export function getPersistedOpenCodeUrl(): string {
 }
 
 export function getPersistedCliBridgeUrl(): string {
-  return (
-    storageGet(StorageKeys.auth.cliBridgeUrl) ?? DEFAULT_CLI_BRIDGE_URL
-  );
+  return storageGet(StorageKeys.auth.cliBridgeUrl) ?? DEFAULT_CLI_BRIDGE_URL;
 }
 
 // ── Lazy init ────────────────────────────────────────────────────────────

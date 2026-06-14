@@ -157,10 +157,7 @@ function basename(file: string): string {
     <SettingsPanel v-model="showSettings" />
 
     <!-- Floating Window Overlay (tool-call windows) -->
-    <div
-      class="fixed inset-0 pointer-events-none"
-      style="z-index: 9999"
-    >
+    <div class="fixed inset-0 pointer-events-none" style="z-index: 9999">
       <FloatingWindow
         v-for="entry in floatingEntries"
         :key="entry.key"

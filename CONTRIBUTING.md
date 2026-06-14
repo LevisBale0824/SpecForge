@@ -15,6 +15,7 @@
 ### 提交代码
 
 1. **Fork 项目**
+
    ```bash
    # 在 GitHub 上 Fork 项目后
    git clone https://github.com/YOUR_USERNAME/openspec-workbench.git
@@ -22,6 +23,7 @@
    ```
 
 2. **创建分支**
+
    ```bash
    git checkout -b feature/your-feature-name
    # 或
@@ -34,6 +36,7 @@
    - 更新相关文档
 
 4. **提交代码**
+
    ```bash
    git add .
    git commit -m "feat: add new feature"
@@ -42,6 +45,7 @@
    ```
 
 5. **推送分支**
+
    ```bash
    git push origin feature/your-feature-name
    ```
@@ -66,6 +70,7 @@
 ```
 
 **类型 (type):**
+
 - `feat`: 新功能
 - `fix`: Bug 修复
 - `docs`: 文档更新
@@ -76,6 +81,7 @@
 - `chore`: 构建/工具链相关
 
 **示例:**
+
 ```
 feat(chat): add message timestamp display
 
@@ -89,16 +95,19 @@ Closes #123
 ### 代码风格
 
 #### TypeScript
+
 - 使用严格模式
 - 明确类型定义
 - 避免使用 `any`
 
 #### Vue
+
 - 使用 Composition API
 - 组件使用 PascalCase 命名
 - Props 使用 camelCase
 
 #### CSS
+
 - 使用 Tailwind CSS
 - 遵循 BEM 命名规范（如需要自定义 CSS）
 
@@ -125,6 +134,7 @@ pnpm electron:dev  # Electron
 ### 代码审查
 
 提交 PR 后，会自动触发：
+
 - 类型检查：`vue-tsc --noEmit`
 - 单元测试：`vitest run`
 - 代码规范检查（配置后）
@@ -134,11 +144,13 @@ pnpm electron:dev  # Electron
 ### 文档更新
 
 如果您的修改涉及：
+
 - 新增功能
 - API 变更
 - 配置调整
 
 请同步更新相关文档：
+
 - README.md
 - API 文档
 - 注释
@@ -152,6 +164,7 @@ pnpm electron:dev  # Electron
 简要描述 bug。
 
 **复现步骤**
+
 1. 打开页面
 2. 点击按钮
 3. 查看结果
@@ -163,6 +176,7 @@ pnpm electron:dev  # Electron
 描述实际发生的错误行为。
 
 **环境信息**
+
 - OS: [e.g. Windows 11, macOS 14]
 - Node.js: [e.g. 18.0.0]
 - Browser: [e.g. Chrome 120]
@@ -203,6 +217,7 @@ pnpm electron:dev  # Electron
 ## 获取帮助
 
 如有问题，可以：
+
 - 在 Issues 中提问
 - 查看 [项目文档](README.md)
 - 联系维护者

@@ -116,10 +116,7 @@ function createWorker(): Worker {
     if (!entry) return;
     pending.delete(data.id);
     if (data.ok) entry.resolve(data.html);
-    else
-      entry.reject(
-        new Error(data.error || entry.errorLabel || "Render failed"),
-      );
+    else entry.reject(new Error(data.error || entry.errorLabel || "Render failed"));
   };
   worker.onerror = (error) => {
     for (const entry of pending.values()) {

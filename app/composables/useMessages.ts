@@ -85,10 +85,7 @@ const OMO_INIT_COMMENT_RE = /<!--\s*OMO_INTERNAL_INITIATOR\s*-->/g;
 /** Remove agent-injected `<system-reminder>` blocks and OMO initiator markers. */
 export function stripSystemReminder(text: string): string {
   if (!text) return text;
-  return text
-    .replace(SYSTEM_REMINDER_RE, "")
-    .replace(OMO_INIT_COMMENT_RE, "")
-    .trim();
+  return text.replace(SYSTEM_REMINDER_RE, "").replace(OMO_INIT_COMMENT_RE, "").trim();
 }
 
 /** True when a text chunk still carries user-visible content after stripping. */
@@ -110,9 +107,7 @@ function asString(value: unknown): string | undefined {
 }
 
 function asNumber(value: unknown): number | undefined {
-  return typeof value === "number" && Number.isFinite(value)
-    ? value
-    : undefined;
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
 }
 
 function isMessageInfo(value: unknown): value is MessageInfo {
@@ -134,16 +129,13 @@ function isMessagePart(value: unknown): value is MessagePart {
 
 // ── Normalization ─────────────────────────────────────────────────────────
 
-function normalizeTokens(
-  value: unknown,
-): MessageUsage["tokens"] | undefined {
+function normalizeTokens(value: unknown): MessageUsage["tokens"] | undefined {
   const rec = toRecord(value);
   if (!rec) return undefined;
   const input = asNumber(rec.input);
   const output = asNumber(rec.output);
   const reasoning = asNumber(rec.reasoning);
-  if (input === undefined || output === undefined || reasoning === undefined)
-    return undefined;
+  if (input === undefined || output === undefined || reasoning === undefined) return undefined;
   const total = asNumber(rec.total);
   const cacheRec = toRecord(rec.cache);
   const cacheRead = asNumber(cacheRec?.read);
@@ -197,10 +189,8 @@ function resolveStatus(info?: MessageInfo): MessageStatus {
 function resolveError(info?: MessageInfo): MessageError {
   const status = resolveStatus(info);
   if (!info || info.role !== "assistant") return null;
-  if (!info.error)
-    return status === "error" ? { name: "Error", message: "" } : null;
-  const message =
-    asString(toRecord(info.error.data)?.message) ?? "";
+  if (!info.error) return status === "error" ? { name: "Error", message: "" } : null;
+  const message = asString(toRecord(info.error.data)?.message) ?? "";
   return { name: info.error.name, message };
 }
 
@@ -266,10 +256,7 @@ const childrenByParent = computed(() => {
 
 // ── Core operations ───────────────────────────────────────────────────────
 
-function ensureMessage(
-  id: string,
-  notifyCollection = true,
-): ShallowRef<MessageEntry> {
+function ensureMessage(id: string, notifyCollection = true): ShallowRef<MessageEntry> {
   let ref = messages.value.get(id);
   if (ref) return ref;
   ref = shallowRef(createMessageEntry());
@@ -341,8 +328,7 @@ function applyPartDelta(delta: MessagePartDeltaPacket) {
 
   const current = partRef.value as MessagePart & Record<string, unknown>;
   const value = current[delta.field];
-  current[delta.field] =
-    typeof value === "string" ? value + delta.delta : delta.delta;
+  current[delta.field] = typeof value === "string" ? value + delta.delta : delta.delta;
   triggerRef(partRef);
 
   const messageRef = messages.value.get(delta.messageID);
@@ -351,11 +337,7 @@ function applyPartDelta(delta: MessagePartDeltaPacket) {
 
 // ── Optimistic (pending) messages ─────────────────────────────────────────
 
-function addPendingUserMessage(
-  sessionId: string,
-  text: string,
-  agentName: string,
-): string {
+function addPendingUserMessage(sessionId: string, text: string, agentName: string): string {
   const now = Date.now();
   const tempId = `pending:${now}`;
   const partId = `pending:part:${now}`;
@@ -476,9 +458,7 @@ function getTextContent(id: string): string {
   return chunks.join("");
 }
 
-function getImageAttachments(
-  id: string,
-): MessageAttachment[] | undefined {
+function getImageAttachments(id: string): MessageAttachment[] | undefined {
   const files = getPartsByType(id, "file");
   if (files.length === 0) return undefined;
   const result: MessageAttachment[] = [];
@@ -625,10 +605,7 @@ function getThread(rootId: string): MessageInfo[] {
 function getFinalAnswer(rootId: string): MessageInfo | undefined {
   const thread = getThread(rootId);
   const assistants = thread
-    .filter(
-      (message) =>
-        message.role === "assistant" && hasTextContent(message.id),
-    )
+    .filter((message) => message.role === "assistant" && hasTextContent(message.id))
     .sort(byTimeThenId);
   return assistants[assistants.length - 1];
 }
@@ -652,8 +629,7 @@ function loadHistory(entries: unknown[]) {
     const mergedInfo = accumulated?.info ?? info;
     if (
       !messageRef.value.info ||
-      JSON.stringify(messageRef.value.info) !==
-        JSON.stringify(mergedInfo)
+      JSON.stringify(messageRef.value.info) !== JSON.stringify(mergedInfo)
     ) {
       messageRef.value.info = mergedInfo;
       triggerMessageRef(messageRef);
@@ -667,9 +643,7 @@ function loadHistory(entries: unknown[]) {
       const key = partLookupKey(merged.messageID, merged.id);
       const existingPart = parts.get(key);
       if (existingPart) {
-        if (
-          JSON.stringify(existingPart.value) !== JSON.stringify(merged)
-        ) {
+        if (JSON.stringify(existingPart.value) !== JSON.stringify(merged)) {
           existingPart.value = merged;
           triggerRef(existingPart);
         }
@@ -686,10 +660,7 @@ function loadHistory(entries: unknown[]) {
         const key = partLookupKey(accPart.messageID, accPart.id);
         const existingPart = parts.get(key);
         if (existingPart) {
-          if (
-            JSON.stringify(existingPart.value) !==
-            JSON.stringify(accPart)
-          ) {
+          if (JSON.stringify(existingPart.value) !== JSON.stringify(accPart)) {
             existingPart.value = accPart;
             triggerRef(existingPart);
           }
@@ -713,10 +684,7 @@ async function loadHistoryIncrementally(
     shouldContinue?: () => boolean;
   },
 ) {
-  const chunkSize = Math.max(
-    1,
-    options?.chunkSize ?? HISTORY_CHUNK_SIZE,
-  );
+  const chunkSize = Math.max(1, options?.chunkSize ?? HISTORY_CHUNK_SIZE);
   for (let offset = 0; offset < entries.length; offset += chunkSize) {
     if (options?.shouldContinue && !options.shouldContinue()) return;
     loadHistory(entries.slice(offset, offset + chunkSize));
@@ -747,10 +715,7 @@ function saveSessionState(sessionId: string) {
     if (oldestKey !== undefined) sessionCache.delete(oldestKey);
   }
 
-  const cachedMessages = new Map<
-    string,
-    { info?: MessageInfo; parts: MessagePart[] }
-  >();
+  const cachedMessages = new Map<string, { info?: MessageInfo; parts: MessagePart[] }>();
   const cachedParts = new Map<string, MessagePart>();
 
   for (const [id, messageRef] of messages.value) {

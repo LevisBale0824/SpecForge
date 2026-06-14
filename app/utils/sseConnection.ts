@@ -52,11 +52,9 @@ export function parsePacket(raw: string): SsePacket | null {
   if (!record.payload || typeof record.payload !== "object") return null;
   const payload = record.payload as Record<string, unknown>;
   if (typeof payload.type !== "string") return null;
-  if (!payload.properties || typeof payload.properties !== "object")
-    return null;
+  if (!payload.properties || typeof payload.properties !== "object") return null;
   return {
-    directory:
-      typeof record.directory === "string" ? record.directory : "",
+    directory: typeof record.directory === "string" ? record.directory : "",
     payload: {
       type: payload.type,
       properties: payload.properties as Record<string, unknown>,
@@ -64,9 +62,7 @@ export function parsePacket(raw: string): SsePacket | null {
   };
 }
 
-export function createSseConnection(
-  callbacks: SseConnectionCallbacks,
-): SseConnection {
+export function createSseConnection(callbacks: SseConnectionCallbacks): SseConnection {
   let abortController: AbortController | undefined;
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   let reconnectAttempt = 0;
@@ -93,9 +89,7 @@ export function createSseConnection(
     }, 1000);
   }
 
-  function handleStream(
-    reader: ReadableStreamDefaultReader<Uint8Array>,
-  ) {
+  function handleStream(reader: ReadableStreamDefaultReader<Uint8Array>) {
     const decoder = new TextDecoder();
     let buffer = "";
 
@@ -128,9 +122,7 @@ export function createSseConnection(
         return;
       }
 
-      callbacks.onError(
-        target?.errorMessages?.streamClosed ?? "SSE stream closed.",
-      );
+      callbacks.onError(target?.errorMessages?.streamClosed ?? "SSE stream closed.");
       abortController = undefined;
       connected = false;
       scheduleReconnect();
@@ -139,10 +131,7 @@ export function createSseConnection(
     void loop();
   }
 
-  function startFetch(
-    options: SseConnectionOptions,
-    isReconnect: boolean,
-  ) {
+  function startFetch(options: SseConnectionOptions, isReconnect: boolean) {
     const effectiveBaseUrl = normalizeBaseUrl(options.baseUrl);
     const headers: Record<string, string> = {
       Accept: "text/event-stream",
@@ -153,17 +142,16 @@ export function createSseConnection(
 
     void (async () => {
       try {
-        const response = await fetch(
-          `${effectiveBaseUrl}/global/event`,
-          { signal: abortController!.signal, headers },
-        );
+        const response = await fetch(`${effectiveBaseUrl}/global/event`, {
+          signal: abortController!.signal,
+          headers,
+        });
 
         if (response.status === 401) {
           abortController = undefined;
           connected = false;
           callbacks.onError(
-            target?.errorMessages?.authenticationFailed ??
-              "Authentication failed.",
+            target?.errorMessages?.authenticationFailed ?? "Authentication failed.",
             401,
           );
           return;
@@ -199,10 +187,7 @@ export function createSseConnection(
       errorMessages: options.errorMessages,
     };
     if (!normalized.baseUrl) {
-      callbacks.onError(
-        normalized.errorMessages?.emptyBaseUrl ??
-          "SSE base URL is empty.",
-      );
+      callbacks.onError(normalized.errorMessages?.emptyBaseUrl ?? "SSE base URL is empty.");
       return;
     }
 

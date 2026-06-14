@@ -25,9 +25,9 @@ async function pickFolder() {
   // Try File System Access API (Chrome/Edge)
   if ("showDirectoryPicker" in window) {
     try {
-    const handle = await window.showDirectoryPicker?.({ mode: "read" });
-    if (!handle) throw new Error("No directory selected");
-    await project.openDirectoryHandle(handle);
+      const handle = await window.showDirectoryPicker?.({ mode: "read" });
+      if (!handle) throw new Error("No directory selected");
+      await project.openDirectoryHandle(handle);
       router.push({ name: "chat" });
       return;
     } catch {
@@ -52,7 +52,9 @@ function submitManualPath() {
     <div class="text-center max-w-md">
       <!-- Logo -->
       <div class="mb-6 flex justify-center">
-        <div class="w-16 h-16 rounded-2xl bg-gradient-to-br from-accent-cyan via-accent-indigo to-accent-emerald opacity-80" />
+        <div
+          class="w-16 h-16 rounded-2xl bg-gradient-to-br from-accent-cyan via-accent-indigo to-accent-emerald opacity-80"
+        />
       </div>
 
       <!-- Title -->
@@ -70,19 +72,30 @@ function submitManualPath() {
 
       <!-- Actions -->
       <div class="flex gap-3 justify-center">
-        <button class="px-4 py-2 text-sm font-medium rounded-lg bg-accent-cyan/15 text-accent-cyan hover:bg-accent-cyan/25 transition-colors" @click="newSession">
+        <button
+          class="px-4 py-2 text-sm font-medium rounded-lg bg-accent-cyan/15 text-accent-cyan hover:bg-accent-cyan/25 transition-colors"
+          @click="newSession"
+        >
           {{ t("welcome.newSession") }}
         </button>
-        <button class="px-4 py-2 text-sm font-medium rounded-lg bg-surface-800 text-surface-300 hover:bg-surface-700 transition-colors" @click="pickFolder">
+        <button
+          class="px-4 py-2 text-sm font-medium rounded-lg bg-surface-800 text-surface-300 hover:bg-surface-700 transition-colors"
+          @click="pickFolder"
+        >
           {{ t("welcome.openProject") }}
         </button>
       </div>
 
       <!-- Manual path dialog -->
       <Teleport to="body">
-        <div v-if="showProjectDialog" class="fixed inset-0 z-[10000] flex items-center justify-center">
+        <div
+          v-if="showProjectDialog"
+          class="fixed inset-0 z-[10000] flex items-center justify-center"
+        >
           <div class="absolute inset-0 bg-black/60" @click="showProjectDialog = false" />
-          <div class="relative w-full max-w-sm bg-surface-900 border border-surface-700 rounded-xl shadow-2xl p-5">
+          <div
+            class="relative w-full max-w-sm bg-surface-900 border border-surface-700 rounded-xl shadow-2xl p-5"
+          >
             <h3 class="text-sm font-semibold text-surface-200 mb-3">Open Project</h3>
             <input
               v-model="manualPath"

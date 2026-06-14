@@ -3,11 +3,7 @@
 // ---------------------------------------------------------------------------
 
 import { reactive } from "vue";
-import {
-  isElectron,
-  selectDirectory,
-  readDirectory,
-} from "../utils/electronBridge";
+import { isElectron, selectDirectory, readDirectory } from "../utils/electronBridge";
 import type { DirEntry } from "../types/electron";
 
 export type FileNode = {

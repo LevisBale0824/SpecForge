@@ -37,9 +37,7 @@ export function useAutoScroller(
   const bottomThresholdPx = options.bottomThresholdPx ?? BOTTOM_THRESHOLD_PX;
   const smoothEngine = options.smoothEngine ?? "raf";
   const smoothOnInitialFollow = options.smoothOnInitialFollow ?? true;
-  const isFollowing = ref(
-    scrollMode.value === "follow" || scrollMode.value === "force",
-  );
+  const isFollowing = ref(scrollMode.value === "follow" || scrollMode.value === "force");
   const isTrackingPaused = ref(options.enabled === false);
 
   let rafId: number | null = null;
@@ -62,10 +60,7 @@ export function useAutoScroller(
   }
 
   function hasRecentUserScrollIntent() {
-    return (
-      pointerInteracting ||
-      nowMs() - lastUserScrollIntentAt <= USER_SCROLL_INTENT_WINDOW_MS
-    );
+    return pointerInteracting || nowMs() - lastUserScrollIntentAt <= USER_SCROLL_INTENT_WINDOW_MS;
   }
 
   const showResumeButton = computed(() => {
@@ -73,9 +68,7 @@ export function useAutoScroller(
   });
 
   function isAtBottom(el: HTMLElement): boolean {
-    return (
-      el.scrollHeight - el.scrollTop - el.clientHeight <= bottomThresholdPx
-    );
+    return el.scrollHeight - el.scrollTop - el.clientHeight <= bottomThresholdPx;
   }
 
   function cancelAnimation() {
@@ -140,10 +133,7 @@ export function useAutoScroller(
       if (done) return;
       done = true;
       if (cleanupBound) {
-        el.removeEventListener(
-          "scrollend",
-          onNativeSmoothScrollEnd as EventListener,
-        );
+        el.removeEventListener("scrollend", onNativeSmoothScrollEnd as EventListener);
         cleanupBound = false;
       }
       if (nativeSmoothMonitorTimeout !== null) {
@@ -159,10 +149,7 @@ export function useAutoScroller(
       finish();
     };
 
-    el.addEventListener(
-      "scrollend",
-      onNativeSmoothScrollEnd as EventListener,
-    );
+    el.addEventListener("scrollend", onNativeSmoothScrollEnd as EventListener);
     cleanupBound = true;
     nativeSmoothMonitorTimeout = setTimeout(() => {
       finish();
@@ -211,8 +198,7 @@ export function useAutoScroller(
 
       if (
         lastSetScrollTop >= 0 &&
-        Math.abs(el.scrollTop - lastSetScrollTop) >
-          INTERVENTION_TOLERANCE_PX
+        Math.abs(el.scrollTop - lastSetScrollTop) > INTERVENTION_TOLERANCE_PX
       ) {
         animating = false;
         lastSetScrollTop = -1;
@@ -280,8 +266,7 @@ export function useAutoScroller(
     }
     if (
       lastSetScrollTop >= 0 &&
-      Math.abs(el.scrollTop - lastSetScrollTop) <=
-        INTERVENTION_TOLERANCE_PX
+      Math.abs(el.scrollTop - lastSetScrollTop) <= INTERVENTION_TOLERANCE_PX
     ) {
       return;
     }
@@ -335,11 +320,7 @@ export function useAutoScroller(
     el.addEventListener("scrollend", onScrollEnd, { passive: true });
     const wheelIntentHandler = (e: WheelEvent) => {
       markUserScrollIntent("wheel");
-      if (
-        e.deltaY < 0 &&
-        scrollMode.value === "follow" &&
-        isFollowing.value
-      ) {
+      if (e.deltaY < 0 && scrollMode.value === "follow" && isFollowing.value) {
         clearNativeSmoothMonitor();
         cancelAnimation();
         isFollowing.value = false;
@@ -365,12 +346,10 @@ export function useAutoScroller(
       __touchIntentHandler?: () => void;
       __pointerDownIntentHandler?: () => void;
     }
-    (el as ElWithHandlers).__clearPointerInteraction =
-      clearPointerInteraction;
+    (el as ElWithHandlers).__clearPointerInteraction = clearPointerInteraction;
     (el as ElWithHandlers).__wheelIntentHandler = wheelIntentHandler;
     (el as ElWithHandlers).__touchIntentHandler = touchIntentHandler;
-    (el as ElWithHandlers).__pointerDownIntentHandler =
-      pointerDownIntentHandler;
+    (el as ElWithHandlers).__pointerDownIntentHandler = pointerDownIntentHandler;
 
     if (scrollMode.value === "follow" || scrollMode.value === "force") {
       scrollToBottom(smoothOnInitialFollow);
@@ -388,18 +367,13 @@ export function useAutoScroller(
       __pointerDownIntentHandler?: () => void;
     }
     const typed = el as ElWithHandlers;
-    if (typed.__wheelIntentHandler)
-      el.removeEventListener("wheel", typed.__wheelIntentHandler);
-    if (typed.__touchIntentHandler)
-      el.removeEventListener("touchmove", typed.__touchIntentHandler);
+    if (typed.__wheelIntentHandler) el.removeEventListener("wheel", typed.__wheelIntentHandler);
+    if (typed.__touchIntentHandler) el.removeEventListener("touchmove", typed.__touchIntentHandler);
     if (typed.__pointerDownIntentHandler)
       el.removeEventListener("pointerdown", typed.__pointerDownIntentHandler);
     if (typed.__clearPointerInteraction) {
       window.removeEventListener("pointerup", typed.__clearPointerInteraction);
-      window.removeEventListener(
-        "pointercancel",
-        typed.__clearPointerInteraction,
-      );
+      window.removeEventListener("pointercancel", typed.__clearPointerInteraction);
     }
     if (popupTimerId !== null) {
       clearTimeout(popupTimerId);

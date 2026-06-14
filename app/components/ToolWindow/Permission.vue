@@ -1,7 +1,5 @@
 <script setup lang="ts">
-import { useFloatingWindow } from "../../composables/useFloatingWindow";
-
-const props = defineProps<{
+defineProps<{
   toolName?: string;
   description?: string;
   command?: string;
@@ -10,8 +8,6 @@ const props = defineProps<{
 const emit = defineEmits<{
   reply: [decision: "allow-once" | "allow-always" | "reject"];
 }>();
-
-const floatingWindow = useFloatingWindow();
 </script>
 
 <template>
@@ -30,9 +26,7 @@ const floatingWindow = useFloatingWindow();
       <button class="permission-btn allow-always" @click="emit('reply', 'allow-always')">
         Allow Always
       </button>
-      <button class="permission-btn reject" @click="emit('reply', 'reject')">
-        Reject
-      </button>
+      <button class="permission-btn reject" @click="emit('reply', 'reject')">Reject</button>
     </div>
   </div>
 </template>

@@ -1,10 +1,4 @@
-import type {
-  MessageInfo,
-  QuestionInfo,
-  ReasoningPart,
-  SubtaskPart,
-  ToolPart,
-} from "./sse";
+import type { MessageInfo, QuestionInfo, ReasoningPart, SubtaskPart, ToolPart } from "./sse";
 
 // ---------------------------------------------------------------------------
 // Message-level type definitions

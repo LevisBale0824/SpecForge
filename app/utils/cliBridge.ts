@@ -20,9 +20,7 @@ export function getBaseUrl() {
 
 function getBaseUrlOrThrow(errorMessage?: string) {
   if (!configuredBaseUrl) {
-    throw new Error(
-      errorMessage ?? "CLI Bridge base URL is not configured.",
-    );
+    throw new Error(errorMessage ?? "CLI Bridge base URL is not configured.");
   }
   return configuredBaseUrl;
 }
@@ -54,26 +52,17 @@ async function parseJson(response: Response) {
   }
 }
 
-async function getJson(
-  path: string,
-  params?: Record<string, QueryValue>,
-): Promise<unknown> {
+async function getJson(path: string, params?: Record<string, QueryValue>): Promise<unknown> {
   const url = createUrl(path, params);
   const response = await fetch(url);
   if (!response.ok) {
     const text = await response.text().catch(() => "");
-    throw new Error(
-      `CLI Bridge GET ${path} failed (${response.status}): ${text}`,
-    );
+    throw new Error(`CLI Bridge GET ${path} failed (${response.status}): ${text}`);
   }
   return parseJson(response);
 }
 
-async function sendJson(
-  path: string,
-  method: string,
-  body?: JsonBody,
-): Promise<unknown> {
+async function sendJson(path: string, method: string, body?: JsonBody): Promise<unknown> {
   const url = createUrl(path);
   const response = await fetch(url, {
     method,
@@ -82,9 +71,7 @@ async function sendJson(
   });
   if (!response.ok) {
     const text = await response.text().catch(() => "");
-    throw new Error(
-      `CLI Bridge ${method} ${path} failed (${response.status}): ${text}`,
-    );
+    throw new Error(`CLI Bridge ${method} ${path} failed (${response.status}): ${text}`);
   }
   return parseJson(response);
 }
@@ -103,10 +90,7 @@ export function getGlobalHealth(): Promise<{
 
 // ── Sessions ────────────────────────────────────────────────────────────
 
-export function createSession(body?: {
-  agent?: string;
-  directory?: string;
-}): Promise<unknown> {
+export function createSession(body?: { agent?: string; directory?: string }): Promise<unknown> {
   return sendJson("/session", "POST", body);
 }
 
@@ -140,39 +124,25 @@ export function sendPromptAsync(
     directory?: string;
   },
 ): Promise<void> {
-  return sendJson(
-    `/session/${sessionId}/prompt_async`,
-    "POST",
-    body,
-  ).then(() => {});
+  return sendJson(`/session/${sessionId}/prompt_async`, "POST", body).then(() => {});
 }
 
 // ── Agents (Phase 2H) ──────────────────────────────────────────────────
 
-export function listAgents(): Promise<
-  Array<{ name: string; type: string }>
-> {
-  return getJson("/global/agents") as Promise<
-    Array<{ name: string; type: string }>
-  >;
+export function listAgents(): Promise<Array<{ name: string; type: string }>> {
+  return getJson("/global/agents") as Promise<Array<{ name: string; type: string }>>;
 }
 
 // ── Files (Phase 3) ────────────────────────────────────────────────────
 
-export function listFiles(payload: {
-  directory: string;
-  path?: string;
-}): Promise<unknown> {
+export function listFiles(payload: { directory: string; path?: string }): Promise<unknown> {
   return getJson("/file", {
     directory: payload.directory,
     path: payload.path,
   });
 }
 
-export function readFileContent(payload: {
-  directory: string;
-  path: string;
-}): Promise<unknown> {
+export function readFileContent(payload: { directory: string; path: string }): Promise<unknown> {
   return getJson("/file/content", {
     directory: payload.directory,
     path: payload.path,

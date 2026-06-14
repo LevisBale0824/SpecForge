@@ -29,9 +29,7 @@ export const FLOATING_WINDOW_KEY = Symbol("floating-window");
 export function useFloatingWindow(): FloatingWindowAPI {
   const api = inject<FloatingWindowAPI>(FLOATING_WINDOW_KEY);
   if (!api) {
-    throw new Error(
-      "useFloatingWindow must be used within a FloatingWindow component",
-    );
+    throw new Error("useFloatingWindow must be used within a FloatingWindow component");
   }
   return api;
 }

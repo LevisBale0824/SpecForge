@@ -24,8 +24,7 @@ function getInstance(): MarkdownIt {
   // Open links in a new tab safely.
   const defaultLinkOpen =
     md.renderer.rules.link_open ??
-    ((tokens, idx, options, _env, self) =>
-      self.renderToken(tokens, idx, options));
+    ((tokens, idx, options, _env, self) => self.renderToken(tokens, idx, options));
   md.renderer.rules.link_open = (tokens, idx, options, env, self) => {
     const token = tokens[idx];
     token.attrSet("target", "_blank");

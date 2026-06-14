@@ -55,7 +55,9 @@ const allMessages = computed(() => {
           <div
             class="max-w-[min(760px,calc(100%-3.5rem))] rounded-lg bg-surface-800/80 px-4 py-3 text-sm leading-relaxed text-surface-200"
           >
-            <div class="mb-1 text-[10px] font-semibold uppercase tracking-wider text-accent-emerald">
+            <div
+              class="mb-1 text-[10px] font-semibold uppercase tracking-wider text-accent-emerald"
+            >
               Assistant
             </div>
             <MessageContent :message-id="msg.id" />

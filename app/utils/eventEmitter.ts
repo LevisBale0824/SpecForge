@@ -8,15 +8,9 @@
 type Listener<T = unknown> = (payload: T) => void;
 
 export class TypedEmitter<EventMap extends Record<string, unknown>> {
-  private listeners = new Map<
-    keyof EventMap,
-    Set<Listener>
-  >();
+  private listeners = new Map<keyof EventMap, Set<Listener>>();
 
-  on<K extends keyof EventMap>(
-    event: K,
-    listener: (payload: EventMap[K]) => void,
-  ): () => void {
+  on<K extends keyof EventMap>(event: K, listener: (payload: EventMap[K]) => void): () => void {
     let set = this.listeners.get(event);
     if (!set) {
       set = new Set();

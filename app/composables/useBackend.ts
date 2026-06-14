@@ -7,7 +7,7 @@
 
 import { ref, readonly, watch, type Ref } from "vue";
 import { useGlobalEvents } from "./useGlobalEvents";
-import { useBackendActivation, type ConnectionState } from "./useBackendActivation";
+import { useBackendActivation } from "./useBackendActivation";
 import { useBackendSessionLifecycle } from "./useBackendSessionLifecycle";
 import { useBackendMessageSend } from "./useBackendMessageSend";
 import { useMessages } from "./useMessages";
@@ -15,10 +15,7 @@ import { useDeltaAccumulator } from "./useDeltaAccumulator";
 import { useSessionStatus } from "./useSessionStatus";
 import { useSessions } from "./useSessions";
 import { useProject } from "./useProject";
-import {
-  isElectron as detectElectron,
-  readWorkspaceDiff,
-} from "../utils/electronBridge";
+import { isElectron as detectElectron, readWorkspaceDiff } from "../utils/electronBridge";
 import {
   getActiveBackendKind,
   getActiveBackendAdapter,
@@ -65,9 +62,7 @@ function toErrorMessage(e: unknown): string {
 }
 
 function toRecord(value: unknown): Record<string, unknown> | undefined {
-  return value && typeof value === "object"
-    ? (value as Record<string, unknown>)
-    : undefined;
+  return value && typeof value === "object" ? (value as Record<string, unknown>) : undefined;
 }
 
 function normalizeFileDiffs(value: unknown): FileDiff[] {
@@ -243,10 +238,7 @@ function scheduleDiffRefresh(sessionId: string, delayMs = 500): void {
       }
     }
     const workspace = await refreshWorkspaceDiffs();
-    msgStore.setSessionDiffs(
-      sessionId,
-      workspace.length > 0 ? workspace : sessionDiffs,
-    );
+    msgStore.setSessionDiffs(sessionId, workspace.length > 0 ? workspace : sessionDiffs);
   }, delayMs);
 
   pendingDiffRefresh.set(sessionId, timer);

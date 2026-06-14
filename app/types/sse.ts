@@ -58,11 +58,7 @@ export type ToolStateError = {
   time: { start: number; end: number };
 };
 
-export type ToolState =
-  | ToolStatePending
-  | ToolStateRunning
-  | ToolStateCompleted
-  | ToolStateError;
+export type ToolState = ToolStatePending | ToolStateRunning | ToolStateCompleted | ToolStateError;
 
 // ── File source types ─────────────────────────────────────────────────────
 
@@ -555,9 +551,7 @@ export type WorkerStateEventType = keyof WorkerStateEventMap;
 
 // ── Helpers ───────────────────────────────────────────────────────────────
 
-export function getMessageVariant(
-  info: MessageInfo
-): string | undefined {
+export function getMessageVariant(info: MessageInfo): string | undefined {
   if (info.role === "user") {
     const modelVariant =
       typeof info.model === "object" && info.model

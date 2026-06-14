@@ -8,6 +8,7 @@
 ## [1.0.0] - 2026-06-13
 
 ### 新增 (Added)
+
 - 🤖 AI Agent 交互式执行功能
 - 📁 智能文件树浏览（支持 Web File System API 和 Electron IPC）
 - 📊 完整的会话管理系统
@@ -40,6 +41,7 @@
   - 类型定义
 
 ### 技术栈 (Technical)
+
 - Vue 3.5.28 (Composition API)
 - TypeScript 6.0.3
 - Vite 7.3.1
@@ -50,11 +52,13 @@
 - Vitest 4.1.2
 
 ### 构建 (Build)
+
 - Web 应用构建
 - Electron 应用打包
 - 跨平台安装包（NSIS, AppImage）
 
 ### 文档 (Documentation)
+
 - 项目 README
 - 贡献指南
 - 变更日志
@@ -69,6 +73,7 @@
 - **[0.x.y]**: 早期开发版本（如存在）
 
 ### 变更类型
+
 - `新增` - 新功能
 - `变更` - 功能变更
 - `弃用` - 即将移除的功能

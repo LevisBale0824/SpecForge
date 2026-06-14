@@ -7,14 +7,9 @@
 
 import { ref, type Ref } from "vue";
 import type { BackendKind } from "../backends/types";
-import { getActiveBackendAdapter, setActiveBackendKind } from "../backends/registry";
+import { setActiveBackendKind } from "../backends/registry";
 
-export type ConnectionState =
-  | "disconnected"
-  | "connecting"
-  | "bootstrapping"
-  | "ready"
-  | "error";
+export type ConnectionState = "disconnected" | "connecting" | "bootstrapping" | "ready" | "error";
 
 export type ActivationState = {
   connectionState: Ref<ConnectionState>;

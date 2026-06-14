@@ -48,7 +48,10 @@ const snapshots = computed<{ before: string; after: string } | null>(() => {
   const hasBefore = typeof diff.before === "string";
   const hasAfter = typeof diff.after === "string";
   if (hasBefore || hasAfter) {
-    return { before: hasBefore ? (diff.before as string) : "", after: hasAfter ? (diff.after as string) : "" };
+    return {
+      before: hasBefore ? (diff.before as string) : "",
+      after: hasAfter ? (diff.after as string) : "",
+    };
   }
   if (diff.diff && diff.diff.trim()) {
     const parsed = parseUnifiedDiff(diff.diff);
@@ -78,9 +81,7 @@ function rightCellClass(p: SidePair): string {
 
 <template>
   <div class="diff-viewer">
-    <div v-if="pairs.length === 0" class="diff-empty">
-      此文件有变更，但后端未提供可对比的内容。
-    </div>
+    <div v-if="pairs.length === 0" class="diff-empty">此文件有变更，但后端未提供可对比的内容。</div>
     <div v-else class="diff-grid">
       <!-- Column headers -->
       <div class="col-header">原文件</div>

@@ -15,6 +15,7 @@
 ## 技术栈
 
 ### 前端
+
 - **框架**: Vue 3 (Composition API)
 - **语言**: TypeScript
 - **构建工具**: Vite 7
@@ -23,11 +24,13 @@
 - **样式**: Tailwind CSS 4
 
 ### 桌面端 (Electron)
+
 - **运行时**: Electron 42
 - **构建**: Electron Builder
 - **进程通信**: IPC (Inter-Process Communication)
 
 ### 开发工具
+
 - **测试**: Vitest + Happy DOM
 - **类型检查**: vue-tsc
 - **包管理**: pnpm
@@ -48,6 +51,7 @@ pnpm install
 ### 开发模式
 
 #### Web 开发
+
 ```bash
 pnpm dev
 ```
@@ -55,6 +59,7 @@ pnpm dev
 访问 http://localhost:5173
 
 #### Electron 桌面开发
+
 ```bash
 pnpm electron:dev
 ```
@@ -62,11 +67,13 @@ pnpm electron:dev
 ### 构建
 
 #### Web 构建
+
 ```bash
 pnpm build
 ```
 
 #### Electron 构建
+
 ```bash
 pnpm electron:build
 ```
@@ -100,24 +107,28 @@ openspec-workbench/
 ## 主要功能
 
 ### 1. 文件树浏览
+
 - 支持 Web (File System API) 和 Electron (IPC) 两种模式
 - 自动忽略 `node_modules`, `.git` 等目录
 - 支持目录展开/折叠
 - 文件和目录排序
 
 ### 2. 会话管理
+
 - 创建新会话
 - 选择现有会话
 - 删除会话
 - 会话历史记录
 
 ### 3. 消息交互
+
 - 与 OpenCode Agent 实时对话
 - 显示工具调用结果
 - 代码内容高亮
 - 文件变更可视化
 
 ### 4. 浮动窗口
+
 - 独立窗口管理
 - 窗口拖拽和层级控制
 - 多窗口支持
@@ -138,19 +149,21 @@ openspec-workbench/
 // app/locales/zh-CN.ts
 export default {
   common: {
-    confirm: '确认',
-    cancel: '取消',
-  }
-}
+    confirm: "确认",
+    cancel: "取消",
+  },
+};
 ```
 
 ### 调试
 
 Web 模式下使用浏览器 DevTools：
+
 - 打开 `http://localhost:5173`
 - 按 `F12` 或 `Ctrl+Shift+I`
 
 Electron 模式下：
+
 - 自动打开 DevTools
 - 主进程日志在终端显示
 
@@ -189,11 +202,13 @@ pnpm lint
 ## 故障排除
 
 ### Electron 启动失败
+
 - 检查端口 13284 是否被占用
 - 确认 OpenCode CLI 已正确安装
 - 查看主进程日志
 
 ### 构建失败
+
 - 清理缓存：`rm -rf node_modules dist dist-electron`
 - 重新安装依赖：`pnpm install`
 

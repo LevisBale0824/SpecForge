@@ -11,10 +11,7 @@ const isElectron = process.env.ELECTRON === "true";
 // Copies the static CJS preload script into dist-electron (no Rollup processing).
 // Preload MUST be CJS — vite-plugin-electron outputs ESM which breaks contextIsolation.
 function copyStaticPreload() {
-  const preloadSource = readFileSync(
-    resolve(__dirname, "electron/preload.cjs"),
-    "utf-8",
-  );
+  const preloadSource = readFileSync(resolve(__dirname, "electron/preload.cjs"), "utf-8");
   return {
     name: "copy-static-preload",
     generateBundle() {

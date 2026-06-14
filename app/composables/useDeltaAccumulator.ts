@@ -79,9 +79,7 @@ export function useDeltaAccumulator() {
       }),
     );
 
-    offs.push(
-      ge.on("connection.reconnected", () => clear()),
-    );
+    offs.push(ge.on("connection.reconnected", () => clear()));
 
     return () => {
       for (const off of offs) off();

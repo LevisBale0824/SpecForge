@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import CodeContent from '../CodeContent.vue';
+import CodeContent from "../CodeContent.vue";
 
 defineProps<{
   html: string;

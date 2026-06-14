@@ -1,8 +1,7 @@
 <script setup lang="ts">
 import { ref } from "vue";
-import { useFloatingWindow } from "../../composables/useFloatingWindow";
 
-const props = defineProps<{
+defineProps<{
   question?: string;
   options?: Array<{ label: string; value: string }>;
 }>();
@@ -11,7 +10,6 @@ const emit = defineEmits<{
   reply: [answer: string];
 }>();
 
-const floatingWindow = useFloatingWindow();
 const customAnswer = ref("");
 const selectedOption = ref("");
 </script>
@@ -29,7 +27,10 @@ const selectedOption = ref("");
         :key="opt.value"
         class="question-option-btn"
         :class="{ selected: selectedOption === opt.value }"
-        @click="selectedOption = opt.value; emit('reply', opt.value)"
+        @click="
+          selectedOption = opt.value;
+          emit('reply', opt.value);
+        "
       >
         {{ opt.label }}
       </button>

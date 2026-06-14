@@ -18,8 +18,7 @@ const rootClass = computed(() => {
     "is-binary": v === "binary",
     "is-term": v === "term",
     "is-plain": v === "plain",
-    "no-gutter":
-      v === "message" || v === "binary" || v === "term" || v === "plain",
+    "no-gutter": v === "message" || v === "binary" || v === "term" || v === "plain",
     "wrap-soft": v === "message" || v === "term",
   };
 });

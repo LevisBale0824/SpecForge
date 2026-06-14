@@ -106,11 +106,7 @@ function parsePorcelainStatus(output: Buffer): Array<{
     }
     if (!file) continue;
     const status =
-      xy.includes("?") || xy.includes("A")
-        ? "added"
-        : xy.includes("D")
-          ? "deleted"
-          : "modified";
+      xy.includes("?") || xy.includes("A") ? "added" : xy.includes("D") ? "deleted" : "modified";
     result.push({ path: file.replace(/\\/g, "/"), status });
   }
 
@@ -134,10 +130,7 @@ function readTextFile(rootPath: string, relPath: string): string | undefined {
   return content.toString("utf8");
 }
 
-async function readGitHeadFile(
-  rootPath: string,
-  relPath: string,
-): Promise<string | undefined> {
+async function readGitHeadFile(rootPath: string, relPath: string): Promise<string | undefined> {
   const result = await runGit(rootPath, ["show", `HEAD:${relPath}`]);
   if (result.code !== 0) return undefined;
   if (result.stdout.length > 1024 * 1024) return undefined;
@@ -172,21 +165,13 @@ async function readWorkspaceDiffs(rootPath: string): Promise<WorkspaceFileDiff[]
   const files = parsePorcelainStatus(status.stdout);
   const diffs: WorkspaceFileDiff[] = [];
   for (const item of files) {
-    const before =
-      item.status === "added" ? undefined : await readGitHeadFile(rootPath, item.path);
-    const after =
-      item.status === "deleted" ? undefined : readTextFile(rootPath, item.path);
+    const before = item.status === "added" ? undefined : await readGitHeadFile(rootPath, item.path);
+    const after = item.status === "deleted" ? undefined : readTextFile(rootPath, item.path);
     const patch =
       item.status === "added"
         ? ""
         : (
-            await runGit(rootPath, [
-              "-c",
-              "core.quotepath=false",
-              "diff",
-              "--",
-              item.path,
-            ])
+            await runGit(rootPath, ["-c", "core.quotepath=false", "diff", "--", item.path])
           ).stdout.toString("utf8");
     const stats =
       item.status === "added" && after
@@ -226,14 +211,11 @@ async function healthCheck(port: number, timeoutMs = 15000): Promise<boolean> {
   while (Date.now() - start < timeoutMs) {
     try {
       await new Promise<void>((resolve, reject) => {
-        const req = http.get(
-          `http://localhost:${port}/global/health`,
-          (res) => {
-            res.resume();
-            if (res.statusCode === 200) resolve();
-            else reject(new Error(`status ${res.statusCode}`));
-          },
-        );
+        const req = http.get(`http://localhost:${port}/global/health`, (res) => {
+          res.resume();
+          if (res.statusCode === 200) resolve();
+          else reject(new Error(`status ${res.statusCode}`));
+        });
         req.on("error", reject);
         req.setTimeout(2000, () => {
           req.destroy();
@@ -320,28 +302,23 @@ function registerIpcHandlers() {
   // Read one level of a directory. `relPath` is "" for the root (passed during
   // openProject) or a POSIX-style relative path for sub-directories. `rootPath`
   // is the absolute root chosen by the user.
-  ipcMain.handle(
-    "readDirectory",
-    async (_e, rootPath: string, relPath: string) => {
-      const abs = relPath
-        ? path.join(rootPath, ...relPath.split("/"))
-        : rootPath;
-      try {
-        const entries = await readDirectoryEntries(abs);
-        // Return entries with paths normalized to POSIX and joined with relPath
-        // so the renderer can build nested tree paths deterministically.
-        return relPath
-          ? entries.map((e) => ({
-              ...e,
-              path: `${relPath}/${e.path}`,
-            }))
-          : entries;
-      } catch (err) {
-        console.error("[electron] readDirectory failed:", err);
-        return [];
-      }
-    },
-  );
+  ipcMain.handle("readDirectory", async (_e, rootPath: string, relPath: string) => {
+    const abs = relPath ? path.join(rootPath, ...relPath.split("/")) : rootPath;
+    try {
+      const entries = await readDirectoryEntries(abs);
+      // Return entries with paths normalized to POSIX and joined with relPath
+      // so the renderer can build nested tree paths deterministically.
+      return relPath
+        ? entries.map((e) => ({
+            ...e,
+            path: `${relPath}/${e.path}`,
+          }))
+        : entries;
+    } catch (err) {
+      console.error("[electron] readDirectory failed:", err);
+      return [];
+    }
+  });
 
   ipcMain.handle("readWorkspaceDiff", async (_e, rootPath: string) => {
     try {
@@ -379,20 +356,22 @@ function registerMenu() {
 
   const template: MenuItemConstructorOptions[] = [
     ...(isMac
-      ? ([{
-          label: app.name,
-          submenu: [
-            { role: "about" },
-            { type: "separator" },
-            { role: "services" },
-            { type: "separator" },
-            { role: "hide" },
-            { role: "hideOthers" },
-            { role: "unhide" },
-            { type: "separator" },
-            { role: "quit" },
-          ],
-        }] as MenuItemConstructorOptions[])
+      ? ([
+          {
+            label: app.name,
+            submenu: [
+              { role: "about" },
+              { type: "separator" },
+              { role: "services" },
+              { type: "separator" },
+              { role: "hide" },
+              { role: "hideOthers" },
+              { role: "unhide" },
+              { type: "separator" },
+              { role: "quit" },
+            ],
+          },
+        ] as MenuItemConstructorOptions[])
       : []),
     {
       label: "File",

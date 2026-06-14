@@ -83,47 +83,28 @@ export type BackendAdapter = {
   label: string;
   capabilities: BackendCapabilities;
 
-  configure?(options: {
-    baseUrl?: string;
-    authorization?: string;
-  }): void;
+  configure?(options: { baseUrl?: string; authorization?: string }): void;
 
   // ── Sessions ───────────────────────────────────────────────────────
   createSession(directory?: string): Promise<unknown>;
-  forkSession(
-    sessionId: string,
-    messageId: string,
-    directory?: string,
-  ): Promise<unknown>;
+  forkSession(sessionId: string, messageId: string, directory?: string): Promise<unknown>;
   updateSession(
     sessionId: string,
     payload: SessionUpdatePayload,
     directory?: string,
   ): Promise<unknown>;
   deleteSession(sessionId: string, directory?: string): Promise<unknown>;
-  revertSession(
-    sessionId: string,
-    messageId: string,
-    directory?: string,
-  ): Promise<unknown>;
+  revertSession(sessionId: string, messageId: string, directory?: string): Promise<unknown>;
   unrevertSession(sessionId: string, directory?: string): Promise<unknown>;
   listSessions(options?: ListSessionsOptions): Promise<unknown>;
 
   // ── Projects ───────────────────────────────────────────────────────
-  updateProject(
-    projectId: string,
-    payload: ProjectUpdatePayload,
-  ): Promise<unknown>;
+  updateProject(projectId: string, payload: ProjectUpdatePayload): Promise<unknown>;
   createWorktree(directory: string): Promise<unknown>;
-  deleteWorktree(
-    directory: string,
-    targetDirectory: string,
-  ): Promise<unknown>;
+  deleteWorktree(directory: string, targetDirectory: string): Promise<unknown>;
 
   // ── Config / Info ──────────────────────────────────────────────────
-  getPathInfo?(
-    options?: BackendRequestOptions,
-  ): Promise<Record<string, string>>;
+  getPathInfo?(options?: BackendRequestOptions): Promise<Record<string, string>>;
   getGlobalConfig?(): Promise<unknown>;
   updateGlobalConfig?(payload: Record<string, unknown>): Promise<unknown>;
   writeConfigValue?(params: {
@@ -156,10 +137,7 @@ export type BackendAdapter = {
     payload: { directory: string; path: string; content: string },
     options?: BackendRequestOptions,
   ): Promise<unknown>;
-  getSessionDiff?(payload: {
-    sessionID: string;
-    directory?: string;
-  }): Promise<unknown>;
+  getSessionDiff?(payload: { sessionID: string; directory?: string }): Promise<unknown>;
 
   // ── Project / Worktree / VCS ───────────────────────────────────────
   listProjects?(directory?: string): Promise<unknown>;
@@ -179,10 +157,7 @@ export type BackendAdapter = {
 
   // ── Providers ──────────────────────────────────────────────────────
   listProviders?(): Promise<unknown>;
-  listProviderAuthMethods?(options?: {
-    directory?: string;
-    workspace?: string;
-  }): Promise<unknown>;
+  listProviderAuthMethods?(options?: { directory?: string; workspace?: string }): Promise<unknown>;
   authorizeProviderOAuth?(
     providerId: string,
     payload: {
@@ -201,10 +176,7 @@ export type BackendAdapter = {
       workspace?: string;
     },
   ): Promise<unknown>;
-  setProviderAuth?(
-    providerId: string,
-    payload: Record<string, unknown>,
-  ): Promise<unknown>;
+  setProviderAuth?(providerId: string, payload: Record<string, unknown>): Promise<unknown>;
   deleteProviderAuth?(providerId: string): Promise<unknown>;
 
   // ── Agents / Commands ──────────────────────────────────────────────
@@ -212,10 +184,7 @@ export type BackendAdapter = {
   listCommands?(directory?: string): Promise<unknown>;
 
   // ── Status / Permissions / Questions ───────────────────────────────
-  getSessionStatusMap?(
-    directory?: string,
-    options?: BackendRequestOptions,
-  ): Promise<unknown>;
+  getSessionStatusMap?(directory?: string, options?: BackendRequestOptions): Promise<unknown>;
   listPendingPermissions?(directory?: string): Promise<unknown>;
   listPendingQuestions?(directory?: string): Promise<unknown>;
 
@@ -224,15 +193,8 @@ export type BackendAdapter = {
     sessionId: string,
     options?: { directory?: string; limit?: number },
   ): Promise<unknown>;
-  getSessionMessage?(
-    sessionId: string,
-    messageId: string,
-    directory?: string,
-  ): Promise<unknown>;
-  getSessionTodos?(
-    sessionId: string,
-    directory?: string,
-  ): Promise<unknown>;
+  getSessionMessage?(sessionId: string, messageId: string, directory?: string): Promise<unknown>;
+  getSessionTodos?(sessionId: string, directory?: string): Promise<unknown>;
 
   // ── PTY ────────────────────────────────────────────────────────────
   listPtys?(directory?: string): Promise<unknown>;
@@ -302,23 +264,13 @@ export type BackendAdapter = {
     requestId: string,
     payload: { directory?: string; answers: string[][] },
   ): Promise<void>;
-  rejectQuestion?(
-    requestId: string,
-    directory?: string,
-  ): Promise<void>;
+  rejectQuestion?(requestId: string, directory?: string): Promise<void>;
 
   // ── Health / MCP / LSP / Skills ────────────────────────────────────
   getGlobalHealth?(): Promise<{ healthy: boolean; version: string }>;
   getMcpStatus?(): Promise<unknown>;
   getLspStatus?(): Promise<unknown>;
-  updateMcp?(payload: {
-    name: string;
-    config: Record<string, unknown>;
-  }): Promise<unknown>;
+  updateMcp?(payload: { name: string; config: Record<string, unknown> }): Promise<unknown>;
   getSkillStatus?(): Promise<unknown>;
-  updateSkill?(payload: {
-    path: string;
-    name?: string;
-    enabled: boolean;
-  }): Promise<unknown>;
+  updateSkill?(payload: { path: string; name?: string; enabled: boolean }): Promise<unknown>;
 };

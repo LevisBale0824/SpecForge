@@ -34,9 +34,7 @@ export function getAuthorization() {
 
 function getBaseUrlOrThrow(errorMessage?: string) {
   if (!configuredBaseUrl) {
-    throw new Error(
-      errorMessage ?? "OpenCode base URL is not configured.",
-    );
+    throw new Error(errorMessage ?? "OpenCode base URL is not configured.");
   }
   return configuredBaseUrl;
 }
@@ -68,16 +66,11 @@ async function parseJson(response: Response) {
   }
 }
 
-function buildHeaders(
-  options?: RequestOptions,
-  contentType?: string,
-) {
+function buildHeaders(options?: RequestOptions, contentType?: string) {
   const headers: Record<string, string> = {};
   if (contentType) headers["Content-Type"] = contentType;
-  if (options?.instanceDirectory)
-    headers["x-opencode-directory"] = options.instanceDirectory;
-  if (configuredAuthorization)
-    headers["Authorization"] = configuredAuthorization;
+  if (options?.instanceDirectory) headers["x-opencode-directory"] = options.instanceDirectory;
+  if (configuredAuthorization) headers["Authorization"] = configuredAuthorization;
   return Object.keys(headers).length > 0 ? headers : undefined;
 }
 
@@ -90,8 +83,7 @@ async function getJson(
     headers: buildHeaders(options),
     signal: options?.signal,
   });
-  if (!response.ok)
-    throw new Error(`${path} request failed (${response.status})`);
+  if (!response.ok) throw new Error(`${path} request failed (${response.status})`);
   return parseJson(response);
 }
 
@@ -107,12 +99,10 @@ async function sendJson(
   const response = await fetch(createUrl(path, options.params), {
     method,
     headers: buildHeaders(options.request, "application/json"),
-    body:
-      options.body === undefined ? undefined : JSON.stringify(options.body),
+    body: options.body === undefined ? undefined : JSON.stringify(options.body),
     signal: options.request?.signal,
   });
-  if (!response.ok)
-    throw new Error(`${path} request failed (${response.status})`);
+  if (!response.ok) throw new Error(`${path} request failed (${response.status})`);
   return parseJson(response);
 }
 
@@ -137,9 +127,7 @@ export function createWsUrl(
 // ── Path / Config ─────────────────────────────────────────────────────────
 
 export function getPathInfo(options?: RequestOptions) {
-  return getJson("/path", undefined, options) as Promise<
-    Record<string, string>
-  >;
+  return getJson("/path", undefined, options) as Promise<Record<string, string>>;
 }
 
 export function getGlobalConfig() {
@@ -147,17 +135,12 @@ export function getGlobalConfig() {
 }
 
 export function updateGlobalConfig(payload: Record<string, unknown>) {
-  return sendJson("/global/config", "PATCH", { body: payload }) as Promise<
-    unknown
-  >;
+  return sendJson("/global/config", "PATCH", { body: payload }) as Promise<unknown>;
 }
 
 // ── Files ─────────────────────────────────────────────────────────────────
 
-export function listFiles(
-  payload: { directory: string; path?: string },
-  options?: RequestOptions,
-) {
+export function listFiles(payload: { directory: string; path?: string }, options?: RequestOptions) {
   return getJson(
     "/file",
     { directory: payload.directory, path: payload.path },
@@ -187,15 +170,11 @@ export async function readFileContentBytes(
     }),
     { headers: buildHeaders(options), signal: options?.signal },
   );
-  if (!response.ok)
-    throw new Error(`/file/content request failed (${response.status})`);
+  if (!response.ok) throw new Error(`/file/content request failed (${response.status})`);
   return new Uint8Array(await response.arrayBuffer());
 }
 
-export function getSessionDiff(payload: {
-  sessionID: string;
-  directory?: string;
-}) {
+export function getSessionDiff(payload: { sessionID: string; directory?: string }) {
   return getJson(`/session/${payload.sessionID}/diff`, {
     directory: payload.directory,
   }) as Promise<unknown>;
@@ -253,14 +232,8 @@ export function listSessions(
   ) as Promise<unknown>;
 }
 
-export function getSession(
-  sessionId: string,
-  directory?: string,
-  request?: RequestOptions,
-) {
-  return getJson(`/session/${sessionId}`, { directory }, request) as Promise<
-    unknown
-  >;
+export function getSession(sessionId: string, directory?: string, request?: RequestOptions) {
+  return getJson(`/session/${sessionId}`, { directory }, request) as Promise<unknown>;
 }
 
 export function getSessionChildren(
@@ -268,11 +241,7 @@ export function getSessionChildren(
   directory?: string,
   request?: RequestOptions,
 ) {
-  return getJson(
-    `/session/${sessionId}/children`,
-    { directory },
-    request,
-  ) as Promise<unknown>;
+  return getJson(`/session/${sessionId}/children`, { directory }, request) as Promise<unknown>;
 }
 
 export function createSession(directory?: string) {
@@ -307,22 +276,14 @@ export function updateSession(
   }) as Promise<unknown>;
 }
 
-export function forkSession(
-  sessionId: string,
-  messageId: string,
-  directory?: string,
-) {
+export function forkSession(sessionId: string, messageId: string, directory?: string) {
   return sendJson(`/session/${sessionId}/fork`, "POST", {
     params: { directory },
     body: { messageID: messageId },
   }) as Promise<unknown>;
 }
 
-export function revertSession(
-  sessionId: string,
-  messageId: string,
-  directory?: string,
-) {
+export function revertSession(sessionId: string, messageId: string, directory?: string) {
   return sendJson(`/session/${sessionId}/revert`, "POST", {
     params: { directory },
     body: { messageID: messageId },
@@ -353,10 +314,7 @@ export function createWorktree(directory: string) {
   }) as Promise<unknown>;
 }
 
-export function deleteWorktree(
-  directory: string,
-  targetDirectory: string,
-) {
+export function deleteWorktree(directory: string, targetDirectory: string) {
   return sendJson("/experimental/worktree", "DELETE", {
     params: { directory },
     body: { directory: targetDirectory },
@@ -369,9 +327,7 @@ export function listProviders() {
   return getJson("/provider") as Promise<unknown>;
 }
 
-export function listProviderAuthMethods(
-  options: { directory?: string; workspace?: string } = {},
-) {
+export function listProviderAuthMethods(options: { directory?: string; workspace?: string } = {}) {
   return getJson("/provider/auth", {
     directory: options.directory,
     workspace: options.workspace,
@@ -408,19 +364,14 @@ export function completeProviderOAuth(
   }) as Promise<unknown>;
 }
 
-export function setProviderAuth(
-  providerId: string,
-  payload: Record<string, unknown>,
-) {
+export function setProviderAuth(providerId: string, payload: Record<string, unknown>) {
   return sendJson(`/auth/${providerId}`, "PUT", {
     body: payload,
   }) as Promise<unknown>;
 }
 
 export function deleteProviderAuth(providerId: string) {
-  return sendJson(`/auth/${providerId}`, "DELETE", { body: {} }) as Promise<
-    unknown
-  >;
+  return sendJson(`/auth/${providerId}`, "DELETE", { body: {} }) as Promise<unknown>;
 }
 
 // ── Agents / Commands ─────────────────────────────────────────────────────
@@ -435,13 +386,8 @@ export function listCommands(directory?: string) {
 
 // ── Status / Permissions / Questions ──────────────────────────────────────
 
-export function getSessionStatusMap(
-  directory?: string,
-  request?: RequestOptions,
-) {
-  return getJson("/session/status", { directory }, request) as Promise<
-    unknown
-  >;
+export function getSessionStatusMap(directory?: string, request?: RequestOptions) {
+  return getJson("/session/status", { directory }, request) as Promise<unknown>;
 }
 
 export function listPendingPermissions(directory?: string) {
@@ -464,20 +410,14 @@ export function listSessionMessages(
   }) as Promise<unknown>;
 }
 
-export function getSessionMessage(
-  sessionId: string,
-  messageId: string,
-  directory?: string,
-) {
+export function getSessionMessage(sessionId: string, messageId: string, directory?: string) {
   return getJson(`/session/${sessionId}/message/${messageId}`, {
     directory,
   }) as Promise<unknown>;
 }
 
 export function getSessionTodos(sessionId: string, directory?: string) {
-  return getJson(`/session/${sessionId}/todo`, { directory }) as Promise<
-    unknown
-  >;
+  return getJson(`/session/${sessionId}/todo`, { directory }) as Promise<unknown>;
 }
 
 // ── PTY ───────────────────────────────────────────────────────────────────
@@ -567,10 +507,7 @@ export async function sendPromptAsync(
   });
 }
 
-export async function abortSession(
-  sessionId: string,
-  directory?: string,
-) {
+export async function abortSession(sessionId: string, directory?: string) {
   await sendJson(`/session/${sessionId}/abort`, "POST", {
     params: { directory },
   });
@@ -612,10 +549,7 @@ export async function replyQuestion(
   });
 }
 
-export async function rejectQuestion(
-  requestId: string,
-  directory?: string,
-) {
+export async function rejectQuestion(requestId: string, directory?: string) {
   await sendJson(`/question/${requestId}/reject`, "POST", {
     params: { directory },
   });
@@ -638,10 +572,7 @@ export function getLspStatus() {
   return getJson("/lsp") as Promise<unknown>;
 }
 
-export function updateMcp(payload: {
-  name: string;
-  config: Record<string, unknown>;
-}) {
+export function updateMcp(payload: { name: string; config: Record<string, unknown> }) {
   return sendJson("/mcp", "POST", { body: payload }) as Promise<unknown>;
 }
 

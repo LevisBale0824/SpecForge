@@ -22,9 +22,7 @@ export type SessionLifecycleOptions = {
   onSessionError?: (message: string) => void;
 };
 
-export function useBackendSessionLifecycle(
-  options: SessionLifecycleOptions,
-) {
+export function useBackendSessionLifecycle(options: SessionLifecycleOptions) {
   const msgStore = useMessages();
 
   async function createSession(directory?: string): Promise<BackendSessionInfo | undefined> {

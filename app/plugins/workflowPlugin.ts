@@ -5,10 +5,16 @@
 // as a Vue plugin. Disabled by default; toggle in settings.
 // ---------------------------------------------------------------------------
 
-import type { App, Plugin } from "vue";
+import type { App } from "vue";
 import type { OpenSpecPlugin } from "./pluginTypes";
-import { STEP_ORDER, createDefaultWorkflowState, type StepName, type StepPhase, type WorkflowState } from "../types/workflow";
-import { reactive, ref } from "vue";
+import {
+  STEP_ORDER,
+  createDefaultWorkflowState,
+  type StepName,
+  type StepPhase,
+  type WorkflowState,
+} from "../types/workflow";
+import { ref } from "vue";
 
 // ── Module-level workflow state ───────────────────────────────────────────
 

@@ -7,7 +7,14 @@
 // ---------------------------------------------------------------------------
 
 export type DiffRow =
-  | { kind: "hunk"; oldStart: number; oldLen: number; newStart: number; newLen: number; text: string }
+  | {
+      kind: "hunk";
+      oldStart: number;
+      oldLen: number;
+      newStart: number;
+      newLen: number;
+      text: string;
+    }
   | { kind: "context"; oldNo: number; newNo: number; text: string }
   | { kind: "added"; newNo: number; text: string }
   | { kind: "removed"; oldNo: number; text: string }
@@ -202,9 +209,7 @@ export function sideBySidePair(before: string, after: string): SidePair[] {
   }
 
   // LCS DP — dp[i][j] = longest common suffix length from (i,j) to (m,n)
-  const dp: number[][] = Array.from({ length: m + 1 }, () =>
-    new Array<number>(n + 1).fill(0),
-  );
+  const dp: number[][] = Array.from({ length: m + 1 }, () => new Array<number>(n + 1).fill(0));
   for (let i = m - 1; i >= 0; i--) {
     for (let j = n - 1; j >= 0; j--) {
       if (b[i] === a[j]) dp[i][j] = dp[i + 1][j + 1] + 1;

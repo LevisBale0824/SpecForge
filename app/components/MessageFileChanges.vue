@@ -34,11 +34,10 @@ const emit = defineEmits<{
   "open-diff": [diff: MessageDiffEntry];
 }>();
 
-const normalized = computed<NormalizedDiff[]>(
-  () =>
-    (props.diffs ?? [])
-      .filter((diff) => diff.file)
-      .map((diff) => ({ ...diff, ...normalizeStats(diff) })),
+const normalized = computed<NormalizedDiff[]>(() =>
+  (props.diffs ?? [])
+    .filter((diff) => diff.file)
+    .map((diff) => ({ ...diff, ...normalizeStats(diff) })),
 );
 
 const patchOnlyFiles = computed(() => {
@@ -46,9 +45,7 @@ const patchOnlyFiles = computed(() => {
   return (props.patchFiles ?? []).filter((file) => !diffFiles.has(file));
 });
 
-const hasChanges = computed(
-  () => normalized.value.length > 0 || patchOnlyFiles.value.length > 0,
-);
+const hasChanges = computed(() => normalized.value.length > 0 || patchOnlyFiles.value.length > 0);
 
 function basename(file: string): string {
   const parts = file.replace(/\\/g, "/").split("/");

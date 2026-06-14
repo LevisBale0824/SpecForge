@@ -36,9 +36,7 @@ export async function readWorkspaceDiff(
   return null;
 }
 
-export function onOpenFolder(
-  callback: (path: string) => void,
-): (() => void) | null {
+export function onOpenFolder(callback: (path: string) => void): (() => void) | null {
   if (window.electronAPI) {
     return window.electronAPI.onOpenFolder(callback);
   }

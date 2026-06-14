@@ -2,11 +2,11 @@
 import { computed } from "vue";
 import { useI18n } from "vue-i18n";
 import { useWorkflow } from "../../plugins/workflowPlugin";
-import { STEP_ORDER, type StepName } from "../../types/workflow";
+import { STEP_ORDER } from "../../types/workflow";
 import StepNav from "./StepNav.vue";
 
 const { t } = useI18n();
-const { state, enabled, setActiveStep, setStepPhase, nextStep } = useWorkflow();
+const { state, enabled, setActiveStep, nextStep } = useWorkflow();
 
 const steps = computed(() =>
   STEP_ORDER.map((name) => ({

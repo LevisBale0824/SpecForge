@@ -25,15 +25,14 @@ const thread = computed(() =>
 
 <template>
   <div class="flex-1 overflow-y-auto py-4">
-    <div v-if="thread.length === 0" class="flex items-center justify-center h-full text-surface-600 text-sm">
+    <div
+      v-if="thread.length === 0"
+      class="flex items-center justify-center h-full text-surface-600 text-sm"
+    >
       Start a conversation...
     </div>
     <div v-else class="space-y-2">
-      <ThreadBlock
-        v-for="message in thread"
-        :key="message.id"
-        :message="message"
-      />
+      <ThreadBlock v-for="message in thread" :key="message.id" :message="message" />
     </div>
   </div>
 </template>

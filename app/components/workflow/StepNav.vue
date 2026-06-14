@@ -15,16 +15,6 @@ defineProps<{
 const emit = defineEmits<{
   select: [step: StepName];
 }>();
-
-function phaseIcon(phase: string): string {
-  switch (phase) {
-    case "done": return "done";
-    case "executing": return "running";
-    case "input":
-    case "reviewing": return "active";
-    default: return "idle";
-  }
-}
 </script>
 
 <template>
@@ -53,7 +43,13 @@ function phaseIcon(phase: string): string {
       </button>
 
       <!-- Connector -->
-      <svg v-if="i < steps.length - 1" class="w-4 h-4 text-surface-700 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <svg
+        v-if="i < steps.length - 1"
+        class="w-4 h-4 text-surface-700 shrink-0"
+        fill="none"
+        stroke="currentColor"
+        viewBox="0 0 24 24"
+      >
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
       </svg>
     </template>

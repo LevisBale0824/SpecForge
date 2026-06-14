@@ -1,18 +1,9 @@
 <script setup lang="ts">
 import { ref, computed, provide, watch, onBeforeUnmount, nextTick } from "vue";
 import CodeContent from "./CodeContent.vue";
-import {
-  FLOATING_WINDOW_KEY,
-  type FloatingWindowAPI,
-} from "../composables/useFloatingWindow";
-import type {
-  FloatingWindowEntry,
-  useFloatingWindows,
-} from "../composables/useFloatingWindows";
-import {
-  useAutoScroller,
-  type ScrollMode,
-} from "../composables/useAutoScroller";
+import { FLOATING_WINDOW_KEY, type FloatingWindowAPI } from "../composables/useFloatingWindow";
+import type { FloatingWindowEntry, useFloatingWindows } from "../composables/useFloatingWindows";
+import { useAutoScroller, type ScrollMode } from "../composables/useAutoScroller";
 import { useContentSearch } from "../composables/useContentSearch";
 import { Icon } from "@iconify/vue";
 
@@ -30,25 +21,21 @@ const windowEl = ref<HTMLElement>();
 const bodyEl = ref<HTMLElement>();
 const searchInputEl = ref<HTMLInputElement>();
 
-const scrollMode = computed<ScrollMode>(
-  () => props.entry.scroll || "manual",
-);
+const scrollMode = computed<ScrollMode>(() => props.entry.scroll || "manual");
 
-const {
-  showResumeButton,
-  isFollowing,
-  resumeFollow,
-  notifyContentChange,
-} = useAutoScroller(bodyEl, scrollMode, {
-  smoothEngine: props.entry.smoothEngine,
-});
+const { showResumeButton, isFollowing, resumeFollow, notifyContentChange } = useAutoScroller(
+  bodyEl,
+  scrollMode,
+  {
+    smoothEngine: props.entry.smoothEngine,
+  },
+);
 
 const search = useContentSearch(bodyEl);
 
 const searchResultLabel = computed(() => {
   if (search.query.value.length === 0) return "";
-  if (search.matchCount.value === 0 || search.currentIndex.value < 0)
-    return "No results";
+  if (search.matchCount.value === 0 || search.currentIndex.value < 0) return "No results";
   return `${search.currentIndex.value + 1}/${search.matchCount.value}`;
 });
 
@@ -60,8 +47,7 @@ let pendingScrollTop: number | null = null;
 let shouldRestoreScrollTop = false;
 
 function shouldPreserveScrollPosition() {
-  if (scrollMode.value === "manual" || scrollMode.value === "none")
-    return true;
+  if (scrollMode.value === "manual" || scrollMode.value === "none") return true;
   return scrollMode.value === "follow" && !isFollowing.value;
 }
 
@@ -112,13 +98,13 @@ const api: FloatingWindowAPI = {
     props.manager.appendContent(props.entry.key, text);
   },
   setTitle: (title: string) => {
-    props.entry.title = title;
+    props.manager.setTitle(props.entry.key, title);
   },
   setStatus: (status: string) => {
-    props.entry.status = status as "running" | "completed" | "error";
+    props.manager.setStatus(props.entry.key, status as "running" | "completed" | "error");
   },
   setColor: (color: string) => {
-    props.entry.color = color;
+    props.manager.patchEntry(props.entry.key, { color });
   },
   bringToFront: () => {
     emit("focus", props.entry.key);
@@ -147,8 +133,7 @@ const windowStyle = computed(() => {
 
 const scrollClass = computed(() => {
   return {
-    "scroll-none":
-      props.entry.scroll === "none" || props.entry.scroll === "force",
+    "scroll-none": props.entry.scroll === "none" || props.entry.scroll === "force",
   };
 });
 
@@ -200,22 +185,13 @@ function onBodyKeydown(event: KeyboardEvent) {
     return;
   }
 
-  if (
-    event.key === "/" &&
-    !event.ctrlKey &&
-    !event.metaKey &&
-    !event.altKey
-  ) {
+  if (event.key === "/" && !event.ctrlKey && !event.metaKey && !event.altKey) {
     event.preventDefault();
     openSearchMode();
     return;
   }
 
-  if (
-    (event.ctrlKey || event.metaKey) &&
-    !event.altKey &&
-    key === "f"
-  ) {
+  if ((event.ctrlKey || event.metaKey) && !event.altKey && key === "f") {
     event.preventDefault();
     openSearchMode();
   }
@@ -224,11 +200,7 @@ function onBodyKeydown(event: KeyboardEvent) {
 function onSearchKeydown(event: KeyboardEvent) {
   const key = event.key.toLowerCase();
 
-  if (
-    (event.ctrlKey || event.metaKey) &&
-    !event.altKey &&
-    key === "f"
-  ) {
+  if ((event.ctrlKey || event.metaKey) && !event.altKey && key === "f") {
     event.preventDefault();
     searchInputEl.value?.focus();
     searchInputEl.value?.select();
@@ -264,15 +236,8 @@ let dragPointerId = -1;
 
 const TITLEBAR_VISIBLE_PX = 32;
 
-function getAxisBounds(
-  extentSize: number,
-  windowSize: number,
-  visibleSize: number,
-) {
-  const keepVisible = Math.max(
-    1,
-    Math.min(visibleSize, windowSize, extentSize),
-  );
+function getAxisBounds(extentSize: number, windowSize: number, visibleSize: number) {
+  const keepVisible = Math.max(1, Math.min(visibleSize, windowSize, extentSize));
   return {
     min: keepVisible - windowSize,
     max: extentSize - keepVisible,
@@ -298,10 +263,7 @@ function getDragBounds() {
   const w = props.entry.width || 600;
   const h = props.entry.height || 400;
   const xBounds = getAxisBounds(extent.width, w, TITLEBAR_VISIBLE_PX);
-  const keepVisibleY = Math.max(
-    1,
-    Math.min(TITLEBAR_VISIBLE_PX, extent.height),
-  );
+  const keepVisibleY = Math.max(1, Math.min(TITLEBAR_VISIBLE_PX, extent.height));
   return {
     minX: xBounds.min,
     maxX: xBounds.max,
@@ -358,8 +320,7 @@ function cleanupDrag() {
 
 function onDragEnd() {
   cleanupDrag();
-  props.entry.x = dragX;
-  props.entry.y = dragY;
+  props.manager.patchEntry(props.entry.key, { x: dragX, y: dragY });
   snapBack();
 }
 
@@ -395,10 +356,7 @@ function snapBack() {
     const tc = Math.min(Math.max(...candidates), 1);
     const tx = x + tc * dx;
     const ty = y + tc * dy;
-    if (
-      (!validX || (tx >= minX && tx <= maxX)) &&
-      (!validY || (ty >= minY && ty <= maxY))
-    ) {
+    if ((!validX || (tx >= minX && tx <= maxX)) && (!validY || (ty >= minY && ty <= maxY))) {
       t = tc;
     }
   }
@@ -420,8 +378,7 @@ function snapBack() {
     if (progress < 1) {
       snapAnimId = requestAnimationFrame(frame);
     } else {
-      props.entry.x = dragX;
-      props.entry.y = dragY;
+      props.manager.patchEntry(props.entry.key, { x: dragX, y: dragY });
       snapAnimId = null;
     }
   }
@@ -468,8 +425,10 @@ function onResizeStart(e: PointerEvent) {
 function onResizeMove(e: PointerEvent) {
   const dx = e.clientX - resizeStartX;
   const dy = e.clientY - resizeStartY;
-  props.entry.width = Math.max(200, windowStartWidth + dx);
-  props.entry.height = Math.max(150, windowStartHeight + dy);
+  props.manager.patchEntry(props.entry.key, {
+    width: Math.max(200, windowStartWidth + dx),
+    height: Math.max(150, windowStartHeight + dy),
+  });
 }
 
 function onResizeEnd(e: PointerEvent) {
@@ -479,10 +438,7 @@ function onResizeEnd(e: PointerEvent) {
   target.releasePointerCapture(e.pointerId);
 
   if (props.entry.onResize) {
-    props.entry.onResize(
-      props.entry.width || 600,
-      props.entry.height || 400,
-    );
+    props.entry.onResize(props.entry.width || 600, props.entry.height || 400);
   }
 }
 </script>
@@ -497,13 +453,7 @@ function onResizeEnd(e: PointerEvent) {
   >
     <div class="floating-window-titlebar" @pointerdown="onDragStart">
       <span class="title">{{ entry.title || "Tool" }}</span>
-      <button
-        v-if="entry.closable"
-        class="close-btn"
-        @click.stop="onClose"
-      >
-        &times;
-      </button>
+      <button v-if="entry.closable" class="close-btn" @click.stop="onClose">&times;</button>
     </div>
 
     <div class="floating-window-body-wrapper">
@@ -520,10 +470,7 @@ function onResizeEnd(e: PointerEvent) {
         </template>
         <CodeContent
           v-else
-          :html="
-            entry.resolvedHtml ||
-            (typeof entry.content === 'string' ? entry.content : '')
-          "
+          :html="entry.resolvedHtml || (typeof entry.content === 'string' ? entry.content : '')"
           :variant="entry.variant"
         />
       </div>
@@ -539,18 +486,10 @@ function onResizeEnd(e: PointerEvent) {
       </Transition>
     </div>
 
-    <div
-      v-if="entry.resizable"
-      class="floating-window-resizer"
-      @pointerdown="onResizeStart"
-    />
+    <div v-if="entry.resizable" class="floating-window-resizer" @pointerdown="onResizeStart" />
 
     <Transition name="search-bar">
-      <div
-        v-if="search.isSearching.value"
-        class="fw-search-bar"
-        @pointerdown.stop
-      >
+      <div v-if="search.isSearching.value" class="fw-search-bar" @pointerdown.stop>
         <input
           ref="searchInputEl"
           v-model="search.query.value"
@@ -569,12 +508,7 @@ function onResizeEnd(e: PointerEvent) {
         >
           &uarr;
         </button>
-        <button
-          class="fw-search-btn"
-          type="button"
-          aria-label="Next match"
-          @click="search.next"
-        >
+        <button class="fw-search-btn" type="button" aria-label="Next match" @click="search.next">
           &darr;
         </button>
         <button
@@ -608,11 +542,7 @@ function onResizeEnd(e: PointerEvent) {
   flex-direction: column;
   max-width: 100vw;
 
-  background: color-mix(
-    in srgb,
-    var(--window-color, #3a4150) 12%,
-    #1a1d24
-  );
+  background: color-mix(in srgb, var(--window-color, #3a4150) 12%, #1a1d24);
   border: 1px solid var(--window-color, #3a4150);
   border-radius: 5px;
 
@@ -631,22 +561,10 @@ function onResizeEnd(e: PointerEvent) {
   justify-content: space-between;
   padding: 0 4px;
   font-size: 12px;
-  color: color-mix(
-    in srgb,
-    var(--window-color, #3a4150) 40%,
-    #e2e8f0
-  );
-  background: color-mix(
-    in srgb,
-    var(--window-color, #3a4150) 22%,
-    rgba(36, 40, 50, 0.95)
-  );
+  color: color-mix(in srgb, var(--window-color, #3a4150) 40%, #e2e8f0);
+  background: color-mix(in srgb, var(--window-color, #3a4150) 22%, rgba(36, 40, 50, 0.95));
   border-bottom: 1px solid
-    color-mix(
-      in srgb,
-      var(--window-color, #3a4150) 35%,
-      rgba(90, 100, 120, 0.35)
-    );
+    color-mix(in srgb, var(--window-color, #3a4150) 35%, rgba(90, 100, 120, 0.35));
   border-radius: 4px 4px 0 0;
   cursor: grab;
   user-select: none;
@@ -826,8 +744,7 @@ function onResizeEnd(e: PointerEvent) {
   height: 0;
   border-style: solid;
   border-width: 0 0 5px 5px;
-  border-color: transparent transparent
-    var(--window-color, #3a4150) transparent;
+  border-color: transparent transparent var(--window-color, #3a4150) transparent;
 }
 
 .floating-window-resizer:hover::before {

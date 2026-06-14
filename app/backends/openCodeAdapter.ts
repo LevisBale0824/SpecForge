@@ -41,10 +41,8 @@ export function createOpenCodeAdapter(): BackendAdapter {
     },
 
     configure: (options) => {
-      if (options.baseUrl !== undefined)
-        opencodeApi.setBaseUrl(options.baseUrl);
-      if (options.authorization !== undefined)
-        opencodeApi.setAuthorization(options.authorization);
+      if (options.baseUrl !== undefined) opencodeApi.setBaseUrl(options.baseUrl);
+      if (options.authorization !== undefined) opencodeApi.setAuthorization(options.authorization);
     },
 
     // ── Sessions ────────────────────────────────────────────────────
@@ -53,17 +51,14 @@ export function createOpenCodeAdapter(): BackendAdapter {
       opencodeApi.forkSession(sessionId, messageId, directory),
     updateSession: (sessionId, payload, directory) =>
       opencodeApi.updateSession(sessionId, payload, directory),
-    deleteSession: (sessionId, directory) =>
-      opencodeApi.deleteSession(sessionId, directory),
+    deleteSession: (sessionId, directory) => opencodeApi.deleteSession(sessionId, directory),
     revertSession: (sessionId, messageId, directory) =>
       opencodeApi.revertSession(sessionId, messageId, directory),
-    unrevertSession: (sessionId, directory) =>
-      opencodeApi.unrevertSession(sessionId, directory),
+    unrevertSession: (sessionId, directory) => opencodeApi.unrevertSession(sessionId, directory),
     listSessions: (options) => opencodeApi.listSessions(options),
 
     // ── Projects ────────────────────────────────────────────────────
-    updateProject: (projectId, payload) =>
-      opencodeApi.updateProject(projectId, payload),
+    updateProject: (projectId, payload) => opencodeApi.updateProject(projectId, payload),
     createWorktree: (directory) => opencodeApi.createWorktree(directory),
     deleteWorktree: (directory, targetDirectory) =>
       opencodeApi.deleteWorktree(directory, targetDirectory),
@@ -71,22 +66,17 @@ export function createOpenCodeAdapter(): BackendAdapter {
     // ── Config / Info ───────────────────────────────────────────────
     getPathInfo: (options) => opencodeApi.getPathInfo(options),
     getGlobalConfig: () => opencodeApi.getGlobalConfig(),
-    updateGlobalConfig: (payload) =>
-      opencodeApi.updateGlobalConfig(payload),
+    updateGlobalConfig: (payload) => opencodeApi.updateGlobalConfig(payload),
 
     // ── Files ───────────────────────────────────────────────────────
-    listFiles: (payload, options) =>
-      opencodeApi.listFiles(payload, options),
-    readFileContent: (payload, options) =>
-      opencodeApi.readFileContent(payload, options),
-    readFileContentBytes: (payload, options) =>
-      opencodeApi.readFileContentBytes(payload, options),
+    listFiles: (payload, options) => opencodeApi.listFiles(payload, options),
+    readFileContent: (payload, options) => opencodeApi.readFileContent(payload, options),
+    readFileContentBytes: (payload, options) => opencodeApi.readFileContentBytes(payload, options),
     getSessionDiff: (payload) => opencodeApi.getSessionDiff(payload),
 
     // ── Project / Worktree / VCS ────────────────────────────────────
     listProjects: (directory) => opencodeApi.listProjects(directory),
-    getCurrentProject: (directory) =>
-      opencodeApi.getCurrentProject(directory),
+    getCurrentProject: (directory) => opencodeApi.getCurrentProject(directory),
     getSession: (sessionId, directory, request) =>
       opencodeApi.getSession(sessionId, directory, request),
     getSessionChildren: (sessionId, directory, request) =>
@@ -96,16 +86,13 @@ export function createOpenCodeAdapter(): BackendAdapter {
 
     // ── Providers ───────────────────────────────────────────────────
     listProviders: () => opencodeApi.listProviders(),
-    listProviderAuthMethods: (options) =>
-      opencodeApi.listProviderAuthMethods(options),
+    listProviderAuthMethods: (options) => opencodeApi.listProviderAuthMethods(options),
     authorizeProviderOAuth: (providerId, payload) =>
       opencodeApi.authorizeProviderOAuth(providerId, payload),
     completeProviderOAuth: (providerId, payload) =>
       opencodeApi.completeProviderOAuth(providerId, payload),
-    setProviderAuth: (providerId, payload) =>
-      opencodeApi.setProviderAuth(providerId, payload),
-    deleteProviderAuth: (providerId) =>
-      opencodeApi.deleteProviderAuth(providerId),
+    setProviderAuth: (providerId, payload) => opencodeApi.setProviderAuth(providerId, payload),
+    deleteProviderAuth: (providerId) => opencodeApi.deleteProviderAuth(providerId),
 
     // ── Agents / Commands ───────────────────────────────────────────
     listAgents: () => opencodeApi.listAgents(),
@@ -114,47 +101,34 @@ export function createOpenCodeAdapter(): BackendAdapter {
     // ── Status / Permissions / Questions ────────────────────────────
     getSessionStatusMap: (directory, options) =>
       opencodeApi.getSessionStatusMap(directory, options),
-    listPendingPermissions: (directory) =>
-      opencodeApi.listPendingPermissions(directory),
-    listPendingQuestions: (directory) =>
-      opencodeApi.listPendingQuestions(directory),
+    listPendingPermissions: (directory) => opencodeApi.listPendingPermissions(directory),
+    listPendingQuestions: (directory) => opencodeApi.listPendingQuestions(directory),
 
     // ── Messages ────────────────────────────────────────────────────
     listSessionMessages: (sessionId, options) =>
       opencodeApi.listSessionMessages(sessionId, options),
     getSessionMessage: (sessionId, messageId, directory) =>
       opencodeApi.getSessionMessage(sessionId, messageId, directory),
-    getSessionTodos: (sessionId, directory) =>
-      opencodeApi.getSessionTodos(sessionId, directory),
+    getSessionTodos: (sessionId, directory) => opencodeApi.getSessionTodos(sessionId, directory),
 
     // ── PTY ─────────────────────────────────────────────────────────
     listPtys: (directory) => opencodeApi.listPtys(directory),
-    createPty: (payload, options) =>
-      opencodeApi.createPty(payload, options),
-    updatePtySize: (ptyId, payload) =>
-      opencodeApi.updatePtySize(ptyId, payload),
-    deletePty: (ptyId, directory) =>
-      opencodeApi.deletePty(ptyId, directory),
+    createPty: (payload, options) => opencodeApi.createPty(payload, options),
+    updatePtySize: (ptyId, payload) => opencodeApi.updatePtySize(ptyId, payload),
+    deletePty: (ptyId, directory) => opencodeApi.deletePty(ptyId, directory),
     createPtyWebSocketUrl: (path, params, credentials) =>
       opencodeApi.createWsUrl(path, params, credentials),
 
     // ── Execution ───────────────────────────────────────────────────
-    sendCommand: (sessionId, payload) =>
-      opencodeApi.sendCommand(sessionId, payload),
-    sendPromptAsync: (sessionId, payload) =>
-      opencodeApi.sendPromptAsync(sessionId, payload),
-    abortSession: (sessionId, directory) =>
-      opencodeApi.abortSession(sessionId, directory),
-    patchMessagePart: (payload) =>
-      opencodeApi.patchMessagePart(payload),
+    sendCommand: (sessionId, payload) => opencodeApi.sendCommand(sessionId, payload),
+    sendPromptAsync: (sessionId, payload) => opencodeApi.sendPromptAsync(sessionId, payload),
+    abortSession: (sessionId, directory) => opencodeApi.abortSession(sessionId, directory),
+    patchMessagePart: (payload) => opencodeApi.patchMessagePart(payload),
 
     // ── Permission / Question replies ───────────────────────────────
-    replyPermission: (requestId, payload) =>
-      opencodeApi.replyPermission(requestId, payload),
-    replyQuestion: (requestId, payload) =>
-      opencodeApi.replyQuestion(requestId, payload),
-    rejectQuestion: (requestId, directory) =>
-      opencodeApi.rejectQuestion(requestId, directory),
+    replyPermission: (requestId, payload) => opencodeApi.replyPermission(requestId, payload),
+    replyQuestion: (requestId, payload) => opencodeApi.replyQuestion(requestId, payload),
+    rejectQuestion: (requestId, directory) => opencodeApi.rejectQuestion(requestId, directory),
 
     // ── Health / MCP / LSP / Skills ─────────────────────────────────
     getGlobalHealth: () => opencodeApi.getGlobalHealth(),
