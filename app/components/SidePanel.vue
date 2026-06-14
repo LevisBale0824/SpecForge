@@ -52,6 +52,7 @@ const emit = defineEmits<{
   "new-session": [];
   "open-file": [path: string];
   "open-diff": [diff: MessageDiffEntry];
+  "open-folder": [];
 }>();
 
 function handleOpenDiff(diff: MessageDiffEntry) {
@@ -94,7 +95,8 @@ const sections = computed(() => [
     title: t("sidebar.files"),
     badge: 0,
     collapsed: collapsed.value.files,
-    canCreate: false,
+    canCreate: true,
+    actionIcon: "folder" as const,
   },
   {
     id: "diff" as const,
@@ -122,8 +124,9 @@ const sections = computed(() => [
       :badge="section.badge"
       :collapsed="section.collapsed"
       :can-create="section.canCreate"
+      :action-icon="section.actionIcon"
       @toggle="toggleSection(section.id)"
-      @new="emit('new-session')"
+      @new="section.id === 'files' ? emit('open-folder') : emit('new-session')"
     >
       <!-- Sessions -->
       <template v-if="section.id === 'sessions'">
@@ -181,13 +184,13 @@ const sections = computed(() => [
 .section-empty {
   padding: 1rem 0.5rem;
   text-align: center;
-  font-size: 11px;
+  font-size: 13px;
   color: var(--color-surface-600, #475569);
 }
 
 .section-error {
   padding: 0.4rem 0.5rem;
-  font-size: 11px;
+  font-size: 13px;
   color: var(--color-accent-rose, #f43f5e);
 }
 </style>

@@ -28,23 +28,23 @@ function handleAbort() {
 </script>
 
 <template>
-  <div class="border-t border-surface-800 bg-surface-900 px-4 py-3">
-    <div class="flex items-end gap-2 max-w-3xl mx-auto">
+  <div class="border-t border-surface-800 bg-surface-900 px-4 py-3.5">
+    <div class="flex items-end gap-2.5 max-w-4xl mx-auto">
       <textarea
         v-model="inputText"
         :placeholder="t('chat.placeholder')"
         :disabled="backend.isSending.value || backend.isBusy.value"
         rows="1"
-        class="flex-1 resize-none rounded-lg bg-surface-800 border border-surface-700 px-3 py-2 text-sm text-surface-100 placeholder:text-surface-600 focus:outline-none focus:border-accent-cyan/50 transition-colors"
+        class="flex-1 resize-none rounded-lg bg-surface-800 border border-surface-700 px-3.5 py-2.5 text-base text-surface-100 placeholder:text-surface-600 focus:outline-none focus:border-accent-cyan/50 transition-colors"
         @keydown="handleKeydown"
       />
       <button
         v-if="!backend.isBusy.value && !backend.isSending.value"
         :disabled="!inputText.trim()"
-        class="px-3 py-2 text-sm font-medium rounded-lg bg-accent-cyan/15 text-accent-cyan hover:bg-accent-cyan/25 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+        class="px-3.5 py-2.5 text-base font-medium rounded-lg bg-accent-cyan/15 text-accent-cyan hover:bg-accent-cyan/25 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
         @click="handleSend"
       >
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path
             stroke-linecap="round"
             stroke-linejoin="round"
@@ -55,10 +55,10 @@ function handleAbort() {
       </button>
       <button
         v-else
-        class="px-3 py-2 text-sm font-medium rounded-lg bg-accent-rose/15 text-accent-rose hover:bg-accent-rose/25 transition-colors"
+        class="px-3.5 py-2.5 text-base font-medium rounded-lg bg-accent-rose/15 text-accent-rose hover:bg-accent-rose/25 transition-colors"
         @click="handleAbort"
       >
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path
             stroke-linecap="round"
             stroke-linejoin="round"

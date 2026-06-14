@@ -1,13 +1,11 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
-import { useRouter } from "vue-router";
 import { useProject } from "../composables/useProject";
 import { useBackend } from "../composables/useBackend";
 import {
   isElectron,
   onWindowMaximizeChange,
-  selectDirectory,
   windowClose,
   windowIsMaximized,
   windowMinimize,
@@ -15,7 +13,6 @@ import {
 } from "../utils/electronBridge";
 
 const { t } = useI18n();
-const router = useRouter();
 const project = useProject();
 const backend = useBackend();
 const projectState = computed(() => project.state);
@@ -23,6 +20,7 @@ const inElectron = isElectron();
 
 const emit = defineEmits<{
   "toggle-settings": [];
+  "open-folder": [];
 }>();
 
 const projectName = computed(() => projectState.value.directoryName || "");
@@ -53,17 +51,8 @@ onUnmounted(() => {
   unsubMaximize?.();
 });
 
-async function openFolder() {
-  // Browser: go to the Welcome page which has the directory picker UI.
-  if (!inElectron) {
-    router.push({ name: "home" });
-    return;
-  }
-  // Electron: trigger the native picker, then load the tree + jump to chat.
-  const dir = await selectDirectory();
-  if (!dir) return;
-  project.openDirectoryPath(dir);
-  router.push({ name: "chat" });
+function openFolder() {
+  emit("open-folder");
 }
 </script>
 
@@ -135,14 +124,13 @@ async function openFolder() {
 
     <!-- Right: Agent label + Settings + Window controls -->
     <div class="flex items-center gap-1 flex-shrink-0">
-      <button
-        class="px-2 py-1 text-xs text-surface-300 hover:text-accent-cyan hover:bg-surface-800 rounded transition-colors flex items-center gap-1 titlebar-nodrag"
+      <span
+        class="px-2 py-1 text-xs text-surface-400 flex items-center gap-1 titlebar-nodrag"
         :title="t('topbar.agentLabel')"
-        @click="emit('toggle-settings')"
       >
         <span class="w-1.5 h-1.5 rounded-full bg-accent-emerald" />
         <span>{{ agentLabel }}</span>
-      </button>
+      </span>
       <button
         class="px-2 py-1 text-xs text-surface-400 hover:text-surface-200 hover:bg-surface-800 rounded transition-colors titlebar-nodrag"
         @click="emit('toggle-settings')"

@@ -1,18 +1,12 @@
 <script setup lang="ts">
 import { ref } from "vue";
 import { useI18n } from "vue-i18n";
-import { useRouter } from "vue-router";
-import { useProject } from "../composables/useProject";
 import { useBackend } from "../composables/useBackend";
 import type { BackendKind } from "../backends/types";
 
 const { t } = useI18n();
-const router = useRouter();
-const project = useProject();
 const backend = useBackend();
 
-const showProjectDialog = ref(false);
-const manualPath = ref("");
 const switching = ref(false);
 
 const agentOptions: Array<{ kind: BackendKind; labelKey: string }> = [
@@ -29,96 +23,82 @@ async function chooseAgent(kind: BackendKind) {
     switching.value = false;
   }
 }
-
-function newSession() {
-  router.push({ name: "chat" });
-}
-
-async function pickFolder() {
-  // Try Electron native dialog first (returns absolute path)
-  const nativeResult = await project.openDirectoryNative();
-  if (nativeResult) {
-    router.push({ name: "chat" });
-    return;
-  }
-  // Try File System Access API (Chrome/Edge)
-  if ("showDirectoryPicker" in window) {
-    try {
-      const handle = await window.showDirectoryPicker?.({ mode: "read" });
-      if (!handle) throw new Error("No directory selected");
-      await project.openDirectoryHandle(handle);
-      router.push({ name: "chat" });
-      return;
-    } catch {
-      // User cancelled or not allowed
-    }
-  }
-  // Fallback: show manual input dialog
-  showProjectDialog.value = true;
-}
-
-function submitManualPath() {
-  const path = manualPath.value.trim();
-  if (!path) return;
-  project.openDirectoryPath(path);
-  showProjectDialog.value = false;
-  router.push({ name: "chat" });
-}
 </script>
 
 <template>
   <div class="flex-1 flex items-center justify-center">
-    <div class="text-center max-w-md">
+    <div class="text-center max-w-lg">
       <!-- Logo -->
-      <div class="mb-6 flex justify-center">
-        <img
-          src="/specforge-icon.svg"
-          alt="SpecForge"
-          class="w-16 h-16 rounded-2xl"
-          draggable="false"
-        />
+      <div class="mb-4 flex justify-center">
+        <svg
+          class="w-28 h-28 rounded-2xl"
+          viewBox="0 0 256 256"
+          xmlns="http://www.w3.org/2000/svg"
+          aria-label="SpecForge"
+          role="img"
+        >
+          <rect class="sf-bg" width="256" height="256" rx="48" />
+          <path
+            class="sf-bracket"
+            d="M96 72 L28 128 L96 184"
+            stroke-width="8"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          />
+          <path
+            class="sf-bracket"
+            d="M160 72 L228 128 L160 184"
+            stroke-width="8"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          />
+          <circle class="sf-cyan" cx="108" cy="172" r="8" />
+          <circle class="sf-indigo" cx="124" cy="148" r="9" />
+          <circle class="sf-emerald" cx="140" cy="124" r="10" />
+          <circle class="sf-amber" cx="156" cy="100" r="11" />
+        </svg>
       </div>
 
       <!-- Title -->
-      <h1 class="text-xl font-bold text-surface-200 mb-2">
+      <h1 class="text-2xl font-bold text-surface-200 mb-1">
         {{ t("welcome.title") }}
       </h1>
-      <p class="text-sm text-surface-500 mb-8">
+      <p class="text-sm text-surface-500 mb-4">
         {{ t("welcome.subtitle") }}
       </p>
 
       <!-- Description -->
-      <p class="text-xs text-surface-600 mb-6">
+      <p class="text-sm text-surface-600 mb-4">
         {{ t("welcome.getStarted") }}
       </p>
 
       <!-- Agent selector -->
-      <div class="mb-6">
-        <p class="text-xs text-surface-500 mb-2">{{ t("welcome.chooseAgent") }}</p>
-        <div class="grid grid-cols-2 gap-2">
+      <div class="mb-4">
+        <p class="text-sm text-surface-500 mb-2">{{ t("welcome.chooseAgent") }}</p>
+        <div class="grid grid-cols-2 gap-2.5">
           <button
             v-for="opt in agentOptions"
             :key="opt.kind"
             type="button"
             :disabled="switching"
             :class="[
-              'px-3 py-2 rounded-lg border text-left transition-colors disabled:opacity-50',
+              'px-4 py-4 rounded-lg border text-center transition-colors disabled:opacity-50',
               backend.activeBackendKind.value === opt.kind
                 ? 'border-accent-cyan/60 bg-accent-cyan/10'
                 : 'border-surface-700 bg-surface-800/50 hover:border-surface-600',
             ]"
             @click="chooseAgent(opt.kind)"
           >
-            <div class="flex items-start gap-2">
+            <div class="flex flex-col items-center gap-2">
               <span
-                class="flex-shrink-0 mt-0.5"
+                class="flex-shrink-0"
                 :class="opt.kind === 'zero' ? 'text-accent-indigo' : 'text-accent-cyan'"
               >
                 <!-- OpenCode: official logo path (background stripped, fill=currentColor) -->
                 <svg
                   v-if="opt.kind === 'opencode'"
-                  width="20"
-                  height="20"
+                  width="36"
+                  height="36"
                   viewBox="0 0 256 256"
                   fill="currentColor"
                   aria-hidden="true"
@@ -129,8 +109,8 @@ function submitManualPath() {
                      aesthetic-shorthand for a code-focused editor) -->
                 <svg
                   v-else-if="opt.kind === 'zero'"
-                  width="20"
-                  height="20"
+                  width="36"
+                  height="36"
                   viewBox="0 0 256 256"
                   fill="currentColor"
                   aria-hidden="true"
@@ -142,8 +122,8 @@ function submitManualPath() {
                   />
                 </svg>
               </span>
-              <div class="min-w-0">
-                <div class="text-sm font-medium text-surface-100">{{ t(opt.labelKey) }}</div>
+              <div class="min-w-0 text-center">
+                <div class="text-base font-medium text-surface-100">{{ t(opt.labelKey) }}</div>
               </div>
             </div>
           </button>
@@ -154,59 +134,50 @@ function submitManualPath() {
           {{ backend.errorMessage.value }}
         </p>
       </div>
-
-      <!-- Actions -->
-      <div class="flex gap-3 justify-center">
-        <button
-          class="px-4 py-2 text-sm font-medium rounded-lg bg-accent-cyan/15 text-accent-cyan hover:bg-accent-cyan/25 transition-colors"
-          @click="newSession"
-        >
-          {{ t("welcome.newSession") }}
-        </button>
-        <button
-          class="px-4 py-2 text-sm font-medium rounded-lg bg-surface-800 text-surface-300 hover:bg-surface-700 transition-colors"
-          @click="pickFolder"
-        >
-          {{ t("welcome.openProject") }}
-        </button>
-      </div>
-
-      <!-- Manual path dialog -->
-      <Teleport to="body">
-        <div
-          v-if="showProjectDialog"
-          class="fixed inset-0 z-[10000] flex items-center justify-center"
-        >
-          <div class="absolute inset-0 bg-black/60" @click="showProjectDialog = false" />
-          <div
-            class="relative w-full max-w-sm bg-surface-900 border border-surface-700 rounded-xl shadow-2xl p-5"
-          >
-            <h3 class="text-sm font-semibold text-surface-200 mb-3">Open Project</h3>
-            <input
-              v-model="manualPath"
-              type="text"
-              placeholder="/path/to/project"
-              class="w-full px-3 py-2 text-sm rounded-lg bg-surface-800 border border-surface-700 text-surface-100 placeholder:text-surface-600 focus:outline-none focus:border-accent-cyan/50 mb-3"
-              @keydown.enter="submitManualPath"
-            />
-            <div class="flex justify-end gap-2">
-              <button
-                class="px-3 py-1.5 text-xs rounded-lg bg-surface-800 text-surface-400 hover:text-surface-200 transition-colors"
-                @click="showProjectDialog = false"
-              >
-                Cancel
-              </button>
-              <button
-                class="px-3 py-1.5 text-xs rounded-lg bg-accent-cyan/15 text-accent-cyan hover:bg-accent-cyan/25 transition-colors disabled:opacity-30"
-                :disabled="!manualPath.trim()"
-                @click="submitManualPath"
-              >
-                Open
-              </button>
-            </div>
-          </div>
-        </div>
-      </Teleport>
     </div>
   </div>
 </template>
+
+<style scoped>
+/* SpecForge brand logo — adaptive dark/light via prefers-color-scheme.
+   Mirrors public/specforge-icon.svg so the inlined markup stays in sync. */
+.sf-bg {
+  fill: #0b0e14;
+}
+.sf-bracket {
+  fill: none;
+  stroke: #f1f5f9;
+}
+.sf-cyan {
+  fill: #22d3ee;
+}
+.sf-indigo {
+  fill: #6366f1;
+}
+.sf-emerald {
+  fill: #10b981;
+}
+.sf-amber {
+  fill: #f59e0b;
+}
+@media (prefers-color-scheme: light) {
+  .sf-bg {
+    fill: #f4f2ed;
+  }
+  .sf-bracket {
+    stroke: #1e293b;
+  }
+  .sf-cyan {
+    fill: #0891b2;
+  }
+  .sf-indigo {
+    fill: #4f46e5;
+  }
+  .sf-emerald {
+    fill: #059669;
+  }
+  .sf-amber {
+    fill: #d97706;
+  }
+}
+</style>

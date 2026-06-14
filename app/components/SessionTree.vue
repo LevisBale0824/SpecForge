@@ -59,7 +59,7 @@ function statusIcon(session: SessionInfo): string {
     <button
       v-for="session in sortedSessions"
       :key="session.id"
-      class="w-full text-left px-2 py-1.5 rounded text-xs transition-colors group"
+      class="w-full text-left px-2.5 py-2 rounded text-sm transition-colors group"
       :class="
         activeSessionId === session.id
           ? 'bg-accent-cyan/10 text-surface-100'
@@ -82,9 +82,7 @@ function statusIcon(session: SessionInfo): string {
         </span>
 
         <!-- Time -->
-        <span
-          class="text-[10px] text-surface-600 opacity-0 group-hover:opacity-100 transition-opacity"
-        >
+        <span class="text-xs text-surface-600 opacity-0 group-hover:opacity-100 transition-opacity">
           {{ formatTime(session.time.updated) }}
         </span>
 

@@ -43,8 +43,8 @@ const colors: Record<string, string> = {
     <!-- Dir entry -->
     <button
       v-if="node.kind === 'directory' && depth !== undefined"
-      class="w-full text-left px-2 py-1 rounded text-xs transition-colors flex items-center gap-1.5 text-surface-400 hover:bg-surface-800 hover:text-surface-200"
-      :style="{ paddingLeft: `${depth * 12 + 8}px` }"
+      class="w-full text-left px-2.5 py-1.5 rounded text-sm transition-colors flex items-center gap-1.5 text-surface-400 hover:bg-surface-800 hover:text-surface-200"
+      :style="{ paddingLeft: `${depth * 14 + 8}px` }"
       @click="toggleNode(node)"
     >
       <span class="w-3 text-center text-surface-600 text-[10px]">
@@ -57,8 +57,8 @@ const colors: Record<string, string> = {
     <!-- File entry -->
     <button
       v-if="node.kind === 'file'"
-      class="w-full text-left px-2 py-1 rounded text-xs transition-colors flex items-center gap-1.5 text-surface-400 hover:bg-surface-800 hover:text-surface-200"
-      :style="{ paddingLeft: `${(depth ?? 0) * 12 + 20}px` }"
+      class="w-full text-left px-2.5 py-1.5 rounded text-sm transition-colors flex items-center gap-1.5 text-surface-400 hover:bg-surface-800 hover:text-surface-200"
+      :style="{ paddingLeft: `${(depth ?? 0) * 14 + 20}px` }"
       @click="emit('open-file', node.path)"
     >
       <span :class="colors[icon(node.name)] ?? 'text-surface-600'">📄</span>

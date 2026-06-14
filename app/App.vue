@@ -12,14 +12,18 @@ import { useFloatingWindows } from "./composables/useFloatingWindows";
 import { useProject } from "./composables/useProject";
 import { useBackend } from "./composables/useBackend";
 import { useOpenSpec } from "./composables/useOpenSpec";
-import { onOpenFolder } from "./utils/electronBridge";
+import { isElectron, onOpenFolder, selectDirectory } from "./utils/electronBridge";
 import type { MessageDiffEntry } from "./types/message";
 
 const route = useRoute();
 const router = useRouter();
-const sidePanelWidth = ref(280);
+const sidePanelWidth = ref(300);
 const showSettings = ref(false);
 const backend = useBackend();
+const inElectron = isElectron();
+
+const showProjectDialog = ref(false);
+const manualPath = ref("");
 
 const isChatRoute = () => route.name === "chat";
 
@@ -103,6 +107,40 @@ function onCloseDiff() {
   activeDiff.value = null;
 }
 
+async function handleOpenFolder() {
+  // Electron: trigger the native picker, then load the tree + jump to chat.
+  if (inElectron) {
+    const dir = await selectDirectory();
+    if (!dir) return;
+    project.openDirectoryPath(dir);
+    router.push({ name: "chat" });
+    return;
+  }
+  // Browser: try File System Access API (Chrome/Edge)
+  if ("showDirectoryPicker" in window) {
+    try {
+      const handle = await window.showDirectoryPicker?.({ mode: "read" });
+      if (!handle) throw new Error("No directory selected");
+      await project.openDirectoryHandle(handle);
+      router.push({ name: "chat" });
+      return;
+    } catch {
+      // User cancelled or not allowed
+    }
+  }
+  // Fallback: show manual input dialog
+  showProjectDialog.value = true;
+}
+
+function submitManualPath() {
+  const path = manualPath.value.trim();
+  if (!path) return;
+  project.openDirectoryPath(path);
+  showProjectDialog.value = false;
+  manualPath.value = "";
+  router.push({ name: "chat" });
+}
+
 function basename(file: string): string {
   const parts = file.replace(/\\/g, "/").split("/");
   return parts[parts.length - 1] || file;
@@ -112,7 +150,7 @@ function basename(file: string): string {
 <template>
   <div class="flex flex-col h-screen bg-surface-950 text-surface-100 overflow-hidden">
     <!-- Top Bar -->
-    <TopBar @toggle-settings="showSettings = !showSettings" />
+    <TopBar @toggle-settings="showSettings = !showSettings" @open-folder="handleOpenFolder" />
 
     <!-- Main Content -->
     <div class="flex flex-1 overflow-hidden">
@@ -127,6 +165,7 @@ function basename(file: string): string {
         @delete-session="onDeleteSession"
         @new-session="onNewSession"
         @open-diff="onOpenDiff"
+        @open-folder="handleOpenFolder"
       />
 
       <!-- Center Content: chat OR diff comparison (mutually exclusive) -->
@@ -185,6 +224,43 @@ function basename(file: string): string {
         @close="onWindowClose"
       />
     </div>
+
+    <!-- Manual path dialog (browser fallback for Open Project) -->
+    <Teleport to="body">
+      <div
+        v-if="showProjectDialog"
+        class="fixed inset-0 z-[10000] flex items-center justify-center"
+      >
+        <div class="absolute inset-0 bg-black/60" @click="showProjectDialog = false" />
+        <div
+          class="relative w-full max-w-sm bg-surface-900 border border-surface-700 rounded-xl shadow-2xl p-5"
+        >
+          <h3 class="text-sm font-semibold text-surface-200 mb-3">Open Project</h3>
+          <input
+            v-model="manualPath"
+            type="text"
+            placeholder="/path/to/project"
+            class="w-full px-3 py-2 text-sm rounded-lg bg-surface-800 border border-surface-700 text-surface-100 placeholder:text-surface-600 focus:outline-none focus:border-accent-cyan/50 mb-3"
+            @keydown.enter="submitManualPath"
+          />
+          <div class="flex justify-end gap-2">
+            <button
+              class="px-3 py-1.5 text-xs rounded-lg bg-surface-800 text-surface-400 hover:text-surface-200 transition-colors"
+              @click="showProjectDialog = false"
+            >
+              Cancel
+            </button>
+            <button
+              class="px-3 py-1.5 text-xs rounded-lg bg-accent-cyan/15 text-accent-cyan hover:bg-accent-cyan/25 transition-colors disabled:opacity-30"
+              :disabled="!manualPath.trim()"
+              @click="submitManualPath"
+            >
+              Open
+            </button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
 

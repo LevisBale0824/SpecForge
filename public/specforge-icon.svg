@@ -22,14 +22,14 @@
   <!-- Background -->
   <rect class="bg" width="256" height="256" rx="48" />
 
-  <!-- Main element: code bracket pair framing the icon -->
-  <path class="bracket" d="M88 68 L40 128 L88 188" stroke-width="16" stroke-linecap="round" stroke-linejoin="round" />
-  <path class="bracket" d="M168 68 L216 128 L168 188" stroke-width="16" stroke-linecap="round" stroke-linejoin="round" />
+  <!-- Main element: angle bracket pair < > framing the icon -->
+  <path class="bracket" d="M96 72 L28 128 L96 184" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" />
+  <path class="bracket" d="M160 72 L228 128 L160 184" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" />
 
   <!-- Auxiliary element: 4 ascending dots representing the OpenSpec
        workflow (Explore → Propose → Apply → Archive) passing through code -->
-  <circle class="dot-cyan"    cx="98"  cy="172" r="8"  />
-  <circle class="dot-indigo"  cx="116" cy="148" r="9"  />
-  <circle class="dot-emerald" cx="134" cy="124" r="10" />
-  <circle class="dot-amber"   cx="152" cy="96"  r="11" />
+  <circle class="dot-cyan"    cx="108" cy="172" r="8"  />
+  <circle class="dot-indigo"  cx="124" cy="148" r="9"  />
+  <circle class="dot-emerald" cx="140" cy="124" r="10" />
+  <circle class="dot-amber"   cx="156" cy="100" r="11" />
 </svg>

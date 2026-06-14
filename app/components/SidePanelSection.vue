@@ -4,6 +4,7 @@ defineProps<{
   badge?: number;
   collapsed?: boolean;
   canCreate?: boolean;
+  actionIcon?: "plus" | "folder";
 }>();
 
 defineEmits<{
@@ -42,10 +43,24 @@ defineEmits<{
         v-if="canCreate"
         type="button"
         class="section-new"
-        title="新建"
+        :title="actionIcon === 'folder' ? '打开项目' : '新建'"
         @click.stop="$emit('new')"
       >
-        +
+        <svg
+          v-if="actionIcon === 'folder'"
+          class="folder-icon"
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"
+          />
+        </svg>
+        <span v-else>+</span>
       </button>
     </div>
     <div v-if="!collapsed" class="section-body">
@@ -74,8 +89,8 @@ defineEmits<{
 .section-header {
   display: flex;
   align-items: center;
-  gap: 0.35rem;
-  padding: 0.4rem 0.5rem;
+  gap: 0.4rem;
+  padding: 0.5rem 0.6rem;
   background: color-mix(in srgb, var(--color-surface-900, #0f172a) 80%, transparent);
   border-bottom: 1px solid color-mix(in srgb, var(--color-surface-800, #1e293b) 60%, transparent);
   user-select: none;
@@ -86,8 +101,8 @@ defineEmits<{
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 18px;
-  height: 18px;
+  width: 20px;
+  height: 20px;
   padding: 0;
   border: 0;
   background: transparent;
@@ -102,8 +117,8 @@ defineEmits<{
 }
 
 .chevron {
-  width: 12px;
-  height: 12px;
+  width: 14px;
+  height: 14px;
   transition: transform 0.15s ease;
 }
 
@@ -113,18 +128,18 @@ defineEmits<{
 
 .section-title {
   flex: 1;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 700;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--color-surface-400, #94a3b8);
 }
 
 .section-badge {
   flex: 0 0 auto;
-  padding: 0 0.35rem;
+  padding: 0 0.4rem;
   border-radius: 8px;
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 700;
   background: color-mix(in srgb, var(--color-accent-cyan, #06b6d4) 18%, transparent);
   color: var(--color-accent-cyan, #06b6d4);
@@ -132,16 +147,24 @@ defineEmits<{
 
 .section-new {
   flex: 0 0 auto;
-  width: 18px;
-  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
   padding: 0;
   border: 0;
   border-radius: 3px;
   background: transparent;
   color: var(--color-surface-500, #64748b);
-  font-size: 14px;
+  font-size: 16px;
   line-height: 1;
   cursor: pointer;
+}
+
+.folder-icon {
+  width: 13px;
+  height: 13px;
 }
 
 .section-new:hover {
@@ -154,6 +177,6 @@ defineEmits<{
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 0.35rem 0.4rem;
+  padding: 0.4rem 0.5rem;
 }
 </style>
