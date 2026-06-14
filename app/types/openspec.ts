@@ -1,0 +1,213 @@
+// ---------------------------------------------------------------------------
+// OpenSpec 类型定义
+// ---------------------------------------------------------------------------
+// 对应 OpenSpec 标准目录结构:
+//   openspec/
+//     specs/<capability>/spec.md          (源真理)
+//     changes/<id>/proposal.md
+//     changes/<id>/tasks.md
+//     changes/<id>/specs/<cap>/spec.md    (delta 增量)
+//     changes/<id>/design.md              (可选)
+//     changes/archive/<YYYY-MM-DD>-<id>/  (归档)
+//
+// 参考: https://github.com/Fission-AI/OpenSpec/blob/main/docs/concepts.md
+// ---------------------------------------------------------------------------
+
+// ── Scenario / Requirement(源真理 spec 与 delta 共用) ─────────────────
+
+export type SpecLevel = "MUST" | "SHALL" | "SHOULD" | "MAY";
+
+export type ScenarioKeyword = "GIVEN" | "WHEN" | "THEN" | "AND";
+
+export interface ScenarioStep {
+  keyword: ScenarioKeyword;
+  text: string;
+}
+
+export interface OpenSpecScenario {
+  name: string;
+  steps: ScenarioStep[];
+}
+
+export interface OpenSpecRequirement {
+  /** 来自 `### Requirement: <Name>` */
+  name: string;
+  /** 规范关键字强度(RFC 2119) */
+  level: SpecLevel;
+  /** header 后的正文 */
+  text: string;
+  scenarios: OpenSpecScenario[];
+  /** 所属 capability */
+  capability: string;
+  /** 来源: 'spec' = 源真理, 'delta' = 某 change 的增量 */
+  source: "spec" | "delta";
+}
+
+// ── Capability(specs/<cap>/spec.md 维度) ──────────────────────────────
+
+export interface OpenSpecCapability {
+  /** kebab-case,如 "auth" */
+  name: string;
+  /** 相对 openspec 根,如 "specs/auth/spec.md" */
+  specPath: string;
+  /** 该 spec.md 是否存在 */
+  hasSpec: boolean;
+}
+
+// ── Delta Spec(changes/<id>/specs/<cap>/spec.md) ───────────────────────
+
+export type OpenSpecDeltaOp = "added" | "modified" | "removed" | "renamed";
+
+export interface OpenSpecDeltaRequirement {
+  op: OpenSpecDeltaOp;
+  /** ADDED/MODIFIED/REMOVED 的目标 requirement name;RENAMED 时是新名 */
+  name: string;
+  /** RENAMED 时的原名 */
+  fromName?: string;
+  /** ADDED/MODIFIED 时附带的完整 requirement;REMOVED/RENAMED 不带 */
+  requirement?: OpenSpecRequirement;
+  /** REMOVED 时的可选理由 */
+  reason?: string;
+}
+
+export interface OpenSpecDeltaSpec {
+  /** capability name */
+  capability: string;
+  /** 相对 openspec 根的 delta spec.md 路径 */
+  path: string;
+  requirements: OpenSpecDeltaRequirement[];
+}
+
+// ── Tasks ──────────────────────────────────────────────────────────────
+
+export type OpenSpecTaskStatus = "pending" | "completed";
+
+export interface OpenSpecTask {
+  /** 如 "1.1" */
+  id: string;
+  title: string;
+  status: OpenSpecTaskStatus;
+  /** 所属分组序号,如 1 */
+  groupIndex: number;
+  /** 所属分组标题,如 "Data Layer" */
+  groupTitle: string;
+  /** 关联的 requirement name(可选) */
+  requirement?: string;
+  /** 验证命令(可选) */
+  verification?: string;
+  /** 工时估算(分钟,可选) */
+  estimate?: number;
+  /** 依赖的 task id 列表(可选) */
+  dependsOn?: string[];
+  /** 完成时附带的验证结果(可选) */
+  result?: string;
+  /** 该 task 在原始 markdown 行中的 - [ ]/- [x] 所在行(0-based) */
+  lineOffset: number;
+}
+
+export interface OpenSpecTaskStats {
+  total: number;
+  completed: number;
+  pending: number;
+  /** 完成率 0-1 */
+  progress: number;
+}
+
+export interface OpenSpecTaskGroup {
+  title: string;
+  groupIndex: number;
+  tasks: OpenSpecTask[];
+}
+
+// ── Proposal ──────────────────────────────────────────────────────────
+
+export interface OpenSpecProposal {
+  raw: string;
+  /** `## Why` 或 `## Intent` */
+  why?: string;
+  /** `## What Changes` 或 `## Scope` */
+  whatChanges?: string;
+  /** `### New Capabilities` 列表(kebab-case) */
+  capabilitiesNew: string[];
+  /** `### Modified Capabilities` 列表 */
+  capabilitiesModified: string[];
+  /** `## Impact` 或 `## Approach` */
+  impact?: string;
+}
+
+// ── Change ────────────────────────────────────────────────────────────
+
+export interface OpenSpecChange {
+  /** kebab-case,如 "add-dark-mode";归档时含日期前缀 */
+  id: string;
+  /** 相对 openspec 根的目录路径 */
+  dirPath: string;
+  archived: boolean;
+  /** 归档日期 ISO,仅 archived=true 时有 */
+  archivedAt?: string;
+  proposal?: OpenSpecProposal;
+  tasks: OpenSpecTask[];
+  taskStats: OpenSpecTaskStats;
+  deltaSpecs: OpenSpecDeltaSpec[];
+  hasDesign: boolean;
+  /** 相对 openspec 根的 tasks.md 路径 */
+  taskPath: string;
+  /** 相对 openspec 根的 proposal.md 路径 */
+  proposalPath: string;
+}
+
+// ── Validation ────────────────────────────────────────────────────────
+
+export interface OpenSpecValidationIssue {
+  file: string;
+  line?: number;
+  message: string;
+  rule?: string;
+  severity: "error" | "warning";
+}
+
+export interface OpenSpecValidationResult {
+  changeId?: string;
+  passed: boolean;
+  /** CLI 是否可用;false 表示浏览器模式或 CLI 未装 */
+  cliAvailable: boolean;
+  issues: OpenSpecValidationIssue[];
+  rawOutput: string;
+  ranAt: number;
+}
+
+// ── 项目级状态 ─────────────────────────────────────────────────────────
+
+export interface OpenSpecState {
+  /** 当前打开项目的 openspec/ 绝对根路径 */
+  rootPath: string;
+  /** 该项目是否存在 openspec/ 目录 */
+  initialized: boolean;
+  capabilities: OpenSpecCapability[];
+  activeChanges: OpenSpecChange[];
+  archivedChanges: OpenSpecChange[];
+  loading: boolean;
+  error: string;
+  lastRefreshedAt: number;
+  /** openspec CLI 是否可用(Electron 模式下探测) */
+  cliAvailable: boolean;
+  cliVersion?: string;
+  /** 按 changeId 索引的最近一次校验结果;"_global" 表示全局 */
+  validation: Record<string, OpenSpecValidationResult>;
+}
+
+// ── IPC 返回类型 ────────────────────────────────────────────────────────
+
+/** openspec:readState 返回(去掉 loading/error/validation 等渲染态字段) */
+export type OpenSpecReadStateResult = Pick<
+  OpenSpecState,
+  "rootPath" | "initialized" | "capabilities" | "activeChanges" | "archivedChanges"
+> & {
+  cliAvailable: boolean;
+  cliVersion?: string;
+};
+
+export interface OpenSpecWriteTasksResult {
+  ok: boolean;
+  reason?: string;
+}

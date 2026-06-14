@@ -11,6 +11,12 @@ contextBridge.exposeInMainWorld("electronAPI", {
   restartServer: () => ipcRenderer.invoke("restartServer"),
   getAgentConfig: () => ipcRenderer.invoke("getAgentConfig"),
   setAgentConfig: (config) => ipcRenderer.invoke("setAgentConfig", config),
+  readOpenSpecState: (rootPath) => ipcRenderer.invoke("readOpenSpecState", rootPath),
+  writeOpenSpecTasks: (rootPath, changeId, taskId, completed) =>
+    ipcRenderer.invoke("writeOpenSpecTasks", rootPath, changeId, taskId, completed),
+  runOpenSpecValidate: (rootPath, changeId) =>
+    ipcRenderer.invoke("runOpenSpecValidate", rootPath, changeId),
+  initOpenSpec: (rootPath) => ipcRenderer.invoke("initOpenSpec", rootPath),
   onOpenFolder: (callback) => {
     const handler = (_event, path) => callback(path);
     ipcRenderer.on("menu:openFolder", handler);

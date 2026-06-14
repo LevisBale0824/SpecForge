@@ -86,6 +86,56 @@ export function useProject() {
     }
   }
 
+  // Recursively refresh every directory node that has already been loaded.
+  // Children that still exist on disk keep their `expanded`/`loaded` flags
+  // so the user's tree expansion state survives the refresh.
+  async function refreshNode(node: FileNode): Promise<void> {
+    if (node.kind !== "directory" || !node.loaded) return;
+
+    let newEntries: FileNode[] = [];
+    if (node.handle) {
+      newEntries = await readDirectoryFromHandle(node.handle, node.path);
+    } else if (isElectron() && state.directoryPath) {
+      const entries = await readDirectory(state.directoryPath, node.path);
+      newEntries = (entries ?? []).map(entryToFileNode);
+    }
+
+    const oldMap = new Map((node.children ?? []).map((c) => [c.path, c]));
+    node.children = newEntries.map((c) => {
+      const old = oldMap.get(c.path);
+      if (old) {
+        return {
+          ...c,
+          expanded: old.expanded,
+          loaded: old.loaded,
+          children: old.children,
+        };
+      }
+      return c;
+    });
+
+    for (const child of node.children) {
+      if (child.loaded) await refreshNode(child);
+    }
+  }
+
+  async function refreshTree(): Promise<void> {
+    if (state.root) await refreshNode(state.root);
+  }
+
+  // Debounced entry point for "user might have changed files externally"
+  // signals (window focus, visibility change). Catches the case where the
+  // user deletes/creates files outside of SpecForge — we don't have a fs
+  // watcher, so polling on focus is the lightest acceptable heuristic.
+  let refreshTimer: number | undefined;
+  function scheduleRefreshTree(delay = 400): void {
+    if (refreshTimer !== undefined) window.clearTimeout(refreshTimer);
+    refreshTimer = window.setTimeout(() => {
+      refreshTimer = undefined;
+      void refreshTree();
+    }, delay);
+  }
+
   async function toggleNode(node: FileNode) {
     if (node.kind !== "directory") return;
 
@@ -188,5 +238,7 @@ export function useProject() {
     toggleNode,
     openDirectoryPath,
     clearProject,
+    refreshTree,
+    scheduleRefreshTree,
   };
 }

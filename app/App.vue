@@ -11,6 +11,7 @@ import { useRoute, useRouter } from "vue-router";
 import { useFloatingWindows } from "./composables/useFloatingWindows";
 import { useProject } from "./composables/useProject";
 import { useBackend } from "./composables/useBackend";
+import { useOpenSpec } from "./composables/useOpenSpec";
 import { onOpenFolder } from "./utils/electronBridge";
 import type { MessageDiffEntry } from "./types/message";
 
@@ -35,11 +36,26 @@ function updateExtent() {
 const activeDiff = ref<MessageDiffEntry | null>(null);
 
 const project = useProject();
+const openspec = useOpenSpec();
 let unsubOpenFolder: (() => void) | null = null;
+
+// On window focus / tab visibility: assume the user might have modified files
+// externally (rm/mv/CLI). Without a fs watcher, polling on focus is the
+// cheapest way to keep the Files tree + OpenSpec panel in sync.
+function onFocusRefresh(): void {
+  project.scheduleRefreshTree();
+  openspec.scheduleRefresh();
+}
+
+function onVisibilityChange(): void {
+  if (document.visibilityState === "visible") onFocusRefresh();
+}
 
 onMounted(() => {
   updateExtent();
   window.addEventListener("resize", updateExtent);
+  window.addEventListener("focus", onFocusRefresh);
+  document.addEventListener("visibilitychange", onVisibilityChange);
   unsubOpenFolder = onOpenFolder((dirPath) => {
     project.openDirectoryPath(dirPath);
     router.push({ name: "chat" });
@@ -48,6 +64,8 @@ onMounted(() => {
 
 onUnmounted(() => {
   window.removeEventListener("resize", updateExtent);
+  window.removeEventListener("focus", onFocusRefresh);
+  document.removeEventListener("visibilitychange", onVisibilityChange);
   unsubOpenFolder?.();
 });
 

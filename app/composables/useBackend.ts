@@ -150,6 +150,8 @@ ge.on("message.updated", (payload) => {
 ge.on("file.edited", () => {
   if (selectedSessionId.value) scheduleDiffRefresh(selectedSessionId.value, 800);
   else scheduleWorkspaceDiffRefresh(800);
+  // OpenSpec 面板也需要刷新(proposal/tasks/spec 文件可能被 agent 改了)
+  void import("./useOpenSpec").then((m) => m.useOpenSpec().scheduleRefresh(800));
 });
 
 ge.on("session.status", (payload) => {

@@ -100,3 +100,45 @@ export async function setAgentConfig(
   }
   return null;
 }
+
+// ── OpenSpec IPC ─────────────────────────────────────────────────────────
+
+export async function readOpenSpecState(
+  rootPath: string,
+): Promise<import("../types/openspec").OpenSpecReadStateResult | null> {
+  if (window.electronAPI) {
+    return window.electronAPI.readOpenSpecState(rootPath);
+  }
+  return null;
+}
+
+export async function writeOpenSpecTasks(
+  rootPath: string,
+  changeId: string,
+  taskId: string,
+  completed: boolean,
+): Promise<import("../types/openspec").OpenSpecWriteTasksResult | null> {
+  if (window.electronAPI) {
+    return window.electronAPI.writeOpenSpecTasks(rootPath, changeId, taskId, completed);
+  }
+  return null;
+}
+
+export async function runOpenSpecValidate(
+  rootPath: string,
+  changeId?: string,
+): Promise<import("../types/openspec").OpenSpecValidationResult | null> {
+  if (window.electronAPI) {
+    return window.electronAPI.runOpenSpecValidate(rootPath, changeId);
+  }
+  return null;
+}
+
+export async function initOpenSpec(
+  rootPath: string,
+): Promise<{ ok: boolean; method?: "cli" | "manual"; reason?: string } | null> {
+  if (window.electronAPI) {
+    return window.electronAPI.initOpenSpec(rootPath);
+  }
+  return null;
+}

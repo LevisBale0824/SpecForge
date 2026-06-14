@@ -1,8 +1,8 @@
-# OpenSpec Workbench 架构文档
+# SpecForge 架构文档
 
 ## 概述
 
-OpenSpec Workbench 是一个基于 Vue 3 + Electron 的现代化 AI 辅助开发工作台。项目采用分层架构，支持 Web 和 Electron 两种运行模式。
+SpecForge 是一个基于 Vue 3 + Electron 的现代化 AI 辅助开发工作台。项目采用分层架构，支持 Web 和 Electron 两种运行模式。
 
 ## 技术架构
 

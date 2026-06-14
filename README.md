@@ -1,10 +1,11 @@
-# OpenSpec Workbench
+# SpecForge
 
-一个现代化的 AI 辅助开发工作台，提供完整的 OpenSpec 项目管理、交互式 Agent 执行和代码审查功能。
+一个现代化的 AI 辅助开发工作台，集 OpenSpec 项目管理、交互式 Code Agent 执行和代码审查于一体。
 
 ## 特性
 
-- 🤖 **AI Agent 交互式执行** - 与 OpenSpec Agent 进行实时对话，执行开发任务
+- 🤖 **AI Code Agent 交互式执行** - 与 OpenCode / Zero Agent 进行实时对话，执行开发任务
+- 📋 **OpenSpec 工作流** - 浏览 changes / proposal / tasks / spec delta，勾选 task 状态，一键 `openspec validate`
 - 📁 **智能文件树浏览** - 支持本地文件系统导航，实时显示项目结构
 - 📊 **会话管理** - 完整的会话历史记录、会话切换和删除功能
 - 🎯 **浮动窗口系统** - 独立的浮动窗口用于代码审查和结果展示
@@ -83,7 +84,7 @@ pnpm electron:build
 ## 项目结构
 
 ```
-openspec-workbench/
+specforge/
 ├── app/                    # 前端应用代码
 │   ├── components/         # Vue 组件
 │   ├── composables/        # 组合式函数

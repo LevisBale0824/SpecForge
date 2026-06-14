@@ -4,6 +4,7 @@ import { useI18n } from "vue-i18n";
 import SessionTree from "./SessionTree.vue";
 import FileTree from "./FileTree.vue";
 import MessageFileChanges from "./MessageFileChanges.vue";
+import OpenSpecPanel from "./openspec/OpenSpecPanel.vue";
 import SidePanelSection from "./SidePanelSection.vue";
 import { useProject } from "../composables/useProject";
 import { useMessages } from "../composables/useMessages";
@@ -32,11 +33,12 @@ const props = withDefaults(
 // the available height evenly (flex: 1 1 0). A collapsed section contributes
 // only its header height.
 
-type SectionId = "sessions" | "files" | "diff";
+type SectionId = "sessions" | "files" | "diff" | "openspec";
 const collapsed = ref<Record<SectionId, boolean>>({
   sessions: false,
   files: false,
   diff: false,
+  openspec: false,
 });
 
 function toggleSection(id: SectionId) {
@@ -108,6 +110,13 @@ const sections = computed(() => [
     collapsed: collapsed.value.diff,
     canCreate: false,
   },
+  {
+    id: "openspec" as const,
+    title: t("sidebar.openspec"),
+    badge: 0,
+    collapsed: collapsed.value.openspec,
+    canCreate: false,
+  },
 ]);
 </script>
 
@@ -149,13 +158,18 @@ const sections = computed(() => [
       </template>
 
       <!-- Diff -->
-      <template v-else>
+      <template v-else-if="section.id === 'diff'">
         <MessageFileChanges
           v-if="activeDiffCount > 0"
           :diffs="activeDiffs"
           @open-diff="handleOpenDiff"
         />
         <div v-else class="section-empty">No file changes</div>
+      </template>
+
+      <!-- OpenSpec -->
+      <template v-else>
+        <OpenSpecPanel />
       </template>
     </SidePanelSection>
   </aside>

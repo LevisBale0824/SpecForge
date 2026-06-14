@@ -1,6 +1,6 @@
 # 贡献指南
 
-感谢您对 OpenSpec Workbench 的关注！我们欢迎任何形式的贡献。
+感谢您对 SpecForge 的关注！我们欢迎任何形式的贡献。
 
 ## 如何贡献
 
@@ -8,7 +8,7 @@
 
 如果您发现 bug 或有新功能建议：
 
-1. 在 [GitHub Issues](https://github.com/your-username/openspec-workbench/issues) 搜索现有 issue
+1. 在 [GitHub Issues](https://github.com/your-username/specforge/issues) 搜索现有 issue
 2. 如果未找到，创建新的 issue
 3. 提供详细的复现步骤和环境信息
 
@@ -18,8 +18,8 @@
 
    ```bash
    # 在 GitHub 上 Fork 项目后
-   git clone https://github.com/YOUR_USERNAME/openspec-workbench.git
-   cd openspec-workbench
+   git clone https://github.com/YOUR_USERNAME/specforge.git
+   cd specforge
    ```
 
 2. **创建分支**

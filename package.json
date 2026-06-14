@@ -1,5 +1,5 @@
 {
-  "name": "openspec-workbench",
+  "name": "specforge",
   "version": "1.0.0",
   "private": true,
   "type": "module",
@@ -33,8 +33,8 @@
     ]
   },
   "build": {
-    "appId": "com.openspec.workbench",
-    "productName": "OpenSpec Workbench",
+    "appId": "com.specforge.app",
+    "productName": "SpecForge",
     "directories": {
       "output": "release"
     },
