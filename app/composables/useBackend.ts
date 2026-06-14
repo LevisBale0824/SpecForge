@@ -465,6 +465,16 @@ export function useBackend() {
     applyBackendConfig(kind);
     activation.errorMessage.value = "";
 
+    // Clear session/message state. The previous agent's session IDs and
+    // messages belong to that agent's daemon; mixing them with the new agent
+    // would show stale or invalid data. Caller is expected to trigger a
+    // reconnect (which re-creates a session under the new agent) afterwards.
+    if (selectedSessionId.value) {
+      msgStore.saveSessionState(selectedSessionId.value);
+    }
+    msgStore.reset();
+    selectedSessionId.value = "";
+
     // In Electron, ask main process to restart the CLI with the new kind.
     // cli-bridge runs as a separate process (not spawned by main), so we only
     // restart for opencode/zero.

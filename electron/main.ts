@@ -1015,6 +1015,11 @@ async function startServer(): Promise<void> {
   });
 
   const healthy = await healthCheck(port);
+  // If we were superseded while healthCheck was running (another startServer
+  // replaced us, or stopServer cleared serverProcess), bail without touching
+  // state or logging. This avoids the "N concurrent healthCheck timeouts all
+  // log 'zero server health check failed'" noise during a respawn storm.
+  if (serverProcess !== proc) return;
   if (healthy) {
     consecutiveFailures = 0;
     serverStatus = {

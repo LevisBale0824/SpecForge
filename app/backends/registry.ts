@@ -9,7 +9,7 @@
 import { createOpenCodeAdapter } from "./openCodeAdapter";
 import { createZeroAdapter } from "./zeroAdapter";
 import type { BackendAdapter, BackendKind } from "./types";
-import { StorageKeys, storageGet } from "../utils/storageKeys";
+import { StorageKeys, storageGet, storageRemove } from "../utils/storageKeys";
 
 // ── Default URLs ──────────────────────────────────────────────────────────
 
@@ -128,3 +128,9 @@ function ensureAdapters() {
 
 // Initialise on import
 ensureAdapters();
+
+// One-shot migration: earlier versions persisted the active backend kind to
+// localStorage. We no longer read or write it (kind is in-session only — see
+// activeBackendKind above), but stale values from older installs may still be
+// present. Remove it so it doesn't confuse future debugging.
+storageRemove(StorageKeys.auth.activeBackend);
