@@ -140,11 +140,6 @@ function submitManualPath() {
   manualPath.value = "";
   router.push({ name: "chat" });
 }
-
-function basename(file: string): string {
-  const parts = file.replace(/\\/g, "/").split("/");
-  return parts[parts.length - 1] || file;
-}
 </script>
 
 <template>
@@ -173,7 +168,7 @@ function basename(file: string): string {
         <template v-if="activeDiff">
           <div class="diff-toolbar">
             <span class="diff-toolbar-title" :title="activeDiff.file">
-              {{ basename(activeDiff.file) }}
+              {{ activeDiff.file }}
             </span>
             <button
               type="button"
