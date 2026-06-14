@@ -6,11 +6,13 @@ import StatusBar from "./components/StatusBar.vue";
 import InputPanel from "./components/InputPanel.vue";
 import FloatingWindow from "./components/FloatingWindow.vue";
 import SettingsPanel from "./components/SettingsPanel.vue";
+import DiffViewer from "./components/DiffViewer.vue";
 import { useRoute, useRouter } from "vue-router";
 import { useFloatingWindows } from "./composables/useFloatingWindows";
 import { useProject } from "./composables/useProject";
 import { useBackend } from "./composables/useBackend";
 import { onOpenFolder } from "./utils/electronBridge";
+import type { MessageDiffEntry } from "./types/message";
 
 const route = useRoute();
 const router = useRouter();
@@ -20,17 +22,18 @@ const backend = useBackend();
 
 const isChatRoute = () => route.name === "chat";
 
-// Floating window system
+// Floating window system (kept for tool-call streaming windows)
 const fw = useFloatingWindows();
 const floatingEntries = fw.entries;
 
-// Track window extent for position clamping
 function updateExtent() {
   fw.setExtent(window.innerWidth, window.innerHeight);
 }
 
-// Native menu: File → Open Folder. The main process already picked the path,
-// so we just load the tree and switch to the chat view.
+// Currently-selected workspace diff — shown in a right-side column instead of
+// a floating window so the user can read it alongside the chat.
+const activeDiff = ref<MessageDiffEntry | null>(null);
+
 const project = useProject();
 let unsubOpenFolder: (() => void) | null = null;
 
@@ -57,6 +60,9 @@ function onWindowClose(key: string) {
 }
 
 function onSelectSession(sessionId: string) {
+  // Selecting a session means leaving the diff view — close any open file and
+  // return to the chat.
+  activeDiff.value = null;
   backend.selectSession(sessionId);
   router.push({ name: "chat" });
 }
@@ -66,8 +72,22 @@ function onDeleteSession(sessionId: string) {
 }
 
 function onNewSession() {
+  activeDiff.value = null;
   backend.startNewSession();
   router.push({ name: "chat" });
+}
+
+function onOpenDiff(diff: MessageDiffEntry) {
+  activeDiff.value = diff;
+}
+
+function onCloseDiff() {
+  activeDiff.value = null;
+}
+
+function basename(file: string): string {
+  const parts = file.replace(/\\/g, "/").split("/");
+  return parts[parts.length - 1] || file;
 }
 </script>
 
@@ -88,12 +108,45 @@ function onNewSession() {
         @select-session="onSelectSession"
         @delete-session="onDeleteSession"
         @new-session="onNewSession"
+        @open-diff="onOpenDiff"
       />
 
-      <!-- Center Content -->
-      <main class="flex-1 flex flex-col overflow-hidden">
-        <router-view />
-        <InputPanel v-if="isChatRoute()" />
+      <!-- Center Content: chat OR diff comparison (mutually exclusive) -->
+      <main class="flex-1 flex flex-col overflow-hidden min-w-0">
+        <template v-if="activeDiff">
+          <div class="diff-toolbar">
+            <span class="diff-toolbar-title" :title="activeDiff.file">
+              {{ basename(activeDiff.file) }}
+            </span>
+            <button
+              type="button"
+              class="diff-toolbar-close"
+              title="关闭对比视图"
+              @click="onCloseDiff"
+            >
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+            </button>
+          </div>
+          <div class="diff-main">
+            <DiffViewer :diff="activeDiff" />
+          </div>
+        </template>
+        <template v-else>
+          <router-view />
+          <InputPanel v-if="isChatRoute()" />
+        </template>
       </main>
     </div>
 
@@ -103,7 +156,7 @@ function onNewSession() {
     <!-- Settings Modal -->
     <SettingsPanel v-model="showSettings" />
 
-    <!-- Floating Window Overlay -->
+    <!-- Floating Window Overlay (tool-call windows) -->
     <div
       class="fixed inset-0 pointer-events-none"
       style="z-index: 9999"
@@ -119,3 +172,52 @@ function onNewSession() {
     </div>
   </div>
 </template>
+
+<style scoped>
+.diff-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.4rem 0.6rem;
+  background: color-mix(in srgb, var(--color-surface-900, #0f172a) 90%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--color-surface-800, #1e293b) 70%, transparent);
+  flex: 0 0 auto;
+}
+
+.diff-toolbar-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono, monospace);
+  font-size: 12px;
+  color: var(--color-surface-200, #e2e8f0);
+}
+
+.diff-toolbar-close {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--color-surface-500, #64748b);
+  cursor: pointer;
+}
+
+.diff-toolbar-close:hover {
+  background: color-mix(in srgb, var(--color-accent-rose, #f43f5e) 22%, transparent);
+  color: var(--color-accent-rose, #f43f5e);
+}
+
+.diff-main {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+</style>

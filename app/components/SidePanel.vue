@@ -4,6 +4,7 @@ import { useI18n } from "vue-i18n";
 import SessionTree from "./SessionTree.vue";
 import FileTree from "./FileTree.vue";
 import MessageFileChanges from "./MessageFileChanges.vue";
+import SidePanelSection from "./SidePanelSection.vue";
 import { useProject } from "../composables/useProject";
 import { useMessages } from "../composables/useMessages";
 import type { MessageDiffEntry } from "../types/message";
@@ -12,22 +13,6 @@ import type { FileDiff, SessionInfo } from "../types/sse";
 const { t } = useI18n();
 const { state: projectState } = useProject();
 const msgStore = useMessages();
-type SideTab = "sessions" | "files" | "diff";
-const activeTab = ref<SideTab>("sessions");
-const tabs: SideTab[] = ["sessions", "files", "diff"];
-const tabLabels: Record<SideTab, string> = {
-  sessions: t("sidebar.sessions"),
-  files: t("sidebar.files"),
-  diff: "Diff",
-};
-
-// Auto-switch to files tab when a project is opened
-watch(
-  () => projectState.directoryName,
-  (name) => {
-    if (name) activeTab.value = "files";
-  },
-);
 
 const props = withDefaults(
   defineProps<{
@@ -41,6 +26,44 @@ const props = withDefaults(
     workspaceDiffs: () => [],
   },
 );
+
+// ── Collapsible sections ─────────────────────────────────────────────────
+// Each section can be independently collapsed. When all expanded, they share
+// the available height evenly (flex: 1 1 0). A collapsed section contributes
+// only its header height.
+
+type SectionId = "sessions" | "files" | "diff";
+const collapsed = ref<Record<SectionId, boolean>>({
+  sessions: false,
+  files: false,
+  diff: false,
+});
+
+function toggleSection(id: SectionId) {
+  collapsed.value[id] = !collapsed.value[id];
+}
+
+// Auto-expand files section when a project is opened.
+watch(
+  () => projectState.directoryName,
+  (name) => {
+    if (name) collapsed.value.files = false;
+  },
+);
+
+const emit = defineEmits<{
+  "select-session": [sessionId: string];
+  "delete-session": [sessionId: string];
+  "new-session": [];
+  "open-file": [path: string];
+  "open-diff": [diff: MessageDiffEntry];
+}>();
+
+function handleOpenDiff(diff: MessageDiffEntry) {
+  emit("open-diff", diff);
+}
+
+// ── Diff data ────────────────────────────────────────────────────────────
 
 const workspaceDiffEntries = computed<MessageDiffEntry[]>(() =>
   props.workspaceDiffs
@@ -63,44 +86,45 @@ const activeDiffs = computed(() => {
 
 const activeDiffCount = computed(() => activeDiffs.value?.length ?? 0);
 
-watch(activeDiffCount, (count) => {
-  if (count > 0) activeTab.value = "diff";
-});
-
-const emit = defineEmits<{
-  "select-session": [sessionId: string];
-  "delete-session": [sessionId: string];
-  "new-session": [];
-  "open-file": [path: string];
-}>();
+const sections = computed(() => [
+  {
+    id: "sessions" as const,
+    title: t("sidebar.sessions"),
+    badge: props.sessions.length,
+    collapsed: collapsed.value.sessions,
+    canCreate: true,
+  },
+  {
+    id: "files" as const,
+    title: t("sidebar.files"),
+    badge: 0,
+    collapsed: collapsed.value.files,
+    canCreate: false,
+  },
+  {
+    id: "diff" as const,
+    title: "Diff",
+    badge: activeDiffCount.value,
+    collapsed: collapsed.value.diff,
+    canCreate: false,
+  },
+]);
 </script>
 
 <template>
-  <aside class="flex flex-col h-full bg-surface-900">
-    <!-- Tab Header -->
-    <div class="flex border-b border-surface-800">
-      <button
-        v-for="tab in tabs"
-        :key="tab"
-        class="flex-1 py-2 text-xs font-medium transition-colors"
-        :class="activeTab === tab
-          ? 'text-accent-cyan border-b-2 border-accent-cyan'
-          : 'text-surface-500 hover:text-surface-300'"
-        @click="activeTab = tab"
-      >
-        {{ tabLabels[tab] }}
-        <span
-          v-if="tab === 'diff' && activeDiffCount > 0"
-          class="ml-1 rounded bg-accent-cyan/15 px-1.5 py-0.5 text-[10px] text-accent-cyan"
-        >
-          {{ activeDiffCount }}
-        </span>
-      </button>
-    </div>
-
-    <!-- Tab Content -->
-    <div class="flex-1 overflow-y-auto p-2">
-      <template v-if="activeTab === 'sessions'">
+  <aside class="side-panel">
+    <SidePanelSection
+      v-for="section in sections"
+      :key="section.id"
+      :title="section.title"
+      :badge="section.badge"
+      :collapsed="section.collapsed"
+      :can-create="section.canCreate"
+      @toggle="toggleSection(section.id)"
+      @new="emit('new-session')"
+    >
+      <!-- Sessions -->
+      <template v-if="section.id === 'sessions'">
         <SessionTree
           :sessions="sessions"
           :active-session-id="activeSessionId"
@@ -108,11 +132,11 @@ const emit = defineEmits<{
           @delete="emit('delete-session', $event)"
         />
       </template>
-      <template v-else-if="activeTab === 'files'">
-        <div v-if="projectState.loading" class="px-2 py-4 text-xs text-surface-600 text-center">
-          Loading...
-        </div>
-        <div v-else-if="projectState.error" class="px-2 py-2 text-xs text-accent-rose">
+
+      <!-- Files -->
+      <template v-else-if="section.id === 'files'">
+        <div v-if="projectState.loading" class="section-empty">Loading...</div>
+        <div v-else-if="projectState.error" class="section-error">
           {{ projectState.error }}
         </div>
         <FileTree
@@ -121,29 +145,42 @@ const emit = defineEmits<{
           :depth="0"
           @open-file="emit('open-file', $event)"
         />
-        <div v-else class="text-center py-8 text-surface-600 text-sm">
-          {{ t("welcome.openProject") }}
-        </div>
+        <div v-else class="section-empty">{{ t("welcome.openProject") }}</div>
       </template>
+
+      <!-- Diff -->
       <template v-else>
         <MessageFileChanges
           v-if="activeDiffCount > 0"
           :diffs="activeDiffs"
+          @open-diff="handleOpenDiff"
         />
-        <div v-else class="px-2 py-8 text-center text-sm text-surface-600">
-          No file changes
-        </div>
+        <div v-else class="section-empty">No file changes</div>
       </template>
-    </div>
-
-    <!-- New Session Button -->
-    <div v-if="activeTab === 'sessions'" class="p-2 border-t border-surface-800">
-      <button
-        class="w-full py-1.5 text-xs font-medium rounded bg-accent-cyan/10 text-accent-cyan hover:bg-accent-cyan/20 transition-colors"
-        @click="emit('new-session')"
-      >
-        + {{ t("sidebar.newSession") }}
-      </button>
-    </div>
+    </SidePanelSection>
   </aside>
 </template>
+
+<style scoped>
+.side-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  background: var(--color-surface-900, #0f172a);
+  overflow: hidden;
+}
+
+.section-empty {
+  padding: 1rem 0.5rem;
+  text-align: center;
+  font-size: 11px;
+  color: var(--color-surface-600, #475569);
+}
+
+.section-error {
+  padding: 0.4rem 0.5rem;
+  font-size: 11px;
+  color: var(--color-accent-rose, #f43f5e);
+}
+</style>

@@ -1,41 +1,24 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from "vue";
-import CodeContent from "./CodeContent.vue";
+import { computed } from "vue";
 import type { MessageDiffEntry } from "../types/message";
-import {
-  RenderCancelledError,
-  startRenderWorkerHtml,
-} from "../utils/workerRenderer";
 
 const props = defineProps<{
   diffs?: MessageDiffEntry[];
   patchFiles?: string[];
 }>();
 
-type RenderedDiff = MessageDiffEntry & {
-  html?: string;
-  loading?: boolean;
-  error?: string;
+type NormalizedDiff = MessageDiffEntry & {
+  additions: number;
+  deletions: number;
+  status?: string;
 };
 
-const rendered = ref<RenderedDiff[]>([]);
-let cancelRenderTasks: Array<() => void> = [];
-
-const patchOnlyFiles = computed(() => {
-  const diffFiles = new Set((props.diffs ?? []).map((diff) => diff.file));
-  return (props.patchFiles ?? []).filter((file) => !diffFiles.has(file));
-});
-
-const hasChanges = computed(
-  () => rendered.value.length > 0 || patchOnlyFiles.value.length > 0,
-);
-
-function fileStats(diff: MessageDiffEntry) {
+function normalizeStats(diff: MessageDiffEntry): {
+  additions: number;
+  deletions: number;
+} {
   if (typeof diff.additions === "number" || typeof diff.deletions === "number") {
-    return {
-      additions: diff.additions ?? 0,
-      deletions: diff.deletions ?? 0,
-    };
+    return { additions: diff.additions ?? 0, deletions: diff.deletions ?? 0 };
   }
   const source = diff.diff || "";
   let additions = 0;
@@ -47,187 +30,156 @@ function fileStats(diff: MessageDiffEntry) {
   return { additions, deletions };
 }
 
-function languageFromFile(file: string): string {
-  const ext = file.split(".").pop()?.toLowerCase();
-  if (!ext) return "text";
-  if (["ts", "tsx", "js", "jsx", "vue", "json", "css", "html", "md"].includes(ext)) {
-    return ext;
-  }
-  return "text";
-}
+const emit = defineEmits<{
+  "open-diff": [diff: MessageDiffEntry];
+}>();
 
-function cancelRendering() {
-  for (const cancel of cancelRenderTasks) cancel();
-  cancelRenderTasks = [];
-}
-
-function fullFileContextLines(diff: MessageDiffEntry): number | undefined {
-  if (diff.before === undefined && diff.after === undefined) return undefined;
-  const beforeLines = (diff.before ?? "").split("\n").length;
-  const afterLines = (diff.after ?? "").split("\n").length;
-  return Math.max(beforeLines, afterLines);
-}
-
-watch(
-  () => props.diffs,
-  (diffs) => {
-    cancelRendering();
-    rendered.value = (diffs ?? []).map((diff) => ({ ...diff, loading: true }));
-
-    rendered.value.forEach((diff, index) => {
-      if (!diff.diff && diff.before === undefined && diff.after === undefined) {
-        rendered.value[index] = { ...diff, loading: false };
-        return;
-      }
-
-      const hasFileSnapshot =
-        diff.before !== undefined || diff.after !== undefined;
-      const task = startRenderWorkerHtml({
-        id: `message-diff:${diff.file}:${index}:${Date.now()}`,
-        code: diff.before ?? "",
-        patch: hasFileSnapshot ? undefined : diff.diff || undefined,
-        after: hasFileSnapshot ? diff.after ?? "" : diff.after,
-        lang: languageFromFile(diff.file),
-        variant: "diff",
-        gutterMode: "double",
-        diffContextLines: fullFileContextLines(diff),
-      });
-      cancelRenderTasks.push(task.cancel);
-      task.promise
-        .then((html) => {
-          rendered.value[index] = { ...rendered.value[index], html, loading: false };
-        })
-        .catch((error: unknown) => {
-          if (error instanceof RenderCancelledError) return;
-          rendered.value[index] = {
-            ...rendered.value[index],
-            loading: false,
-            error: error instanceof Error ? error.message : String(error),
-          };
-        });
-    });
-  },
-  { immediate: true, deep: true },
+const normalized = computed<NormalizedDiff[]>(
+  () =>
+    (props.diffs ?? [])
+      .filter((diff) => diff.file)
+      .map((diff) => ({ ...diff, ...normalizeStats(diff) })),
 );
 
-onBeforeUnmount(cancelRendering);
+const patchOnlyFiles = computed(() => {
+  const diffFiles = new Set(normalized.value.map((diff) => diff.file));
+  return (props.patchFiles ?? []).filter((file) => !diffFiles.has(file));
+});
+
+const hasChanges = computed(
+  () => normalized.value.length > 0 || patchOnlyFiles.value.length > 0,
+);
+
+function basename(file: string): string {
+  const parts = file.replace(/\\/g, "/").split("/");
+  return parts[parts.length - 1] || file;
+}
+
+function statusLabel(diff: NormalizedDiff): string {
+  if (diff.status === "added") return "NEW";
+  if (diff.status === "deleted") return "DEL";
+  return "";
+}
+
+function onOpen(diff: NormalizedDiff) {
+  emit("open-diff", diff);
+}
 </script>
 
 <template>
-  <div v-if="hasChanges" class="file-changes">
-    <div class="file-changes-title">文件变更</div>
-
-    <details
-      v-for="diff in rendered"
+  <div v-if="hasChanges" class="diff-list">
+    <button
+      v-for="diff in normalized"
       :key="diff.file"
-      class="file-change"
-      open
+      type="button"
+      class="file-item"
+      :title="diff.file"
+      @click="onOpen(diff)"
     >
-      <summary class="file-change-summary">
-        <span class="file-name">{{ diff.file }}</span>
-        <span class="file-stat added">+{{ fileStats(diff).additions }}</span>
-        <span class="file-stat removed">-{{ fileStats(diff).deletions }}</span>
-      </summary>
-
-      <div v-if="diff.loading" class="file-change-empty">正在渲染 diff...</div>
-      <div v-else-if="diff.error" class="file-change-empty">{{ diff.error }}</div>
-      <CodeContent
-        v-else-if="diff.html"
-        class="file-change-code"
-        :html="diff.html"
-        variant="diff"
-      />
-      <div v-else class="file-change-empty">此文件有变更，但后端未提供 diff 内容。</div>
-    </details>
-
+      <span class="file-basename">{{ basename(diff.file) }}</span>
+      <span v-if="statusLabel(diff)" class="file-status">{{ statusLabel(diff) }}</span>
+      <span class="file-stats">
+        <span class="stat-add">+{{ diff.additions }}</span>
+        <span class="stat-del">-{{ diff.deletions }}</span>
+      </span>
+    </button>
     <div
       v-for="file in patchOnlyFiles"
-      :key="file"
-      class="file-change patch-only"
+      :key="`patch-${file}`"
+      class="file-item patch-only"
+      :title="file"
     >
-      <span class="file-name">{{ file }}</span>
-      <span class="file-change-empty">已修改，等待后端 diff 内容。</span>
+      <span class="file-basename">{{ basename(file) }}</span>
+      <span class="patch-waiting">等待 diff</span>
     </div>
   </div>
+  <div v-else class="diff-list-empty">No file changes</div>
 </template>
 
 <style scoped>
-.file-changes {
-  margin-top: 0.85rem;
-  border-top: 1px solid color-mix(in srgb, var(--color-surface-700) 65%, transparent);
-  padding-top: 0.75rem;
+.diff-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
 }
 
-.file-changes-title {
-  margin-bottom: 0.45rem;
-  font-size: 11px;
-  font-weight: 650;
-  letter-spacing: 0.02em;
-  color: var(--color-surface-300);
+.diff-list-empty {
+  padding: 2rem 0.5rem;
+  text-align: center;
+  font-size: 12px;
+  color: var(--color-surface-600);
 }
 
-.file-change {
-  overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--color-surface-700) 70%, transparent);
-  border-radius: 7px;
-  background: color-mix(in srgb, var(--color-surface-950) 45%, transparent);
-}
-
-.file-change + .file-change {
-  margin-top: 0.5rem;
-}
-
-.file-change-summary,
-.patch-only {
+.file-item {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  min-width: 0;
-  padding: 0.45rem 0.6rem;
-  font-size: 12px;
-}
-
-.file-change-summary {
+  gap: 0.4rem;
+  width: 100%;
+  padding: 0.4rem 0.5rem;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--color-surface-300);
+  font-size: 11px;
+  text-align: left;
   cursor: pointer;
-  background: color-mix(in srgb, var(--color-surface-900) 72%, transparent);
+  transition: background 0.12s;
 }
 
-.file-name {
-  min-width: 0;
+.file-item:hover {
+  background: color-mix(in srgb, var(--color-surface-800) 70%, transparent);
+  color: var(--color-surface-100);
+}
+
+.file-basename {
   flex: 1;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   font-family: var(--font-mono);
-  color: var(--color-surface-200);
 }
 
-.file-stat {
+.file-status {
   flex: 0 0 auto;
-  font-family: var(--font-mono);
-  font-size: 11px;
+  padding: 0 0.3rem;
+  border-radius: 3px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  background: color-mix(in srgb, var(--color-accent-amber) 22%, transparent);
+  color: var(--color-accent-amber);
 }
 
-.file-stat.added {
+.file-stats {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 0.3rem;
+  font-family: var(--font-mono);
+  font-size: 10px;
+}
+
+.stat-add {
   color: var(--color-accent-emerald);
 }
 
-.file-stat.removed {
+.stat-del {
   color: var(--color-accent-rose);
 }
 
-.file-change-code {
-  max-height: 360px;
-  overflow: auto;
-  padding: 0.5rem 0;
-  font-family: var(--font-mono);
-  font-size: 12px;
-  line-height: 1.55;
+.patch-only {
+  cursor: default;
+  opacity: 0.55;
 }
 
-.file-change-empty {
-  padding: 0.55rem 0.65rem;
-  font-size: 12px;
+.patch-only:hover {
+  background: transparent;
+  color: var(--color-surface-300);
+}
+
+.patch-waiting {
+  flex: 0 0 auto;
+  font-size: 10px;
   color: var(--color-surface-500);
 }
 </style>
