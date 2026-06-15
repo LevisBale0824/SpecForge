@@ -50,6 +50,21 @@ function remove(sessionId: string): void {
   statusBySession.value = next;
 }
 
+/**
+ * Force a session to idle. Used as a fallback when the backend signals task
+ * completion (message finish/error) but never sends `session.status=idle`
+ * (common on timeout / abort / crash paths). No-op if the session is already
+ * idle or unknown — never creates a stale entry.
+ */
+function markIdle(sessionId: string): void {
+  if (!sessionId) return;
+  const current = statusBySession.value.get(sessionId);
+  if (!current || current.type === "idle") return;
+  const next = new Map(statusBySession.value);
+  next.set(sessionId, { type: "idle" });
+  statusBySession.value = next;
+}
+
 function reset(): void {
   statusBySession.value = new Map();
 }
@@ -62,6 +77,7 @@ export function useSessionStatus(selectedSessionId?: Ref<string>) {
     isBusyOf,
     isRetryingOf,
     remove,
+    markIdle,
     reset,
     bindGlobal,
     // Active-session views (backwards-compatible with InputPanel / StatusBar).

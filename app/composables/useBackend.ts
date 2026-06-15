@@ -140,6 +140,38 @@ const activation = useBackendActivation({
 const sessionsStore = useSessions();
 const commandsStore = useCommands();
 
+// Idle fallback timers: when the backend signals task completion via
+// message.updated (finish/completed/error) but doesn't follow up with a
+// `session.status=idle` event within a grace window, force the session idle.
+// Covers timeout/abort/crash paths where the backend drops the idle event,
+// which previously left the session stuck in RUNNING forever.
+const IDLE_FALLBACK_GRACE_MS = 1500;
+const idleFallbackTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
+function scheduleIdleFallback(sessionId: string): void {
+  if (!sessionId) return;
+  const existing = idleFallbackTimers.get(sessionId);
+  if (existing) clearTimeout(existing);
+  const timer = setTimeout(() => {
+    idleFallbackTimers.delete(sessionId);
+    if (sessionStatus.isBusyOf(sessionId)) {
+      sessionStatus.markIdle(sessionId);
+      console.warn(
+        `[useBackend] Forced session ${sessionId} idle — completion signal received without idle event`,
+      );
+    }
+  }, IDLE_FALLBACK_GRACE_MS);
+  idleFallbackTimers.set(sessionId, timer);
+}
+
+function clearIdleFallback(sessionId: string): void {
+  const existing = idleFallbackTimers.get(sessionId);
+  if (existing) {
+    clearTimeout(existing);
+    idleFallbackTimers.delete(sessionId);
+  }
+}
+
 // Reload commands when the backend kind changes (different backend = different commands).
 watch(activeBackendKind, () => {
   commandsStore.reset();
@@ -191,6 +223,9 @@ ge.on("message.updated", (payload) => {
   if (!info || info.role !== "assistant") return;
   if (info.time?.completed === undefined && !info.finish && !info.error) return;
   scheduleDiffRefresh(info.sessionID);
+  // Backend signaled completion — arm the idle fallback in case the
+  // `session.status=idle` event never arrives (timeout / abort paths).
+  scheduleIdleFallback(info.sessionID);
 });
 
 ge.on("file.edited", () => {
@@ -203,6 +238,8 @@ ge.on("file.edited", () => {
 ge.on("session.status", (payload) => {
   const packet = payload as SessionStatusPacket;
   if (packet.status?.type !== "idle") return;
+  // Backend sent idle — cancel any pending fallback for this session.
+  clearIdleFallback(packet.sessionID);
   scheduleDiffRefresh(packet.sessionID, 250);
 });
 
