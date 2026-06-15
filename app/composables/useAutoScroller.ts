@@ -12,9 +12,9 @@ import { ref, computed, watch, onUnmounted, type Ref } from "vue";
 
 export type ScrollMode = "follow" | "force" | "manual" | "none";
 
-const BOTTOM_THRESHOLD_PX = 8;
+const BOTTOM_THRESHOLD_PX = 40;
 const SCROLL_SPEED_PX_PER_MS = 1.5;
-const INTERVENTION_TOLERANCE_PX = 2;
+const INTERVENTION_TOLERANCE_PX = 4;
 const MAX_FRAME_DT_MS = 50;
 const NATIVE_SMOOTH_TIMEOUT_MS = 1_500;
 const USER_SCROLL_INTENT_WINDOW_MS = 240;

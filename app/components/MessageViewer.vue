@@ -48,7 +48,13 @@ const contentSignature = computed(() => {
 });
 
 watch(contentSignature, () => {
-  notifyContentChange(true);
+  // Streaming tokens arrive many times per second. Use instant jumps instead
+  // of smooth rAF animation — smooth animation fights with the high update
+  // rate (its "user intervention" guard misfires on every reflow) and ends up
+  // cancelling follow, which is exactly why the viewport jumped away after the
+  // user dragged back to the bottom. Smooth scroll is still used for the
+  // explicit "resume" button click.
+  notifyContentChange(false);
 });
 
 // When switching sessions, snap to the bottom instantly (no smooth scroll
