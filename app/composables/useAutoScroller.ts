@@ -262,6 +262,12 @@ export function useAutoScroller(
     const hasUserIntent = hasRecentUserScrollIntent();
     lastObservedScrollTop = el.scrollTop;
     if (!isFollowing.value) {
+      // Resume follow as soon as the user returns to the bottom. This is a
+      // fallback for browsers where `scrollend` is unreliable or never fires
+      // (notably when the user drags the scrollbar thumb instead of wheeling).
+      if (isAtBottom(el)) {
+        isFollowing.value = true;
+      }
       return;
     }
     if (
