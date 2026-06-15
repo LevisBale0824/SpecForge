@@ -65,6 +65,36 @@ const providerId = ref("");
 const variant = ref("");
 const workspaceDiffs = ref<FileDiff[]>([]);
 
+// Sessions we have already auto-titled from the user's first prompt. Once a
+// session is in this set we never overwrite its title again — the user's
+// manual rename (or the backend's own title-update event) always wins.
+//
+// Background: opencode updates `title` to the first user message on its own,
+// but zero returns a generic "New Session - <ts>" and never updates it. To
+// keep the sidebar useful across all backends we mirror opencode's behaviour
+// client-side: derive a short title from the first prompt and PATCH it back.
+const autoTitledSessions = new Set<string>();
+
+function deriveTitleFromPrompt(text: string, maxLen = 48): string {
+  // First non-empty line, with leading markdown markers (#, -, *, >, •, etc.)
+  // stripped. Newlines turn into spaces so multi-line prompts still produce a
+  // single-line title.
+  const firstLine =
+    text
+      .split(/\r?\n/)
+      .map((l) => l.trim())
+      .find((l) => l.length > 0) ?? "";
+  const stripped = firstLine
+    .replace(/^#{1,6}\s+/, "")
+    .replace(/^[-*+•]\s+/, "")
+    .replace(/^>\s*/, "")
+    .replace(/`{1,3}/g, "")
+    .trim();
+  const collapsed = stripped.replace(/\s+/g, " ");
+  if (collapsed.length <= maxLen) return collapsed;
+  return collapsed.slice(0, maxLen - 1).trimEnd() + "…";
+}
+
 function t(key: string): string {
   return key;
 }
@@ -360,9 +390,63 @@ export function useBackend() {
     }
 
     const success = await messageSend.sendPrompt(trimmed);
-    if (!success) msgStore.removeMessage(tempId);
+    if (!success) {
+      msgStore.removeMessage(tempId);
+      return success;
+    }
+
+    // First-prompt auto-titling. Only fires once per session and only when the
+    // backend hasn't already given the session a real title (i.e. the title is
+    // still the "Session xxxxxxxx" / "New Session - …" placeholder). This
+    // covers zero (which never auto-titles) without fighting opencode (which
+    // does).
+    void maybeAutoTitleSession(selectedSessionId.value, trimmed);
+
     // On success, the real message arrives via SSE and auto-cleans the temp
     return success;
+  }
+
+  async function maybeAutoTitleSession(sessionId: string, promptText: string): Promise<void> {
+    if (autoTitledSessions.has(sessionId)) return;
+    const existing = sessionsStore.sessions.value.get(sessionId);
+    if (!existing) return;
+
+    // Skip if the session already has a meaningful title (opencode / user
+    // rename). Match the "Session <id>" / "New Session …" placeholders plus
+    // any title that's just an 8-char id prefix.
+    const current = (existing.title ?? "").trim();
+    const isPlaceholder =
+      !current ||
+      /^Session(\s|$)/i.test(current) ||
+      /^New\s+Session/i.test(current) ||
+      current === sessionId.slice(0, 8);
+    if (!isPlaceholder) {
+      autoTitledSessions.add(sessionId);
+      return;
+    }
+
+    const title = deriveTitleFromPrompt(promptText);
+    if (!title) return;
+    autoTitledSessions.add(sessionId);
+
+    // Optimistically update the sidebar so the new title shows up immediately.
+    sessionsStore.upsert({
+      ...existing,
+      title,
+      time: { ...existing.time, updated: Date.now() / 1000 },
+    });
+
+    // Persist on the backend (best-effort). If zero/opencode rejects the
+    // PATCH we keep the optimistic sidebar title — it's still more useful than
+    // "New Session - 1700000000".
+    try {
+      const adapter = getActiveBackendAdapter();
+      if (adapter.updateSession) {
+        await adapter.updateSession(sessionId, { title }, activeDirectory.value || undefined);
+      }
+    } catch (error) {
+      console.warn("[useBackend] auto-title PATCH failed:", error);
+    }
   }
 
   function setBaseUrl(url: string) {

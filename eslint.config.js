@@ -122,5 +122,21 @@ export default [
     },
   },
 
+  {
+    // Node 脚本(scripts/**/*.mjs)运行在 Node 环境,需要 Node 全局。
+    files: ["scripts/**"],
+    languageOptions: {
+      globals: {
+        process: "readonly",
+        Buffer: "readonly",
+        console: "readonly",
+        __dirname: "readonly",
+      },
+    },
+    rules: {
+      "no-console": "off",
+    },
+  },
+
   eslintConfigPrettier,
 ];
