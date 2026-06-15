@@ -23,6 +23,7 @@ const slashQuery = computed(() => {
 });
 
 const commands = computed(() => backend.commands.value);
+const commandsLoading = computed(() => backend.commandsLoading.value);
 
 function clampSelection(len: number) {
   if (len <= 0) {
@@ -187,6 +188,7 @@ async function handleSend() {
       :commands="commands"
       :query="slashQuery"
       :selected-index="selectedIndex"
+      :loading="commandsLoading"
       @select="acceptSelection"
       @hover="handleHover"
     />

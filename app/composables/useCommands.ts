@@ -30,9 +30,12 @@ async function loadCommands(
     commands.value = Array.isArray(result) ? (result as CommandInfo[]) : [];
     loaded.value = true;
   } catch (error) {
+    // IMPORTANT: do NOT flip `loaded` on error. ensureLoaded() guards on
+    // loaded/loading, so marking it true here would suppress every retry —
+    // the menu would never recover after a transient failure (common during
+    // dev startup when the backend isn't up yet on the first "/" press).
     console.error("[useCommands] loadCommands failed:", error);
     commands.value = [];
-    loaded.value = true;
   } finally {
     loading.value = false;
   }

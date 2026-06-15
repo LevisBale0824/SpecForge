@@ -775,6 +775,7 @@ export function useBackend() {
 
     // Slash commands
     commands: commandsStore.commands,
+    commandsLoading: commandsStore.loading,
     ensureCommandsLoaded,
 
     // Global events (for SSE subscription)

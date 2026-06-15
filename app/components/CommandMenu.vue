@@ -6,6 +6,7 @@ const props = defineProps<{
   commands: CommandInfo[];
   query: string;
   selectedIndex: number;
+  loading?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -45,12 +46,20 @@ function handleClick(command: CommandInfo) {
 
 <template>
   <div
-    v-if="filtered.length > 0"
     ref="listRef"
     class="command-menu absolute bottom-full left-0 right-0 mb-1 max-h-64 overflow-y-auto rounded-lg border border-surface-700 bg-surface-900 shadow-xl"
   >
+    <!-- Loading -->
+    <div v-if="loading" class="px-3 py-2 text-xs text-surface-500">Loading commands…</div>
+    <!-- Empty -->
+    <div v-else-if="filtered.length === 0" class="px-3 py-2 text-xs text-surface-500">
+      <template v-if="commands.length === 0">No commands available</template>
+      <template v-else>No matching commands</template>
+    </div>
+    <!-- List -->
     <button
       v-for="(command, index) in filtered"
+      v-else
       :key="command.id"
       :data-index="index"
       type="button"
