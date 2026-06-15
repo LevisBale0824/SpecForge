@@ -15,6 +15,7 @@ import { useDeltaAccumulator } from "./useDeltaAccumulator";
 import { useSessionStatus } from "./useSessionStatus";
 import { useSessions } from "./useSessions";
 import { useCommands } from "./useCommands";
+import { useFileIndex } from "./useFileIndex";
 import { useProject } from "./useProject";
 import { isElectron as detectElectron, readWorkspaceDiff } from "../utils/electronBridge";
 import {
@@ -139,6 +140,7 @@ const activation = useBackendActivation({
 
 const sessionsStore = useSessions();
 const commandsStore = useCommands();
+const fileIndexStore = useFileIndex();
 
 // Idle fallback timers: when the backend signals task completion via
 // message.updated (finish/completed/error) but doesn't follow up with a
@@ -175,6 +177,12 @@ function clearIdleFallback(sessionId: string): void {
 // Reload commands when the backend kind changes (different backend = different commands).
 watch(activeBackendKind, () => {
   commandsStore.reset();
+});
+
+// Reset the file index when the project directory changes so @ mentions
+// reflect the new project on the next @ press.
+watch(activeDirectory, () => {
+  fileIndexStore.reset();
 });
 
 const sessionLifecycle = useBackendSessionLifecycle({
@@ -416,7 +424,7 @@ export function useBackend() {
     selectedSessionId.value = "";
   }
 
-  async function sendPromptWithSession(text: string): Promise<boolean> {
+  async function sendPromptWithSession(text: string, attachments: string[] = []): Promise<boolean> {
     const trimmed = text.trim();
     if (!trimmed) return false;
 
@@ -433,7 +441,7 @@ export function useBackend() {
       return false;
     }
 
-    const success = await messageSend.sendPrompt(trimmed);
+    const success = await messageSend.sendPrompt(trimmed, attachments);
     if (!success) {
       msgStore.removeMessage(tempId);
       return success;
@@ -499,6 +507,11 @@ export function useBackend() {
   function ensureCommandsLoaded(): void {
     const adapter = getActiveBackendAdapter();
     commandsStore.ensureLoaded(adapter, activeDirectory.value || undefined);
+  }
+
+  function ensureFilesLoaded(): void {
+    if (!activeDirectory.value) return;
+    fileIndexStore.ensureLoaded(activeDirectory.value);
   }
 
   async function maybeAutoTitleSession(sessionId: string, promptText: string): Promise<void> {
@@ -777,6 +790,11 @@ export function useBackend() {
     commands: commandsStore.commands,
     commandsLoading: commandsStore.loading,
     ensureCommandsLoaded,
+
+    // File mentions (@)
+    files: fileIndexStore.files,
+    filesLoading: fileIndexStore.loading,
+    ensureFilesLoaded,
 
     // Global events (for SSE subscription)
     globalEvents: ge,
