@@ -3,6 +3,7 @@ import {
   diffSnapshots,
   parseUnifiedDiff,
   reconstructFromPatch,
+  sideBySideFromPatch,
   sideBySidePair,
 } from "../parseDiff";
 
@@ -112,6 +113,62 @@ describe("reconstructFromPatch", () => {
     expect(before.split("\n")).toContain("removed");
     expect(after.split("\n")).toContain("ctx");
     expect(after.split("\n")).toContain("inserted");
+  });
+});
+
+describe("sideBySideFromPatch", () => {
+  it("returns empty for a patch without hunks", () => {
+    expect(sideBySideFromPatch("nope")).toEqual([]);
+  });
+
+  it("emits context lines to both sides with aligned numbers", () => {
+    const patch = ["@@ -10,2 +10,2 @@", " same"].join("\n");
+    const pairs = sideBySideFromPatch(patch);
+    expect(pairs).toHaveLength(1);
+    expect(pairs[0].kind).toBe("equal");
+    expect(pairs[0].left).toEqual({ no: 10, text: "same" });
+    expect(pairs[0].right).toEqual({ no: 10, text: "same" });
+  });
+
+  it("renders a small change as context + removed + added (matches git)", () => {
+    // +1,-1 change inside a 3-line context window
+    const patch = ["@@ -48,3 +48,3 @@", " ctx-before", "-old", "+new", " ctx-after"].join("\n");
+    const pairs = sideBySideFromPatch(patch);
+
+    // context (48) | removed (49) | added (49) | context (50)
+    expect(pairs).toHaveLength(4);
+
+    expect(pairs[0].kind).toBe("equal");
+    expect(pairs[0].left?.no).toBe(48);
+    expect(pairs[0].right?.no).toBe(48);
+
+    expect(pairs[1].kind).toBe("removed");
+    expect(pairs[1].left?.no).toBe(49);
+    expect(pairs[1].right).toBeUndefined();
+
+    expect(pairs[2].kind).toBe("added");
+    expect(pairs[2].left).toBeUndefined();
+    expect(pairs[2].right?.no).toBe(49);
+
+    expect(pairs[3].kind).toBe("equal");
+    expect(pairs[3].left?.no).toBe(50);
+    expect(pairs[3].right?.no).toBe(50);
+  });
+
+  it("ignores git metadata lines between hunks", () => {
+    const patch = [
+      "diff --git a/x b/x",
+      "index 1..2 100644",
+      "--- a/x",
+      "+++ b/x",
+      "@@ -1,1 +1,1 @@",
+      "-a",
+      "+b",
+    ].join("\n");
+    const pairs = sideBySideFromPatch(patch);
+    expect(pairs).toHaveLength(2);
+    expect(pairs[0].kind).toBe("removed");
+    expect(pairs[1].kind).toBe("added");
   });
 });
 

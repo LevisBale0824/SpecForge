@@ -3,7 +3,7 @@ import { computed } from "vue";
 import type { MessageDiffEntry } from "../types/message";
 import {
   parseUnifiedDiff,
-  reconstructFromPatch,
+  sideBySideFromPatch,
   sideBySidePair,
   type SidePair,
 } from "../utils/parseDiff";
@@ -39,31 +39,34 @@ const normalized = computed<NormalizedDiff>(() => ({
   ...normalizeStats(props.diff),
 }));
 
-// Resolve before/after snapshots. Prefer explicit snapshots (treating a
-// missing side as an empty string so brand-new / deleted files still render);
-// otherwise reconstruct from the patch text. Returns null only when we have
-// neither snapshots nor a parseable patch.
-const snapshots = computed<{ before: string; after: string } | null>(() => {
+// Resolve side-by-side pairs.
+//
+// Priority:
+//   1. Patch text (Myers/git diff) → use the hunk structure directly. This
+//      matches VSCode exactly because we reuse git's own diff decision
+//      instead of re-running LCS over a lossy reconstruction.
+//   2. Explicit before/after snapshots → fall back to LCS pairing.
+//   3. Empty array (no renderable content).
+const pairs = computed<SidePair[]>(() => {
   const diff = normalized.value;
+
+  // 1. Patch-first
+  if (diff.diff && diff.diff.trim()) {
+    const parsed = parseUnifiedDiff(diff.diff);
+    if (parsed.hasHunks) return sideBySideFromPatch(diff.diff);
+  }
+
+  // 2. Snapshot fallback
   const hasBefore = typeof diff.before === "string";
   const hasAfter = typeof diff.after === "string";
   if (hasBefore || hasAfter) {
-    return {
-      before: hasBefore ? (diff.before as string) : "",
-      after: hasAfter ? (diff.after as string) : "",
-    };
+    return sideBySidePair(
+      hasBefore ? (diff.before as string) : "",
+      hasAfter ? (diff.after as string) : "",
+    );
   }
-  if (diff.diff && diff.diff.trim()) {
-    const parsed = parseUnifiedDiff(diff.diff);
-    if (parsed.hasHunks) return reconstructFromPatch(diff.diff);
-  }
-  return null;
-});
 
-const pairs = computed<SidePair[]>(() => {
-  const snap = snapshots.value;
-  if (!snap) return [];
-  return sideBySidePair(snap.before, snap.after);
+  return [];
 });
 
 function leftCellClass(p: SidePair): string {
@@ -159,7 +162,9 @@ function rightCellClass(p: SidePair): string {
 .cell .line-no {
   text-align: right;
   padding-right: 0.5ch;
-  color: var(--color-surface-600, #475569);
+  /* surface-500 sits in the middle of the scale for both dark and light themes,
+     so the gutter stays readable without competing with line content. */
+  color: var(--color-surface-500, #71717a);
   user-select: none;
   font-variant-numeric: tabular-nums;
 }
@@ -176,23 +181,25 @@ function rightCellClass(p: SidePair): string {
 }
 
 .cell-context {
-  color: var(--color-surface-300, #cbd5e1);
+  /* surface-100 is the highest-contrast text token in both modes (lightest on
+     dark backgrounds, darkest on light backgrounds). */
+  color: var(--color-surface-100, #f4f4f5);
   background: transparent;
 }
 
 .cell-added {
-  background: color-mix(in srgb, var(--color-accent-emerald, #10b981) 16%, transparent);
-  color: #aff5b4;
+  background: color-mix(in srgb, var(--color-accent-emerald, #10b981) 22%, transparent);
+  color: var(--color-surface-100, #f4f4f5);
 }
 
 .cell-removed {
-  background: color-mix(in srgb, var(--color-accent-rose, #f43f5e) 16%, transparent);
-  color: #ffdcd7;
+  background: color-mix(in srgb, var(--color-accent-rose, #f43f5e) 22%, transparent);
+  color: var(--color-surface-100, #f4f4f5);
 }
 
 .cell-empty {
   background: color-mix(in srgb, var(--color-surface-800, #1e293b) 35%, transparent);
-  color: var(--color-surface-600, #475569);
+  color: var(--color-surface-500, #71717a);
   font-style: italic;
 }
 

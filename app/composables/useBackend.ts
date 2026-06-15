@@ -309,23 +309,16 @@ if (electronMode) {
       }
     },
   );
-
-  // Eagerly create a session once the connection is ready so the first
-  // message doesn't pay the session-creation round-trip cost.
-  watch(activation.connectionState, (state) => {
-    if (state !== "ready") return;
-    // Populate the sidebar with previously-persisted sessions for this dir.
-    void refreshSessions();
-    if (!selectedSessionId.value && activeDirectory.value) {
-      sessionLifecycle.createSession(activeDirectory.value);
-    }
-  });
-} else {
-  // Browser mode: refresh sessions once connected.
-  watch(activation.connectionState, (state) => {
-    if (state === "ready") void refreshSessions();
-  });
 }
+
+// Refresh the sidebar with previously-persisted sessions once the connection
+// is ready. We deliberately do NOT eagerly create a session here: agent
+// switching (switchBackend → reconnect → "ready") would otherwise trigger a
+// new empty session on every switch. Session creation is deferred to the
+// first message (see ensureSession in the sendPrompt flow).
+watch(activation.connectionState, (state) => {
+  if (state === "ready") void refreshSessions();
+});
 
 // ── Public API ────────────────────────────────────────────────────────────
 

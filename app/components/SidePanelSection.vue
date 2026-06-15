@@ -15,13 +15,8 @@ defineEmits<{
 
 <template>
   <section class="side-section" :class="{ 'is-collapsed': collapsed }">
-    <div class="section-header">
-      <button
-        type="button"
-        class="section-toggle"
-        :title="collapsed ? '展开' : '折叠'"
-        @click="$emit('toggle')"
-      >
+    <div class="section-header" :title="collapsed ? '展开' : '折叠'" @click="$emit('toggle')">
+      <span class="section-toggle" aria-hidden="true">
         <svg
           class="chevron"
           :class="{ 'is-collapsed': collapsed }"
@@ -34,7 +29,7 @@ defineEmits<{
         >
           <polyline points="6 9 12 15 18 9" />
         </svg>
-      </button>
+      </span>
       <span class="section-title">{{ title }}</span>
       <span v-if="badge !== undefined && badge > 0" class="section-badge">
         {{ badge }}
@@ -95,6 +90,11 @@ defineEmits<{
   border-bottom: 1px solid color-mix(in srgb, var(--color-surface-800, #1e293b) 60%, transparent);
   user-select: none;
   flex: 0 0 auto;
+  cursor: pointer;
+}
+
+.section-header:hover {
+  background: color-mix(in srgb, var(--color-surface-800, #1e293b) 70%, transparent);
 }
 
 .section-toggle {
@@ -103,17 +103,9 @@ defineEmits<{
   justify-content: center;
   width: 20px;
   height: 20px;
-  padding: 0;
-  border: 0;
-  background: transparent;
   color: var(--color-surface-500, #64748b);
-  cursor: pointer;
-  border-radius: 3px;
-}
-
-.section-toggle:hover {
-  background: color-mix(in srgb, var(--color-surface-800, #1e293b) 80%, transparent);
-  color: var(--color-surface-200, #e2e8f0);
+  /* No longer a button — just a visual chevron. The whole header toggles. */
+  pointer-events: none;
 }
 
 .chevron {

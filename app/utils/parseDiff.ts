@@ -180,6 +180,74 @@ export function reconstructFromPatch(patch: string): {
   return { before: buildPadded(beforeLines), after: buildPadded(afterLines) };
 }
 
+// ── Side-by-side pairing from a unified patch (Myers/git diff) ─────────────
+//
+// Preserves the diff structure computed by git — context lines emit to both
+// sides, removed lines to the left, added lines to the right. This matches
+// VSCode's side-by-side rendering exactly and avoids re-running LCS against
+// a partial reconstruction (which misaligns small changes).
+
+export function sideBySideFromPatch(patch: string): SidePair[] {
+  const pairs: SidePair[] = [];
+  let oldNo = 0;
+  let newNo = 0;
+  let inHunk = false;
+
+  for (const line of patch.split(/\r?\n/)) {
+    if (line.startsWith("@@")) {
+      const match = HUNK_RE.exec(line);
+      if (match) {
+        oldNo = Number(match[1]);
+        newNo = Number(match[3]);
+      }
+      inHunk = true;
+      continue;
+    }
+
+    if (
+      line.startsWith("diff --git") ||
+      line.startsWith("index ") ||
+      line.startsWith("---") ||
+      line.startsWith("+++") ||
+      line.startsWith("new file mode") ||
+      line.startsWith("deleted file mode") ||
+      line.startsWith("similarity index") ||
+      line.startsWith("rename from ") ||
+      line.startsWith("rename to ") ||
+      line.startsWith("Binary files ") ||
+      line.startsWith("GIT binary patch") ||
+      line.startsWith("\\")
+    ) {
+      inHunk = false;
+      continue;
+    }
+
+    if (!inHunk) continue;
+
+    if (line.startsWith("+")) {
+      pairs.push({ right: { no: newNo++, text: line.slice(1) }, kind: "added" });
+    } else if (line.startsWith("-")) {
+      pairs.push({ left: { no: oldNo++, text: line.slice(1) }, kind: "removed" });
+    } else if (line.startsWith(" ")) {
+      const text = line.slice(1);
+      pairs.push({
+        left: { no: oldNo++, text },
+        right: { no: newNo++, text },
+        kind: "equal",
+      });
+    } else if (line === "") {
+      // Some producers emit bare empty lines inside hunks; treat as context.
+      pairs.push({
+        left: { no: oldNo++, text: "" },
+        right: { no: newNo++, text: "" },
+        kind: "equal",
+      });
+    }
+  }
+
+  return pairs;
+}
+
 // ── Side-by-side pairing via LCS ──────────────────────────────────────────
 
 export type SidePair = {

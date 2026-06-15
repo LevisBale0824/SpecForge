@@ -104,7 +104,7 @@ function onOpen(diff: NormalizedDiff) {
   padding: 2rem 0.5rem;
   text-align: center;
   font-size: 12px;
-  color: var(--color-surface-600);
+  color: var(--color-surface-500);
 }
 
 .file-item {
@@ -116,7 +116,9 @@ function onOpen(diff: NormalizedDiff) {
   border: 0;
   border-radius: 5px;
   background: transparent;
-  color: var(--color-surface-300);
+  /* surface-400 sits in the readable middle for both modes (bright grey on
+     dark, dark grey on light). */
+  color: var(--color-surface-400);
   font-size: 11px;
   text-align: left;
   cursor: pointer;
@@ -145,7 +147,9 @@ function onOpen(diff: NormalizedDiff) {
   font-weight: 700;
   letter-spacing: 0.04em;
   background: color-mix(in srgb, var(--color-accent-amber) 22%, transparent);
-  color: var(--color-accent-amber);
+  /* Mix toward surface-100 (the highest-contrast text token in either mode)
+     so the amber label stays readable on both dark and light backgrounds. */
+  color: color-mix(in srgb, var(--color-accent-amber) 65%, var(--color-surface-100));
 }
 
 .file-stats {
@@ -154,14 +158,15 @@ function onOpen(diff: NormalizedDiff) {
   gap: 0.3rem;
   font-family: var(--font-mono);
   font-size: 10px;
+  font-weight: 700;
 }
 
 .stat-add {
-  color: var(--color-accent-emerald);
+  color: color-mix(in srgb, var(--color-accent-emerald) 70%, var(--color-surface-100));
 }
 
 .stat-del {
-  color: var(--color-accent-rose);
+  color: color-mix(in srgb, var(--color-accent-rose) 75%, var(--color-surface-100));
 }
 
 .patch-only {
@@ -171,7 +176,7 @@ function onOpen(diff: NormalizedDiff) {
 
 .patch-only:hover {
   background: transparent;
-  color: var(--color-surface-300);
+  color: var(--color-surface-400);
 }
 
 .patch-waiting {
