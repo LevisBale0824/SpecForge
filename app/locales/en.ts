@@ -18,6 +18,8 @@ export default {
     newSession: "New Session",
     deleteSession: "Delete session",
     justNow: "now",
+    collapse: "Collapse sub-sessions",
+    expand: "Expand sub-sessions",
   },
   welcome: {
     title: "Welcome to SpecForge",

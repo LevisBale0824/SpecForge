@@ -18,6 +18,8 @@ export default {
     newSession: "新建会话",
     deleteSession: "删除会话",
     justNow: "刚刚",
+    collapse: "折叠子会话",
+    expand: "展开子会话",
   },
   welcome: {
     title: "欢迎使用 SpecForge",
