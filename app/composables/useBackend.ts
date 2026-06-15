@@ -14,6 +14,7 @@ import { useMessages } from "./useMessages";
 import { useDeltaAccumulator } from "./useDeltaAccumulator";
 import { useSessionStatus } from "./useSessionStatus";
 import { useSessions } from "./useSessions";
+import { useCommands } from "./useCommands";
 import { useProject } from "./useProject";
 import { isElectron as detectElectron, readWorkspaceDiff } from "../utils/electronBridge";
 import {
@@ -137,6 +138,12 @@ const activation = useBackendActivation({
 });
 
 const sessionsStore = useSessions();
+const commandsStore = useCommands();
+
+// Reload commands when the backend kind changes (different backend = different commands).
+watch(activeBackendKind, () => {
+  commandsStore.reset();
+});
 
 const sessionLifecycle = useBackendSessionLifecycle({
   activeBackendKind,
@@ -404,6 +411,57 @@ export function useBackend() {
 
     // On success, the real message arrives via SSE and auto-cleans the temp
     return success;
+  }
+
+  // Send a slash command (e.g. "/opsx:explore some topic"). The text is split
+  // into command id + free-form arguments, then dispatched via adapter.sendCommand.
+  async function sendCommandWithSession(text: string): Promise<boolean> {
+    const trimmed = text.trim();
+    if (!trimmed.startsWith("/")) return false;
+    const [cmd, ...rest] = trimmed.split(/\s+/);
+    const command = cmd.slice(1);
+    if (!command) return false;
+    const args = rest.join(" ");
+
+    const tempId = msgStore.addPendingUserMessage(
+      selectedSessionId.value || "pending",
+      trimmed,
+      agent.value,
+    );
+
+    await ensureSession();
+    if (!selectedSessionId.value) {
+      msgStore.removeMessage(tempId);
+      return false;
+    }
+
+    isSending.value = true;
+    try {
+      const adapter = getActiveBackendAdapter();
+      if (!adapter.sendCommand) {
+        throw new Error("Backend does not support sending commands");
+      }
+      await adapter.sendCommand(selectedSessionId.value, {
+        directory: activeDirectory.value || undefined,
+        command,
+        arguments: args,
+        agent: agent.value || undefined,
+        model: modelId.value || undefined,
+        variant: variant.value || undefined,
+      });
+      return true;
+    } catch (error) {
+      msgStore.removeMessage(tempId);
+      console.error("[useBackend] sendCommand failed:", error);
+      return false;
+    } finally {
+      isSending.value = false;
+    }
+  }
+
+  function ensureCommandsLoaded(): void {
+    const adapter = getActiveBackendAdapter();
+    commandsStore.ensureLoaded(adapter, activeDirectory.value || undefined);
   }
 
   async function maybeAutoTitleSession(sessionId: string, promptText: string): Promise<void> {
@@ -676,6 +734,11 @@ export function useBackend() {
 
     // Messages (with auto session creation)
     sendPrompt: sendPromptWithSession,
+    sendCommand: sendCommandWithSession,
+
+    // Slash commands
+    commands: commandsStore.commands,
+    ensureCommandsLoaded,
 
     // Global events (for SSE subscription)
     globalEvents: ge,

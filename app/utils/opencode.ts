@@ -5,6 +5,8 @@
 // Ported from opencode-visualizer-cn/app/utils/opencode.ts
 // ---------------------------------------------------------------------------
 
+import type { CommandInfo } from "../types/command";
+
 type QueryValue = string | number | boolean | undefined;
 type JsonBody = Record<string, unknown> | Array<unknown>;
 
@@ -380,8 +382,22 @@ export function listAgents() {
   return getJson("/agent") as Promise<unknown>;
 }
 
-export function listCommands(directory?: string) {
-  return getJson("/command", { directory }) as Promise<unknown>;
+export async function listCommands(directory?: string): Promise<CommandInfo[]> {
+  const raw = (await getJson("/command", { directory })) as
+    | Array<Record<string, unknown>>
+    | undefined;
+  if (!Array.isArray(raw)) return [];
+  // Normalize: the command id field may be `id`, `command`, or `name` depending
+  // on backend version. Display name prefers `title`/`name` over the raw id.
+  return raw
+    .map((item) => {
+      const id = String(item.id ?? item.command ?? item.name ?? "");
+      const name = item.title ? String(item.title) : item.name ? String(item.name) : undefined;
+      const description = item.description ? String(item.description) : undefined;
+      const category = item.category ? String(item.category) : undefined;
+      return { id, name, description, category } as CommandInfo;
+    })
+    .filter((c) => c.id.length > 0);
 }
 
 // ── Status / Permissions / Questions ──────────────────────────────────────
