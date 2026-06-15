@@ -891,15 +891,18 @@ function clearRespawnTimer(): void {
 /**
  * Kill a spawned CLI process and its entire descendant tree.
  *
- * Why this exists: on Windows, `spawn(cmd, args, { shell: true })` actually
- * launches `cmd.exe → opencode.cmd → node.exe`. Calling `proc.kill()` only
- * terminates the outer cmd.exe wrapper; the actual daemon (node.exe) survives
- * as an orphan and keeps the port bound, so the next spawn on the same port
- * fails with EADDRINUSE. `taskkill /F /T /PID` walks the process tree and
- * kills every descendant.
+ * Why this exists: both Windows and Unix spawn a wrapper process that forks
+ * the actual daemon. Killing only the wrapper leaves the daemon orphaned and
+ * still bound to the port, so the next spawn on the same port fails with
+ * EADDRINUSE.
  *
- * On Unix the spawned process is the daemon directly (no shell wrapper), so
- * `proc.kill()` is sufficient.
+ * - Windows: `spawn(cmd, args, { shell: true })` launches
+ *   `cmd.exe → opencode.cmd → node.exe`. `taskkill /F /T /PID` walks the
+ *   tree and kills every descendant.
+ * - Unix: the CLI bin (an npm shebang script or compiled launcher) forks a
+ *   daemon child. We spawn with `detached: true` so the child becomes its
+ *   own process-group leader (pgid == pid), then `process.kill(-pid)` sends
+ *   the signal to the entire group — wrapper, daemon, and any grandchildren.
  */
 function killProcessTree(proc: ChildProcess): void {
   if (!proc.pid) return;
@@ -912,10 +915,17 @@ function killProcessTree(proc: ChildProcess): void {
       console.warn(`[electron] taskkill /T failed for PID ${proc.pid}:`, err);
     }
   } else {
+    // Send the signal to the entire process group. Requires the child to
+    // have been spawned with detached:true so pgid == pid. Falls back to a
+    // direct signal if the group kill fails (e.g. already reaped).
     try {
-      proc.kill("SIGTERM");
+      process.kill(-proc.pid, "SIGTERM");
     } catch {
-      // already dead — ignore
+      try {
+        proc.kill("SIGTERM");
+      } catch {
+        // already dead — ignore
+      }
     }
   }
 }
@@ -977,7 +987,10 @@ async function startServer(): Promise<void> {
 
   const proc = spawn(cmd, ["serve", "--port", String(port)], {
     stdio: ["ignore", "pipe", "pipe"],
-    detached: false,
+    // On Unix, detached:true makes the child a process-group leader so we
+    // can later kill the whole tree via process.kill(-pid). On Windows this
+    // flag is irrelevant for our purposes (we use taskkill /T instead).
+    detached: !isWin,
     shell: isWin,
   });
   serverProcess = proc;

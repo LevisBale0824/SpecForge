@@ -7,6 +7,9 @@ dist-ssr/
 dist-electron/
 release/
 
+# Generated PNG icons (source SVG is tracked at build/icon.svg)
+build/icons/
+
 # IDE
 .vscode/
 .idea/
