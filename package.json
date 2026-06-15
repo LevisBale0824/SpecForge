@@ -19,7 +19,7 @@
     "format": "prettier --write \"**/*.{ts,tsx,vue,js,jsx,json,md,css,yml,yaml}\"",
     "format:check": "prettier --check \"**/*.{ts,tsx,vue,js,jsx,json,md,css,yml,yaml}\"",
     "prepare": "husky || true",
-    "electron:build": "vue-tsc --noEmit && vite build && electron-builder",
+    "electron:build": "vue-tsc --noEmit && ELECTRON=true vite build && electron-builder",
     "bridge:build": "tsc -p cli-bridge/tsconfig.json",
     "bridge:start": "node cli-bridge/dist/server.js"
   },
