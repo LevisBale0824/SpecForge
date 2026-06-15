@@ -45,11 +45,11 @@ const allMessages = computed(() => {
       >
         <template v-if="msg.role === 'assistant'">
           <!-- Avatar -->
-          <div
-            class="mt-0.5 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-accent-emerald/20 text-[11px] font-bold text-accent-emerald"
-          >
-            AI
-          </div>
+          <img
+            :src="`/avatars/agent.png`"
+            alt="Agent"
+            class="mt-0.5 h-9 w-9 flex-shrink-0 rounded-full object-cover"
+          />
 
           <!-- Bubble -->
           <div
@@ -58,7 +58,7 @@ const allMessages = computed(() => {
             <div
               class="mb-1 text-[10px] font-semibold uppercase tracking-wider text-accent-emerald"
             >
-              Assistant
+              Hephaestus
             </div>
             <MessageContent :message-id="msg.id" />
           </div>
@@ -76,11 +76,11 @@ const allMessages = computed(() => {
           </div>
 
           <!-- Avatar -->
-          <div
-            class="mt-0.5 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-accent-cyan/20 text-[11px] font-bold text-accent-cyan"
-          >
-            U
-          </div>
+          <img
+            :src="`/avatars/user.png`"
+            alt="User"
+            class="mt-0.5 h-9 w-9 flex-shrink-0 rounded-full object-cover"
+          />
         </template>
       </div>
     </div>
