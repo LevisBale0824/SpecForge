@@ -55,9 +55,7 @@ const allMessages = computed(() => {
           <div
             class="max-w-[min(760px,calc(100%-3.5rem))] rounded-lg bg-surface-800/80 px-4 py-3 text-sm leading-relaxed text-surface-200"
           >
-            <div
-              class="mb-1 text-[10px] font-semibold uppercase tracking-wider text-accent-emerald"
-            >
+            <div class="mb-1 text-[10px] font-semibold tracking-wider text-accent-emerald">
               Hephaestus
             </div>
             <MessageContent :message-id="msg.id" />
@@ -69,9 +67,7 @@ const allMessages = computed(() => {
           <div
             class="max-w-[min(820px,calc(100%-3.5rem))] rounded-lg bg-accent-cyan/10 px-4 py-3 text-sm leading-relaxed text-surface-100"
           >
-            <div class="mb-1 text-[10px] font-semibold uppercase tracking-wider text-accent-cyan">
-              You
-            </div>
+            <div class="mb-1 text-[10px] font-semibold tracking-wider text-accent-cyan">Patron</div>
             <MessageContent :message-id="msg.id" />
           </div>
 
