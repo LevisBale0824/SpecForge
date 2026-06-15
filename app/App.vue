@@ -107,6 +107,10 @@ function onDeleteSession(sessionId: string) {
   backend.deleteSession(sessionId);
 }
 
+function onAbortSession(sessionId: string) {
+  backend.abortSession(sessionId);
+}
+
 function onNewSession() {
   activeDiff.value = null;
   backend.startNewSession();
@@ -170,8 +174,10 @@ function submitManualPath() {
         :sessions="backend.sessions.value"
         :active-session-id="backend.selectedSessionId.value"
         :workspace-diffs="backend.workspaceDiffs.value"
+        :status-of="backend.statusOf"
         @select-session="onSelectSession"
         @delete-session="onDeleteSession"
+        @abort-session="onAbortSession"
         @new-session="onNewSession"
         @open-diff="onOpenDiff"
         @open-folder="handleOpenFolder"

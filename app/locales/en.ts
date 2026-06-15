@@ -20,6 +20,7 @@ export default {
     justNow: "now",
     collapse: "Collapse sub-sessions",
     expand: "Expand sub-sessions",
+    abortSession: "Abort session",
   },
   welcome: {
     title: "Welcome to SpecForge",

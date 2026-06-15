@@ -80,15 +80,15 @@ export function useBackendSessionLifecycle(options: SessionLifecycleOptions) {
     }
   }
 
-  async function abortSession() {
-    const sessionId = options.selectedSessionId.value;
-    if (!sessionId || options.isAborting.value) return;
+  async function abortSession(sessionId?: string) {
+    const id = sessionId ?? options.selectedSessionId.value;
+    if (!id || options.isAborting.value) return;
 
     options.isAborting.value = true;
     try {
       const adapter = getActiveBackendAdapter();
       if (adapter.abortSession) {
-        await adapter.abortSession(sessionId, options.activeDirectory.value || undefined);
+        await adapter.abortSession(id, options.activeDirectory.value || undefined);
       }
     } catch (error) {
       console.error("[SessionLifecycle] Abort failed:", error);

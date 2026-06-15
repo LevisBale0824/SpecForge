@@ -20,6 +20,7 @@ export default {
     justNow: "刚刚",
     collapse: "折叠子会话",
     expand: "展开子会话",
+    abortSession: "终止会话",
   },
   welcome: {
     title: "欢迎使用 SpecForge",

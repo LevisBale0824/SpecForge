@@ -231,7 +231,10 @@ const messageSend = useBackendMessageSend({
 
 const msgStore = useMessages();
 const acc = useDeltaAccumulator();
-const sessionStatus = useSessionStatus();
+const sessionStatus = useSessionStatus(selectedSessionId);
+// Bind once to the global SSE bus so we capture every session's status event
+// (including sub-agent sessions whose sessionID differs from the active one).
+sessionStatus.bindGlobal(ge);
 const pendingDiffRefresh = new Map<string, number>();
 let pendingWorkspaceDiffRefresh: number | undefined;
 
@@ -291,11 +294,9 @@ function scheduleDiffRefresh(sessionId: string, delayMs = 500): void {
 // Bind SSE scope to message store when session changes
 watch(selectedSessionId, (newId) => {
   if (!newId) return;
-  sessionStatus.reset();
   const scope = ge.session(selectedSessionId);
   msgStore.bindScope(scope);
   acc.listen(scope);
-  sessionStatus.bindScope(scope);
   scheduleDiffRefresh(newId, 0);
 });
 
@@ -368,7 +369,6 @@ export function useBackend() {
     const currentId = selectedSessionId.value;
     if (currentId) msgStore.saveSessionState(currentId);
     msgStore.reset();
-    sessionStatus.reset();
     selectedSessionId.value = "";
   }
 
@@ -626,12 +626,12 @@ export function useBackend() {
       console.error("[useBackend] deleteSession failed:", error);
     }
     sessionsStore.remove(sessionId);
+    sessionStatus.remove(sessionId);
     // If the deleted session was active, clear the transcript so the next prompt
     // lazily creates a fresh session.
     if (selectedSessionId.value === sessionId) {
       msgStore.saveSessionState(sessionId);
       msgStore.reset();
-      sessionStatus.reset();
       selectedSessionId.value = "";
     }
   }
@@ -650,6 +650,8 @@ export function useBackend() {
     isBusy: sessionStatus.isBusy,
     isRetrying: sessionStatus.isRetrying,
     sessionStatus: sessionStatus.status,
+    statusOf: sessionStatus.statusOf,
+    isBusyOf: sessionStatus.isBusyOf,
     sessions: sessionsStore.sortedSessions,
     workspaceDiffs: readonly(workspaceDiffs),
     isElectron: electronMode,

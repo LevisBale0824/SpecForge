@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
-import type { SessionInfo } from "../types/sse";
+import type { SessionInfo, SessionStatusInfo } from "../types/sse";
 
 const { t } = useI18n();
 
@@ -9,16 +9,19 @@ const props = withDefaults(
   defineProps<{
     sessions?: SessionInfo[];
     activeSessionId?: string;
+    statusOf?: (id: string) => SessionStatusInfo;
   }>(),
   {
     sessions: () => [],
     activeSessionId: "",
+    statusOf: () => ({ type: "idle" }) as SessionStatusInfo,
   },
 );
 
 const emit = defineEmits<{
   select: [sessionId: string];
   delete: [sessionId: string];
+  abort: [sessionId: string];
 }>();
 
 // Sort helper: pinned first, then by updated descending.
@@ -106,6 +109,10 @@ function formatTime(timestamp?: number): string {
   return date.toLocaleDateString();
 }
 
+function isBusy(sessionId: string): boolean {
+  return props.statusOf(sessionId)?.type === "busy";
+}
+
 function statusIcon(session: SessionInfo): string {
   if (session.time.archived) return "archived";
   if (session.time.pinned) return "pinned";
@@ -147,13 +154,17 @@ function statusIcon(session: SessionInfo): string {
               />
             </svg>
           </button>
-          <!-- Status indicator (when no children) -->
+          <!-- Status dot: busy pulse > pinned/archived > empty placeholder -->
           <span
-            v-else-if="statusIcon(session)"
+            v-if="isBusy(session.id)"
+            class="w-1.5 h-1.5 rounded-full bg-accent-emerald animate-pulse flex-shrink-0"
+          />
+          <span
+            v-else-if="childrenOf(session.id).length === 0 && statusIcon(session)"
             class="w-1.5 h-1.5 rounded-full flex-shrink-0"
             :class="statusIcon(session) === 'pinned' ? 'bg-accent-amber' : 'bg-surface-600'"
           />
-          <span v-else class="w-1.5 h-1.5 flex-shrink-0" />
+          <span v-else-if="childrenOf(session.id).length === 0" class="w-1.5 h-1.5 flex-shrink-0" />
 
           <!-- Title -->
           <span class="truncate flex-1">
@@ -174,6 +185,23 @@ function statusIcon(session: SessionInfo): string {
           >
             {{ formatTime(session.time.updated) }}
           </span>
+
+          <!-- Abort button (only when busy) -->
+          <button
+            v-if="isBusy(session.id)"
+            class="opacity-0 group-hover:opacity-100 flex-shrink-0 p-0.5 rounded hover:bg-accent-rose/20 hover:text-accent-rose text-surface-500 transition-all"
+            :title="t('sidebar.abortSession')"
+            @click.stop="emit('abort', session.id)"
+          >
+            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M6 18L18 6M6 6l12 12"
+              />
+            </svg>
+          </button>
 
           <!-- Delete button -->
           <button
@@ -210,8 +238,12 @@ function statusIcon(session: SessionInfo): string {
           @click="emit('select', child.id)"
         >
           <div class="flex items-center gap-1.5">
-            <!-- Subagent dot icon -->
-            <span class="w-1.5 h-1.5 rounded-full bg-accent-indigo/70 flex-shrink-0" />
+            <!-- Subagent dot: busy pulse overrides the idle indigo dot -->
+            <span
+              v-if="isBusy(child.id)"
+              class="w-1.5 h-1.5 rounded-full bg-accent-emerald animate-pulse flex-shrink-0"
+            />
+            <span v-else class="w-1.5 h-1.5 rounded-full bg-accent-indigo/70 flex-shrink-0" />
 
             <!-- Title -->
             <span class="truncate flex-1 text-[13px]">
@@ -224,6 +256,23 @@ function statusIcon(session: SessionInfo): string {
             >
               {{ formatTime(child.time.updated) }}
             </span>
+
+            <!-- Abort button (only when busy) -->
+            <button
+              v-if="isBusy(child.id)"
+              class="opacity-0 group-hover:opacity-100 flex-shrink-0 p-0.5 rounded hover:bg-accent-rose/20 hover:text-accent-rose text-surface-500 transition-all"
+              :title="t('sidebar.abortSession')"
+              @click.stop="emit('abort', child.id)"
+            >
+              <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M6 18L18 6M6 6l12 12"
+                />
+              </svg>
+            </button>
 
             <!-- Delete button -->
             <button
@@ -258,13 +307,37 @@ function statusIcon(session: SessionInfo): string {
       @click="emit('select', session.id)"
     >
       <div class="flex items-center gap-1.5">
-        <span class="w-1.5 h-1.5 flex-shrink-0" />
+        <span
+          v-if="isBusy(session.id)"
+          class="w-1.5 h-1.5 rounded-full bg-accent-emerald animate-pulse flex-shrink-0"
+        />
+        <span
+          v-else-if="statusIcon(session)"
+          class="w-1.5 h-1.5 rounded-full flex-shrink-0"
+          :class="statusIcon(session) === 'pinned' ? 'bg-accent-amber' : 'bg-surface-600'"
+        />
+        <span v-else class="w-1.5 h-1.5 flex-shrink-0" />
         <span class="truncate flex-1">
           {{ session.title || session.id.slice(0, 8) }}
         </span>
         <span class="text-xs text-surface-600 opacity-0 group-hover:opacity-100 transition-opacity">
           {{ formatTime(session.time.updated) }}
         </span>
+        <button
+          v-if="isBusy(session.id)"
+          class="opacity-0 group-hover:opacity-100 flex-shrink-0 p-0.5 rounded hover:bg-accent-rose/20 hover:text-accent-rose text-surface-500 transition-all"
+          :title="t('sidebar.abortSession')"
+          @click.stop="emit('abort', session.id)"
+        >
+          <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M6 18L18 6M6 6l12 12"
+            />
+          </svg>
+        </button>
         <button
           class="opacity-0 group-hover:opacity-100 flex-shrink-0 p-0.5 rounded hover:bg-accent-rose/20 hover:text-accent-rose text-surface-500 transition-all"
           :title="t('sidebar.deleteSession')"

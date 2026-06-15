@@ -9,7 +9,7 @@ import SidePanelSection from "./SidePanelSection.vue";
 import { useProject } from "../composables/useProject";
 import { useMessages } from "../composables/useMessages";
 import type { MessageDiffEntry } from "../types/message";
-import type { FileDiff, SessionInfo } from "../types/sse";
+import type { FileDiff, SessionInfo, SessionStatusInfo } from "../types/sse";
 
 const { t } = useI18n();
 const { state: projectState } = useProject();
@@ -20,11 +20,13 @@ const props = withDefaults(
     sessions?: SessionInfo[];
     activeSessionId?: string;
     workspaceDiffs?: readonly FileDiff[];
+    statusOf?: (id: string) => SessionStatusInfo;
   }>(),
   {
     sessions: () => [],
     activeSessionId: "",
     workspaceDiffs: () => [],
+    statusOf: () => ({ type: "idle" }) as SessionStatusInfo,
   },
 );
 
@@ -49,6 +51,7 @@ function toggleSection(id: SectionId) {
 const emit = defineEmits<{
   "select-session": [sessionId: string];
   "delete-session": [sessionId: string];
+  "abort-session": [sessionId: string];
   "new-session": [];
   "open-file": [path: string];
   "open-diff": [diff: MessageDiffEntry];
@@ -133,8 +136,10 @@ const sections = computed(() => [
         <SessionTree
           :sessions="sessions"
           :active-session-id="activeSessionId"
+          :status-of="statusOf"
           @select="emit('select-session', $event)"
           @delete="emit('delete-session', $event)"
+          @abort="emit('abort-session', $event)"
         />
       </template>
 
