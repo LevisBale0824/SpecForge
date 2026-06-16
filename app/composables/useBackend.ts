@@ -144,19 +144,32 @@ const fileIndexStore = useFileIndex();
 // `session.status=idle` event within a grace window, force the session idle.
 // Covers timeout/abort/crash paths where the backend drops the idle event,
 // which previously left the session stuck in RUNNING forever.
-const IDLE_FALLBACK_GRACE_MS = 1500;
+//
+// Grace window is intentionally generous: the backend may still be flushing
+// SSE events, persisting state, or tearing down MCP/PTY resources after the
+// final assistant message. Forcing idle too early makes the UI look done
+// while the session is still busy — the next prompt can then race with the
+// still-running one. 5s is a balance: long enough to absorb normal backend
+// teardown latency, short enough that a crashed backend doesn't leave the
+// UI stuck for too long.
+const IDLE_FALLBACK_GRACE_MS = 5000;
 const idleFallbackTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
 function scheduleIdleFallback(sessionId: string): void {
   if (!sessionId) return;
   const existing = idleFallbackTimers.get(sessionId);
   if (existing) clearTimeout(existing);
+  const armedAt = Date.now();
   const timer = setTimeout(() => {
     idleFallbackTimers.delete(sessionId);
     if (sessionStatus.isBusyOf(sessionId)) {
+      const elapsedMs = Date.now() - armedAt;
       sessionStatus.markIdle(sessionId);
       console.warn(
-        `[useBackend] Forced session ${sessionId} idle — completion signal received without idle event`,
+        `[useBackend] Forced session ${sessionId} idle after ${elapsedMs}ms grace — ` +
+          `completion signal received without a session.status=idle event. ` +
+          `If this happens often, the backend may be dropping idle events or the grace window needs tuning.`,
+        { sessionId, graceMs: IDLE_FALLBACK_GRACE_MS, elapsedMs },
       );
     }
   }, IDLE_FALLBACK_GRACE_MS);

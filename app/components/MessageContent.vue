@@ -220,7 +220,7 @@ function toolStatusColor(block: { state: ToolState }): string {
       <span class="thinking-dot" />
       <span class="thinking-dot" />
       <span class="thinking-dot" />
-      <span class="ml-1 text-[11px] text-surface-400">正在思考...</span>
+      <span class="ml-1 text-[11px] text-surface-400">正在思考</span>
     </div>
 
     <div v-if="isError" class="mt-1 text-xs text-accent-rose">
