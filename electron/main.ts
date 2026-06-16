@@ -1266,10 +1266,76 @@ function registerIpcHandlers() {
     return true;
   });
   ipcMain.handle("window:close", () => {
+    // Tear down any in-flight console subprocesses so the app exits cleanly
+    // instead of orphaning shells behind the window.
+    for (const proc of consoleChildren.values()) killConsoleChild(proc);
+    consoleChildren.clear();
     mainWindow?.close();
   });
   ipcMain.handle("window:isMaximized", () => {
     return mainWindow?.isMaximized() ?? false;
+  });
+
+  // ── Console: spawn user commands and stream output ─────────────────────
+  // Tracked so we can kill in-flight shells on `console:kill` or window close.
+  const consoleChildren = new Map<number, ChildProcess>();
+
+  function killConsoleChild(proc: ChildProcess | undefined): void {
+    if (!proc || proc.exitCode !== null || proc.signalCode) return;
+    try {
+      if (process.platform === "win32") {
+        // /T kills the whole descendant tree — important because shell:true
+        // spawns a wrapper (cmd.exe) that owns the real process.
+        execSync(`taskkill /F /T /PID ${proc.pid}`, { stdio: "ignore" });
+      } else {
+        // detached handling isn't set here; fall back to direct kill plus
+        // a process-group attempt for shells that did setsid themselves.
+        try {
+          if (typeof proc.pid === "number") process.kill(-proc.pid, "SIGTERM");
+          else proc.kill("SIGTERM");
+        } catch {
+          proc.kill("SIGTERM");
+        }
+      }
+    } catch {
+      // Process already gone — ignore.
+    }
+  }
+
+  ipcMain.handle("console:exec", async (_e, payload: { cmd: string; cwd?: string }) => {
+    const cwd = payload.cwd && fs.existsSync(payload.cwd) ? payload.cwd : undefined;
+    let proc: ChildProcess;
+    try {
+      // shell:true so users get PATH resolution, redirection, quoting —
+      // matching what they'd type in a real terminal.
+      proc = spawn(payload.cmd, {
+        cwd,
+        shell: true,
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+    } catch (err) {
+      return { ok: false as const, error: String(err) };
+    }
+    const pid = proc.pid ?? -1;
+    if (pid >= 0) consoleChildren.set(pid, proc);
+
+    const send = (kind: "stdout" | "stderr" | "exit", data: string, code?: number) => {
+      mainWindow?.webContents.send("console:data", { pid, kind, data, code });
+    };
+
+    proc.stdout?.on("data", (chunk: Buffer) => send("stdout", chunk.toString()));
+    proc.stderr?.on("data", (chunk: Buffer) => send("stderr", chunk.toString()));
+    proc.on("error", (err) => send("stderr", `${err.message}\n`));
+    proc.on("exit", (code, signal) => {
+      consoleChildren.delete(pid);
+      send("exit", "", code ?? (signal ? -1 : 0));
+    });
+    return { ok: true as const, pid };
+  });
+
+  ipcMain.handle("console:kill", async (_e, pid: number) => {
+    killConsoleChild(consoleChildren.get(pid));
+    consoleChildren.delete(pid);
   });
 }
 

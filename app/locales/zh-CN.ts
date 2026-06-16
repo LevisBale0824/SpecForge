@@ -69,6 +69,7 @@ export default {
   topbar: {
     backend: "后端",
     settings: "设置",
+    console: "控制台",
     agentLabel: "Agent",
   },
   render: {

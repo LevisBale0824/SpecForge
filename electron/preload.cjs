@@ -21,6 +21,13 @@ contextBridge.exposeInMainWorld("electronAPI", {
   windowToggleMaximize: () => ipcRenderer.invoke("window:toggleMaximize"),
   windowClose: () => ipcRenderer.invoke("window:close"),
   windowIsMaximized: () => ipcRenderer.invoke("window:isMaximized"),
+  consoleExec: (cmd, cwd) => ipcRenderer.invoke("console:exec", { cmd, cwd }),
+  consoleKill: (pid) => ipcRenderer.invoke("console:kill", pid),
+  onConsoleData: (callback) => {
+    const handler = (_event, payload) => callback(payload);
+    ipcRenderer.on("console:data", handler);
+    return () => ipcRenderer.removeListener("console:data", handler);
+  },
   onWindowMaximizeChange: (callback) => {
     const handler = (_event, isMaximized) => callback(isMaximized);
     ipcRenderer.on("window:maximizeChange", handler);

@@ -29,6 +29,13 @@ export type ServerStatus = {
   pid: number;
 };
 
+// ── Console IPC ─────────────────────────────────────────────────────────
+export type ConsoleExecResult = { ok: true; pid: number } | { ok: false; error: string };
+
+export type ConsoleDataEvent =
+  | { pid: number; kind: "stdout" | "stderr"; data: string }
+  | { pid: number; kind: "exit"; data: string; code: number };
+
 // ── OpenSpec IPC ────────────────────────────────────────────────────────
 // 主类型定义在 app/types/openspec.ts,这里只 re-export IPC 边界用到的类型
 export type {
@@ -74,6 +81,12 @@ export interface ElectronAPI {
   windowIsMaximized: () => Promise<boolean>;
   onWindowMaximizeChange: (callback: (isMaximized: boolean) => void) => () => void;
   onOpenFolder: (callback: (path: string) => void) => () => void;
+  /** Spawn a user-typed shell command, return OS pid for kill/stream keying. */
+  consoleExec: (cmd: string, cwd?: string) => Promise<ConsoleExecResult>;
+  /** Kill an in-flight console subprocess by pid. */
+  consoleKill: (pid: number) => Promise<void>;
+  /** Subscribe to stdout/stderr/exit streams for any console subprocess. */
+  onConsoleData: (callback: (event: ConsoleDataEvent) => void) => () => void;
   isElectron: true;
 }
 

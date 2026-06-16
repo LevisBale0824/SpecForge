@@ -20,7 +20,12 @@ const inElectron = isElectron();
 
 const emit = defineEmits<{
   "toggle-settings": [];
+  "toggle-console": [];
   "open-folder": [];
+}>();
+
+const props = defineProps<{
+  consoleActive?: boolean;
 }>();
 
 const projectName = computed(() => projectState.value.directoryName || "");
@@ -132,7 +137,25 @@ function openFolder() {
         <span>{{ agentLabel }}</span>
       </span>
       <button
+        class="px-2 py-1 text-xs rounded transition-colors titlebar-nodrag"
+        :class="
+          props.consoleActive
+            ? 'text-accent-cyan bg-accent-cyan/10'
+            : 'text-surface-400 hover:text-surface-200 hover:bg-surface-800'
+        "
+        :title="t('topbar.console')"
+        :aria-pressed="props.consoleActive"
+        @click="emit('toggle-console')"
+      >
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <rect x="3" y="4" width="18" height="16" rx="2" stroke-width="2" />
+          <path d="M7 9l3 3-3 3" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+          <line x1="13" y1="15" x2="17" y2="15" stroke-width="2" stroke-linecap="round" />
+        </svg>
+      </button>
+      <button
         class="px-2 py-1 text-xs text-surface-400 hover:text-surface-200 hover:bg-surface-800 rounded transition-colors titlebar-nodrag"
+        :title="t('topbar.settings')"
         @click="emit('toggle-settings')"
       >
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

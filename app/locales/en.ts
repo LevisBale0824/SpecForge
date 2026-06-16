@@ -69,6 +69,7 @@ export default {
   topbar: {
     backend: "Backend",
     settings: "Settings",
+    console: "Console",
     agentLabel: "Agent",
   },
   render: {

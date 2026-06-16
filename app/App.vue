@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { ref, watch, onMounted, onUnmounted } from "vue";
+import { ref, watch, onMounted, onUnmounted, nextTick } from "vue";
 import TopBar from "./components/TopBar.vue";
 import SidePanel from "./components/SidePanel.vue";
 import StatusBar from "./components/StatusBar.vue";
 import InputPanel from "./components/InputPanel.vue";
 import FloatingWindow from "./components/FloatingWindow.vue";
 import SettingsPanel from "./components/SettingsPanel.vue";
+import ConsolePanel from "./components/ConsolePanel.vue";
 import DiffViewer from "./components/DiffViewer.vue";
 import { useRoute, useRouter } from "vue-router";
 import { useFloatingWindows } from "./composables/useFloatingWindows";
@@ -19,6 +20,9 @@ const route = useRoute();
 const router = useRouter();
 const sidePanelWidth = ref(300);
 const showSettings = ref(false);
+const showConsole = ref(false);
+const consoleHeight = ref(220);
+const consolePanelEl = ref<InstanceType<typeof ConsolePanel> | null>(null);
 const backend = useBackend();
 const inElectron = isElectron();
 
@@ -125,6 +129,13 @@ function onCloseDiff() {
   activeDiff.value = null;
 }
 
+function toggleConsole() {
+  showConsole.value = !showConsole.value;
+  if (showConsole.value) {
+    nextTick(() => consolePanelEl.value?.focus());
+  }
+}
+
 async function handleOpenFolder() {
   // Electron: trigger the native picker, then load the tree + jump to chat.
   if (inElectron) {
@@ -163,7 +174,12 @@ function submitManualPath() {
 <template>
   <div class="flex flex-col h-screen bg-surface-950 text-surface-100 overflow-hidden">
     <!-- Top Bar -->
-    <TopBar @toggle-settings="showSettings = !showSettings" @open-folder="handleOpenFolder" />
+    <TopBar
+      :console-active="showConsole"
+      @toggle-settings="showSettings = !showSettings"
+      @toggle-console="toggleConsole"
+      @open-folder="handleOpenFolder"
+    />
 
     <!-- Main Content -->
     <div class="flex flex-1 overflow-hidden">
@@ -221,6 +237,16 @@ function submitManualPath() {
         </template>
       </main>
     </div>
+
+    <!-- Console Panel (toggleable, sits above the status bar) -->
+    <ConsolePanel
+      v-if="showConsole"
+      ref="consolePanelEl"
+      :cwd="project.state.directoryPath"
+      v-model:height="consoleHeight"
+      class="flex-shrink-0"
+      @minimize="showConsole = false"
+    />
 
     <!-- Status Bar -->
     <StatusBar />
