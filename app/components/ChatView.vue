@@ -5,6 +5,14 @@ import { stripSystemReminder, useMessages } from "../composables/useMessages";
 
 const msgStore = useMessages();
 
+// Public-dir asset URLs must be prefixed with BASE_URL so they resolve under
+// any Vite `base` setting. With `base: "./"` (used for Electron file:// loads)
+// a hard-coded `/avatars/...` would point at the filesystem root inside an
+// AppImage and 404 — BASE_URL keeps the path relative to index.html.
+const avatarBaseUrl = import.meta.env.BASE_URL;
+const agentAvatarSrc = `${avatarBaseUrl}avatars/agent.png`;
+const userAvatarSrc = `${avatarBaseUrl}avatars/user.png`;
+
 function hasVisibleText(id: string): boolean {
   return msgStore.getParts(id).some((part) => {
     if (part.type !== "text" || part.synthetic) return false;
@@ -46,7 +54,7 @@ const allMessages = computed(() => {
         <template v-if="msg.role === 'assistant'">
           <!-- Avatar -->
           <img
-            :src="`/avatars/agent.png`"
+            :src="agentAvatarSrc"
             alt="Agent"
             class="mt-0.5 h-9 w-9 flex-shrink-0 rounded-full object-cover"
           />
@@ -73,7 +81,7 @@ const allMessages = computed(() => {
 
           <!-- Avatar -->
           <img
-            :src="`/avatars/user.png`"
+            :src="userAvatarSrc"
             alt="User"
             class="mt-0.5 h-9 w-9 flex-shrink-0 rounded-full object-cover"
           />

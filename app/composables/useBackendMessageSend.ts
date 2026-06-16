@@ -54,6 +54,7 @@ export function useBackendMessageSend(options: MessageSendOptions) {
 
       return true;
     } catch (error) {
+      console.error("[useBackendMessageSend] sendPrompt failed:", error);
       sendError.value = options.toErrorMessage(error);
       options.onSendError?.(sendError.value);
       return false;

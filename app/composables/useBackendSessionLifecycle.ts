@@ -40,6 +40,7 @@ export function useBackendSessionLifecycle(options: SessionLifecycleOptions) {
       }
       return session;
     } catch (error) {
+      console.error("[SessionLifecycle] createSession failed:", error);
       const message = options.toErrorMessage(error);
       options.onSessionError?.(message);
       return undefined;

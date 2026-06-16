@@ -269,15 +269,29 @@ function parseFileAttachments(text: string): string[] {
 async function handleSend() {
   const text = inputText.value.trim();
   if (!text || backend.isSending.value || backend.isBusy.value) return;
+  // Keep the original text so we can restore it if the backend rejects the
+  // send. Previously the input was cleared unconditionally, which made send
+  // failures look like the message had been "swallowed" — the user lost
+  // their text and saw no error. Clear only after a successful dispatch.
   inputText.value = "";
   showMenu.value = false;
   showFileMenu.value = false;
   atIndex.value = -1;
-  if (text.startsWith("/")) {
-    await backend.sendCommand(text);
-  } else {
-    const attachments = parseFileAttachments(text);
-    await backend.sendPrompt(text, attachments);
+  let ok = true;
+  try {
+    if (text.startsWith("/")) {
+      ok = await backend.sendCommand(text);
+    } else {
+      const attachments = parseFileAttachments(text);
+      ok = await backend.sendPrompt(text, attachments);
+    }
+  } catch (e) {
+    console.error("[InputPanel] send threw:", e);
+    ok = false;
+  }
+  if (!ok) {
+    // Restore the user's text so they can edit + retry instead of retyping.
+    inputText.value = text;
   }
 }
 </script>
