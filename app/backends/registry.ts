@@ -41,7 +41,30 @@ export function setActiveBackendKind(kind: BackendKind) {
     throw new Error(`Backend adapter is not registered: ${kind}`);
   }
   activeBackendKind = kind;
+  // Re-apply the freshly-activated backend's persisted config to the shared
+  // REST client. Both opencode and zero adapters reuse `app/utils/opencode.ts`,
+  // which keeps baseUrl/auth in module-level variables. ensureAdapters()
+  // configures opencode first and zero second — so by the time it returns the
+  // shared client is left pointing at zero's :13286 regardless of which
+  // backend is actually active. Without this re-apply, every boot defaults to
+  // 13286 and every kind switch needs the caller to also reconfigure, which
+  // is easy to forget (and was forgotten on the initial boot path).
+  applyPersistedConfig(kind);
   for (const listener of listeners) listener(kind);
+}
+
+function applyPersistedConfig(kind: BackendKind): void {
+  const adapter = adapters[kind];
+  if (!adapter?.configure) return;
+  const persistedUrl = getPersistedUrlFor(kind);
+  const authKey =
+    kind === "opencode"
+      ? StorageKeys.auth.opencodeAuthorization
+      : kind === "zero"
+        ? StorageKeys.auth.zeroAuthorization
+        : null;
+  const persistedAuth = authKey ? (storageGet(authKey) ?? undefined) : undefined;
+  adapter.configure({ baseUrl: persistedUrl, authorization: persistedAuth });
 }
 
 export function onActiveBackendKindChange(listener: (kind: BackendKind) => void) {
@@ -128,6 +151,10 @@ function ensureAdapters() {
 
 // Initialise on import
 ensureAdapters();
+// After ensureAdapters the shared REST client is left configured for whatever
+// adapter was created last (zero), not for the actual active backend. Re-apply
+// the active kind's config so the initial boot talks to the right port.
+applyPersistedConfig(activeBackendKind);
 
 // One-shot migration: earlier versions persisted the active backend kind to
 // localStorage. We no longer read or write it (kind is in-session only — see
