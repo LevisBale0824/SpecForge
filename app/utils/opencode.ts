@@ -76,16 +76,45 @@ function buildHeaders(options?: RequestOptions, contentType?: string) {
   return Object.keys(headers).length > 0 ? headers : undefined;
 }
 
+/**
+ * Read up to `limit` chars of the response body for diagnostic logging.
+ * Caps size so a huge error page can't blow up the console.
+ */
+async function readErrorBody(response: Response, limit = 2000): Promise<string> {
+  try {
+    const raw = await response.text();
+    if (!raw) return "";
+    return raw.length > limit
+      ? `${raw.slice(0, limit)}…<truncated ${raw.length - limit} chars>`
+      : raw;
+  } catch (e) {
+    return `<unreadable body: ${(e as Error).message}>`;
+  }
+}
+
 async function getJson(
   path: string,
   params?: Record<string, QueryValue>,
   options?: RequestOptions,
 ) {
-  const response = await fetch(createUrl(path, params), {
+  const url = createUrl(path, params);
+  const response = await fetch(url, {
     headers: buildHeaders(options),
     signal: options?.signal,
   });
-  if (!response.ok) throw new Error(`${path} request failed (${response.status})`);
+  if (!response.ok) {
+    const body = await readErrorBody(response);
+    console.error(`[opencode] GET ${path} failed`, {
+      status: response.status,
+      statusText: response.statusText,
+      params,
+      url,
+      body,
+    });
+    throw new Error(
+      `${path} request failed (${response.status} ${response.statusText})${body ? `: ${body}` : ""}`,
+    );
+  }
   return parseJson(response);
 }
 
@@ -98,13 +127,27 @@ async function sendJson(
     request?: RequestOptions;
   },
 ) {
-  const response = await fetch(createUrl(path, options.params), {
+  const url = createUrl(path, options.params);
+  const response = await fetch(url, {
     method,
     headers: buildHeaders(options.request, "application/json"),
     body: options.body === undefined ? undefined : JSON.stringify(options.body),
     signal: options.request?.signal,
   });
-  if (!response.ok) throw new Error(`${path} request failed (${response.status})`);
+  if (!response.ok) {
+    const body = await readErrorBody(response);
+    console.error(`[opencode] ${method} ${path} failed`, {
+      status: response.status,
+      statusText: response.statusText,
+      params: options.params,
+      url,
+      requestBody: options.body,
+      responseBody: body,
+    });
+    throw new Error(
+      `${path} request failed (${response.status} ${response.statusText})${body ? `: ${body}` : ""}`,
+    );
+  }
   return parseJson(response);
 }
 
@@ -165,14 +208,27 @@ export async function readFileContentBytes(
   payload: { directory: string; path: string },
   options?: RequestOptions,
 ) {
-  const response = await fetch(
-    createUrl("/file/content", {
-      directory: payload.directory,
-      path: payload.path,
-    }),
-    { headers: buildHeaders(options), signal: options?.signal },
-  );
-  if (!response.ok) throw new Error(`/file/content request failed (${response.status})`);
+  const url = createUrl("/file/content", {
+    directory: payload.directory,
+    path: payload.path,
+  });
+  const response = await fetch(url, {
+    headers: buildHeaders(options),
+    signal: options?.signal,
+  });
+  if (!response.ok) {
+    const body = await readErrorBody(response);
+    console.error(`[opencode] GET /file/content failed`, {
+      status: response.status,
+      statusText: response.statusText,
+      params: payload,
+      url,
+      responseBody: body,
+    });
+    throw new Error(
+      `/file/content request failed (${response.status} ${response.statusText})${body ? `: ${body}` : ""}`,
+    );
+  }
   return new Uint8Array(await response.arrayBuffer());
 }
 
@@ -517,6 +573,29 @@ export async function sendPromptAsync(
   if (payload.model) {
     body.model = { ...payload.model, variant: payload.variant };
   }
+  // Diagnostic summary: avoid dumping full text (could be large) — log part
+  // types/paths so @-attachment issues are easy to spot.
+  const partsSummary = payload.parts.map((p) => {
+    const t = (p as { type?: string }).type;
+    if (t === "file") {
+      const src = (p as { source?: { path?: string } }).source;
+      return `file(${src?.path ?? "<missing path>"})`;
+    }
+    if (t === "text") {
+      const txt = (p as { text?: string }).text ?? "";
+      return `text(${txt.length} chars)`;
+    }
+    return `${t ?? "unknown"}`;
+  });
+  console.info("[opencode] POST /prompt_async", {
+    sessionId,
+    directory: payload.directory || "<empty>",
+    agent: payload.agent,
+    variant: payload.variant,
+    model: payload.model,
+    partsCount: payload.parts.length,
+    parts: partsSummary,
+  });
   await sendJson(`/session/${sessionId}/prompt_async`, "POST", {
     params: { directory: payload.directory },
     body,

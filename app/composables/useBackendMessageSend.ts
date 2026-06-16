@@ -44,6 +44,17 @@ export function useBackendMessageSend(options: MessageSendOptions) {
         : undefined;
 
       const parts = buildPromptParts(text, attachments);
+      console.info("[useBackendMessageSend] sendPrompt", {
+        backendKind: getActiveBackendKind(),
+        sessionId,
+        directory: dir ?? "<empty>",
+        agent: options.agent.value,
+        model,
+        textLength: text.length,
+        attachmentsCount: attachments.length,
+        attachments,
+        partsCount: parts.length,
+      });
       await adapter.sendPromptAsync(sessionId, {
         directory: dir ?? "",
         agent: options.agent.value || "general",
@@ -54,7 +65,15 @@ export function useBackendMessageSend(options: MessageSendOptions) {
 
       return true;
     } catch (error) {
-      console.error("[useBackendMessageSend] sendPrompt failed:", error);
+      console.error("[useBackendMessageSend] sendPrompt failed:", error, {
+        backendKind: getActiveBackendKind(),
+        sessionId,
+        directory: options.activeDirectory.value || "<empty>",
+        agent: options.agent.value,
+        textLength: text.length,
+        attachmentsCount: attachments.length,
+        attachments,
+      });
       sendError.value = options.toErrorMessage(error);
       options.onSendError?.(sendError.value);
       return false;
@@ -104,5 +123,11 @@ function buildPromptParts(text: string, attachments: string[]): Array<Record<str
       source: { type: "file", path: relPath },
     });
   }
+  console.info("[useBackendMessageSend] buildPromptParts", {
+    backendKind: kind,
+    attachmentsCount: attachments.length,
+    attachments,
+    partsCount: parts.length,
+  });
   return parts;
 }
