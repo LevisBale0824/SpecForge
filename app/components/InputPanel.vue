@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, ref } from "vue";
+import { computed, nextTick, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { useBackend } from "../composables/useBackend";
 import CommandMenu from "./CommandMenu.vue";
@@ -11,6 +11,19 @@ const backend = useBackend();
 
 const inputText = ref("");
 const textareaEl = ref<HTMLTextAreaElement | null>(null);
+
+// Auto-resize the textarea to fit content. Without this, picking a long
+// `@path/to/deep/file.ts` leaves the user with one visible line and a
+// scroll bar — they can't tell at a glance what got attached. Cap the
+// growth so a giant paste doesn't take over the layout.
+const MAX_TEXTAREA_HEIGHT_PX = 200;
+function autoResize() {
+  const el = textareaEl.value;
+  if (!el) return;
+  el.style.height = "auto";
+  el.style.height = `${Math.min(el.scrollHeight, MAX_TEXTAREA_HEIGHT_PX)}px`;
+}
+watch(inputText, () => nextTick(autoResize));
 
 // ── Slash command menu state ──────────────────────────────────────────────
 const showMenu = ref(false);

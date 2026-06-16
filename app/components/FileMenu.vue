@@ -59,8 +59,9 @@ function handleClick(file: string) {
       v-else
       :key="file"
       :data-index="index"
+      :title="file"
       type="button"
-      class="flex w-full items-baseline gap-1 px-3 py-1.5 text-left transition-colors"
+      class="flex w-full items-baseline gap-1 px-3 py-1.5 text-left transition-colors min-w-0"
       :class="
         index === selectedIndex
           ? 'bg-accent-cyan/10 text-surface-100'
@@ -69,8 +70,11 @@ function handleClick(file: string) {
       @click="handleClick(file)"
       @mouseenter="emit('hover', index)"
     >
-      <span class="font-mono text-sm text-accent-cyan">@</span>
-      <span class="font-mono text-sm truncate">
+      <span class="font-mono text-sm text-accent-cyan flex-shrink-0">@</span>
+      <!-- min-w-0 + flex-1 lets the path truncate inside flex; without it the
+           long path pushes the menu wider than the viewport. dir is dimmed so
+           when truncation kicks in the basename stays the most visible part. -->
+      <span class="font-mono text-sm truncate min-w-0 flex-1">
         <span class="text-surface-500">{{ splitPath(file).dir }}</span>
         <span class="text-surface-100">{{ splitPath(file).base }}</span>
       </span>
