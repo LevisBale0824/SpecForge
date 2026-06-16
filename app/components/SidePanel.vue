@@ -89,7 +89,11 @@ const sections = computed(() => [
   {
     id: "sessions" as const,
     title: t("sidebar.sessions"),
-    badge: props.sessions.length,
+    // Count only root sessions (those without a parentID). Sub-agent
+    // sessions are nested under their parent and shouldn't inflate the
+    // top-level count — otherwise "5 sessions" might really be 1 parent
+    // + 4 sub-agents.
+    badge: props.sessions.filter((s) => !s.parentID).length,
     collapsed: collapsed.value.sessions,
     canCreate: true,
   },
