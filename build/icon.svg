@@ -1,5 +1,8 @@
 <svg width="512" height="512" title="SpecForge" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <rect width="256" height="256" rx="96" fill="#0b0e14" />
+  <defs>
+
+  </defs>
+  <rect width="256" height="256" rx="56" fill="#0b0e14" />
   <path d="M96 72 L28 128 L96 184" stroke="#f1f5f9" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" />
   <path d="M160 72 L228 128 L160 184" stroke="#f1f5f9" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" />
   <circle cx="108" cy="172" r="8" fill="#22d3ee" />

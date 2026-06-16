@@ -7,8 +7,10 @@ dist-ssr/
 dist-electron/
 release/
 
-# Generated PNG icons (source SVG is tracked at build/icon.svg)
-build/icons/
+# Icon generation:
+#   - Source SVG:     build/icon.svg          (tracked)
+#   - Generated PNGs: .generated/icons/       (tracked — needed by electron-builder
+#     and Linux .desktop integration without requiring a sharp install)
 
 # IDE
 .vscode/
