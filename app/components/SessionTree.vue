@@ -61,30 +61,35 @@ const orphanSessions = computed(() =>
   ),
 );
 
-// Collapsed parent ids. Default empty = all expanded.
-const collapsedParents = ref(new Set<string>());
+// Expanded parent ids. Default empty = all collapsed. Most users don't need
+// to see sub-agent sessions every time they open the sidebar — the children
+// badge already tells them how many there are. Opt-in expansion via the
+// toggle button keeps the list scannable.
+const expandedParents = ref(new Set<string>());
 
 function toggleCollapse(parentId: string) {
-  const next = new Set(collapsedParents.value);
+  const next = new Set(expandedParents.value);
   if (next.has(parentId)) next.delete(parentId);
   else next.add(parentId);
-  collapsedParents.value = next;
+  expandedParents.value = next;
 }
 
 function isExpanded(parentId: string): boolean {
-  return !collapsedParents.value.has(parentId);
+  return expandedParents.value.has(parentId);
 }
 
-// Auto-expand the parent when activating one of its children.
+// Auto-expand the parent when activating one of its children, so the active
+// sub-agent stays visible in the sidebar instead of being hidden by the
+// default-collapsed state.
 watch(
   () => props.activeSessionId,
   (newId) => {
     if (!newId) return;
     const child = props.sessions.find((s) => s.id === newId);
-    if (child?.parentID && collapsedParents.value.has(child.parentID)) {
-      const next = new Set(collapsedParents.value);
-      next.delete(child.parentID);
-      collapsedParents.value = next;
+    if (child?.parentID && !expandedParents.value.has(child.parentID)) {
+      const next = new Set(expandedParents.value);
+      next.add(child.parentID);
+      expandedParents.value = next;
     }
   },
 );
