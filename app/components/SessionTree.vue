@@ -33,8 +33,15 @@ function sortByDefault(list: SessionInfo[]): SessionInfo[] {
   });
 }
 
+// Cap the rendered list so a backlog of hundreds of historical sessions
+// doesn't tank DOM performance. Sorted by recency first (sortByDefault),
+// then sliced — older sessions stay in storage / backend, just not rendered.
+const MAX_ROOT_SESSIONS = 100;
+
 // Root sessions: no parentID.
-const rootSessions = computed(() => sortByDefault([...props.sessions].filter((s) => !s.parentID)));
+const rootSessions = computed(() =>
+  sortByDefault([...props.sessions].filter((s) => !s.parentID)).slice(0, MAX_ROOT_SESSIONS),
+);
 
 // Children grouped by parentID (only one level).
 const childrenByParent = computed(() => {
