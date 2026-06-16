@@ -21,7 +21,7 @@ import { isElectron as detectElectron, readWorkspaceDiff } from "../utils/electr
 import {
   getActiveBackendKind,
   getActiveBackendAdapter,
-  getPersistedUrlFor,
+  resolveBackendConfig,
   configureOpenCodeBackend,
   configureZeroBackend,
   setActiveBackendKind,
@@ -48,12 +48,9 @@ const electronMode = detectElectron();
 // :13284 even when the user had last selected zero (:13286) — manifesting as
 // silent connection failures and stray TIME_WAIT sockets on the wrong port.
 const initialBackendKind = getActiveBackendKind();
-const baseUrl = ref(getPersistedUrlFor(initialBackendKind));
-const authHeader = ref(
-  initialBackendKind === "zero"
-    ? (storageGet(StorageKeys.auth.zeroAuthorization) ?? undefined)
-    : (storageGet(StorageKeys.auth.opencodeAuthorization) ?? undefined),
-);
+const initialConfig = resolveBackendConfig(initialBackendKind);
+const baseUrl = ref(initialConfig.url);
+const authHeader = ref(initialConfig.auth);
 const activeBackendKind = ref<BackendKind>(initialBackendKind);
 
 // Shared refs consumed by multiple sub-composables
@@ -596,16 +593,13 @@ export function useBackend() {
    * failed switch.
    */
   function applyBackendConfig(kind: BackendKind): void {
-    const persistedUrl = getPersistedUrlFor(kind);
-    baseUrl.value = persistedUrl;
+    const { url, auth } = resolveBackendConfig(kind);
+    baseUrl.value = url;
+    authHeader.value = auth;
     if (kind === "opencode") {
-      const persistedAuth = storageGet(StorageKeys.auth.opencodeAuthorization) ?? undefined;
-      authHeader.value = persistedAuth;
-      configureOpenCodeBackend({ baseUrl: persistedUrl, authorization: persistedAuth });
+      configureOpenCodeBackend({ baseUrl: url, authorization: auth });
     } else if (kind === "zero") {
-      const persistedAuth = storageGet(StorageKeys.auth.zeroAuthorization) ?? undefined;
-      authHeader.value = persistedAuth;
-      configureZeroBackend({ baseUrl: persistedUrl, authorization: persistedAuth });
+      configureZeroBackend({ baseUrl: url, authorization: auth });
     }
   }
 

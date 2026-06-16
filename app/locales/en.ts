@@ -56,8 +56,6 @@ export default {
     tabBackend: "Backend",
     tabAppearance: "Appearance",
     connect: "Connect",
-    dangerZone: "Danger Zone",
-    resetBackendConfig: "Reset Backend Config",
   },
   workflow: {
     explore: "Explore",

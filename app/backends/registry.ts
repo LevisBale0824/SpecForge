@@ -10,6 +10,7 @@ import { createOpenCodeAdapter } from "./openCodeAdapter";
 import { createZeroAdapter } from "./zeroAdapter";
 import type { BackendAdapter, BackendKind } from "./types";
 import { StorageKeys, storageGet, storageRemove } from "../utils/storageKeys";
+import { isElectron } from "../utils/electronBridge";
 
 // ── Default URLs ──────────────────────────────────────────────────────────
 
@@ -56,15 +57,38 @@ export function setActiveBackendKind(kind: BackendKind) {
 function applyPersistedConfig(kind: BackendKind): void {
   const adapter = adapters[kind];
   if (!adapter?.configure) return;
-  const persistedUrl = getPersistedUrlFor(kind);
+  const { url, auth } = resolveBackendConfig(kind);
+  adapter.configure({ baseUrl: url, authorization: auth });
+}
+
+/**
+ * Resolve the baseUrl + auth that should be active for the given backend
+ * kind in the current runtime. In Electron mode this always returns the
+ * hardcoded daemon ports (the main process spawns them) and ignores
+ * localStorage entirely — historical pollution in storage can't poison the
+ * renderer. In Browser mode it falls back to the persisted values so users
+ * can point at a remote daemon.
+ */
+export function resolveBackendConfig(kind: BackendKind): { url: string; auth: string | undefined } {
+  if (isElectron()) {
+    const url =
+      kind === "zero"
+        ? DEFAULT_ZERO_URL
+        : kind === "cli-bridge"
+          ? DEFAULT_CLI_BRIDGE_URL
+          : DEFAULT_OPENCODE_URL;
+    return { url, auth: undefined };
+  }
   const authKey =
     kind === "opencode"
       ? StorageKeys.auth.opencodeAuthorization
       : kind === "zero"
         ? StorageKeys.auth.zeroAuthorization
         : null;
-  const persistedAuth = authKey ? (storageGet(authKey) ?? undefined) : undefined;
-  adapter.configure({ baseUrl: persistedUrl, authorization: persistedAuth });
+  return {
+    url: getPersistedUrlFor(kind),
+    auth: authKey ? (storageGet(authKey) ?? undefined) : undefined,
+  };
 }
 
 export function onActiveBackendKindChange(listener: (kind: BackendKind) => void) {

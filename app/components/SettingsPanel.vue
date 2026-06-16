@@ -3,7 +3,7 @@ import { computed, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { useBackend } from "../composables/useBackend";
 import { useTheme } from "../composables/useTheme";
-import { StorageKeys, storageSet, storageRemove } from "../utils/storageKeys";
+import { StorageKeys, storageSet } from "../utils/storageKeys";
 import type { BackendKind } from "../backends/types";
 
 const { t, locale } = useI18n();
@@ -90,20 +90,6 @@ function applyUrl() {
 function applyAuth() {
   if (switching.value) return;
   backend.setAuthHeader(authInput.value.trim() || undefined);
-}
-
-// One-shot purge of every persisted backend URL/auth. Use case: a previous
-// release (or a switch race) wrote :13286 into `opencode:baseUrl` etc., and
-// the renderer keeps trying to talk to the wrong port. This nukes all four
-// keys so the next boot falls back to the hardcoded defaults (:13284 /
-// :13286). Caller is expected to reload the window afterwards.
-function resetBackendConfig() {
-  storageRemove(StorageKeys.auth.opencodeBaseUrl);
-  storageRemove(StorageKeys.auth.opencodeAuthorization);
-  storageRemove(StorageKeys.auth.zeroBaseUrl);
-  storageRemove(StorageKeys.auth.zeroAuthorization);
-  // Force a full reload so the renderer re-reads defaults and re-binds SSE.
-  window.location.reload();
 }
 
 // ── Connection ────────────────────────────────────────────────────────
@@ -328,21 +314,6 @@ const activeTab = ref<SettingsTab>("backend");
                 class="setting-input w-full disabled:opacity-50 disabled:cursor-wait"
                 @keydown.enter="applyAuth"
               />
-            </div>
-
-            <!-- Reset backend config — purges all persisted baseUrl/auth
-                 keys. Use this when a previous switch-race wrote the wrong
-                 port into a key (e.g. opencode:baseUrl = :13286) and the
-                 renderer keeps hitting the wrong daemon. Reloads window. -->
-            <div v-if="backend.isElectron" class="setting-section">
-              <label class="setting-label">{{ t("settings.dangerZone") }}</label>
-              <button
-                type="button"
-                class="px-3 py-2 text-xs font-medium rounded-lg bg-accent-rose/10 text-accent-rose hover:bg-accent-rose/20 transition-colors"
-                @click="resetBackendConfig"
-              >
-                {{ t("settings.resetBackendConfig") }}
-              </button>
             </div>
           </template>
 
