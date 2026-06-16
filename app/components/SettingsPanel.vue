@@ -3,7 +3,7 @@ import { computed, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { useBackend } from "../composables/useBackend";
 import { useTheme } from "../composables/useTheme";
-import { StorageKeys, storageSet } from "../utils/storageKeys";
+import { StorageKeys, storageSet, storageRemove } from "../utils/storageKeys";
 import type { BackendKind } from "../backends/types";
 
 const { t, locale } = useI18n();
@@ -79,11 +79,31 @@ watch(
 );
 
 function applyUrl() {
+  // Block writes during agent switch — switching is async and the URL input's
+  // displayed value is mid-flight. Writing now would persist the *previous*
+  // backend's URL into the *current* backend's storage key, which is exactly
+  // how `opencode:baseUrl` ends up pointing at :13286 (zero's port).
+  if (switching.value) return;
   backend.setBaseUrl(urlInput.value.trim());
 }
 
 function applyAuth() {
+  if (switching.value) return;
   backend.setAuthHeader(authInput.value.trim() || undefined);
+}
+
+// One-shot purge of every persisted backend URL/auth. Use case: a previous
+// release (or a switch race) wrote :13286 into `opencode:baseUrl` etc., and
+// the renderer keeps trying to talk to the wrong port. This nukes all four
+// keys so the next boot falls back to the hardcoded defaults (:13284 /
+// :13286). Caller is expected to reload the window afterwards.
+function resetBackendConfig() {
+  storageRemove(StorageKeys.auth.opencodeBaseUrl);
+  storageRemove(StorageKeys.auth.opencodeAuthorization);
+  storageRemove(StorageKeys.auth.zeroBaseUrl);
+  storageRemove(StorageKeys.auth.zeroAuthorization);
+  // Force a full reload so the renderer re-reads defaults and re-binds SSE.
+  window.location.reload();
 }
 
 // ── Connection ────────────────────────────────────────────────────────
@@ -255,8 +275,13 @@ const activeTab = ref<SettingsTab>("backend");
               </p>
             </div>
 
-            <!-- Server URL -->
-            <div class="setting-section">
+            <!-- Server URL — hidden in Electron mode. The main process spawns
+                 opencode/zero daemons on hardcoded ports (13284/13286), so the
+                 URL is never user-configurable here. Letting users edit it only
+                 opens a race where the wrong port gets persisted to the wrong
+                 backend's storage key (the root cause of recurring 13286-in-
+                 opencode-key pollution). Browser mode still needs it. -->
+            <div v-if="!backend.isElectron" class="setting-section">
               <label class="setting-label">{{
                 backend.activeBackendKind.value === "zero"
                   ? t("settings.zero")
@@ -267,7 +292,8 @@ const activeTab = ref<SettingsTab>("backend");
                   v-model="urlInput"
                   type="text"
                   :placeholder="urlPlaceholder"
-                  class="setting-input flex-1"
+                  :disabled="switching"
+                  class="setting-input flex-1 disabled:opacity-50 disabled:cursor-wait"
                   @keydown.enter="applyUrl"
                 />
                 <button
@@ -291,16 +317,32 @@ const activeTab = ref<SettingsTab>("backend");
               </div>
             </div>
 
-            <!-- Authorization -->
-            <div class="setting-section">
+            <!-- Authorization — also Electron-hidden, same reason. -->
+            <div v-if="!backend.isElectron" class="setting-section">
               <label class="setting-label">Authorization</label>
               <input
                 v-model="authInput"
                 type="password"
                 placeholder="Bearer ..."
-                class="setting-input w-full"
+                :disabled="switching"
+                class="setting-input w-full disabled:opacity-50 disabled:cursor-wait"
                 @keydown.enter="applyAuth"
               />
+            </div>
+
+            <!-- Reset backend config — purges all persisted baseUrl/auth
+                 keys. Use this when a previous switch-race wrote the wrong
+                 port into a key (e.g. opencode:baseUrl = :13286) and the
+                 renderer keeps hitting the wrong daemon. Reloads window. -->
+            <div v-if="backend.isElectron" class="setting-section">
+              <label class="setting-label">{{ t("settings.dangerZone") }}</label>
+              <button
+                type="button"
+                class="px-3 py-2 text-xs font-medium rounded-lg bg-accent-rose/10 text-accent-rose hover:bg-accent-rose/20 transition-colors"
+                @click="resetBackendConfig"
+              >
+                {{ t("settings.resetBackendConfig") }}
+              </button>
             </div>
           </template>
 

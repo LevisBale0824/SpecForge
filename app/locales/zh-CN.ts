@@ -56,6 +56,8 @@ export default {
     tabBackend: "后端",
     tabAppearance: "外观",
     connect: "连接",
+    dangerZone: "危险区",
+    resetBackendConfig: "重置后端配置",
   },
   workflow: {
     explore: "需求探索",
