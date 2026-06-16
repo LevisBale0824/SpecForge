@@ -22,8 +22,17 @@ import { ref } from "vue";
 import { isElectron, readDirectory } from "../utils/electronBridge";
 import { useProject } from "./useProject";
 
-const MAX_DEPTH = 6;
-const MAX_FILES = 5000;
+// Depth cap defends against pathological trees (e.g. a vendored copy of some
+// deep package). 6 was too low — Java projects routinely hit
+// `src/main/java/com/company/project/module/service/impl/Xyz.java` (9 levels),
+// Go monorepos and Rust workspaces go deeper still. 20 covers every real
+// project structure we've seen without letting a runaway nested vendor dir
+// blow up the walk.
+const MAX_DEPTH = 20;
+// File cap is the real safety valve — IGNORED_DIRS already drops the giant
+// dirs (node_modules / .git / dist / build), so the surviving source tree is
+// rarely huge. 20000 leaves plenty of headroom for monorepos.
+const MAX_FILES = 20000;
 
 // Mirror of electron/main.ts IGNORED_DIRS — applied only in Web mode because
 // the Electron IPC already filters them server-side.
