@@ -4,6 +4,9 @@ on:
   release:
     types: [published]
 
+permissions:
+  contents: write
+
 # 同一个 release 只跑一次，避免重复发布
 concurrency:
   group: release-${{ github.event.release.id }}
@@ -40,17 +43,7 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Build & Package
+      - name: Build & Publish
         run: pnpm electron:build
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Upload artifacts to Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ github.event.release.tag_name }}
-          files: |
-            release/*.exe
-            release/*.exe.blockmap
-            release/*.AppImage
-            release/latest*.yml
