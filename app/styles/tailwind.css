@@ -23,11 +23,31 @@
 }
 
 /* Global resets */
+html {
+  /* Root font-size drives all rem-based spacing/typography in Tailwind.
+     Default is 16px; bumping to 17px scales the whole UI ~6% larger
+     without touching every text-* class individually. */
+  font-size: 17px;
+}
+
 body {
   margin: 0;
   padding: 0;
   overflow: hidden;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+}
+
+/* While dragging a panel resize handle, suppress text selection globally so
+   the gesture doesn't accidentally highlight chat content or labels. */
+body.resize-active {
+  cursor: var(--resize-cursor, default);
+  user-select: none;
+}
+body.resize-active[data-resize="horizontal"] {
+  --resize-cursor: col-resize;
+}
+body.resize-active[data-resize="vertical"] {
+  --resize-cursor: row-resize;
 }
 
 /* Scrollbar styling */
@@ -49,7 +69,7 @@ body {
 /* ── Markdown content (chat assistant messages) ─────────────────────────── */
 
 .md-content {
-  font-size: 13px;
+  font-size: 15px;
   line-height: 1.65;
   color: var(--color-surface-200);
   word-break: break-word;

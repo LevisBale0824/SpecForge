@@ -24,11 +24,11 @@ const statusText: Record<string, string> = {
 
 <template>
   <footer
-    class="h-6 flex items-center justify-between px-3 bg-surface-900 border-t border-surface-800 text-[10px] select-none"
+    class="h-7 flex items-center justify-between px-3 bg-surface-900 border-t border-surface-800 text-xs select-none"
   >
     <div class="flex items-center gap-1.5">
       <span
-        class="w-1.5 h-1.5 rounded-full"
+        class="w-2 h-2 rounded-full"
         :class="statusDot[backend.connectionState.value] ?? 'bg-surface-600'"
       />
       <span

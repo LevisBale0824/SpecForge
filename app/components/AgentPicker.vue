@@ -87,7 +87,7 @@ onBeforeUnmount(() => document.removeEventListener("mousedown", onDocClick));
       type="button"
       :disabled="isEmpty"
       :title="isEmpty ? t('agentPicker.empty') : currentLabel"
-      class="group inline-flex max-w-[280px] items-center gap-1.5 rounded-full border border-surface-700 bg-surface-800/60 px-2.5 py-1 text-xs text-surface-300 transition-colors hover:border-surface-600 hover:text-surface-100 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-surface-700 disabled:hover:text-surface-300"
+      class="group inline-flex max-w-[400px] items-center gap-1.5 rounded-full border border-surface-700 bg-surface-800/60 px-3 py-1.5 text-sm text-surface-300 transition-colors hover:border-surface-600 hover:text-surface-100 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-surface-700 disabled:hover:text-surface-300"
       @click="toggle"
     >
       <span
@@ -113,7 +113,7 @@ onBeforeUnmount(() => document.removeEventListener("mousedown", onDocClick));
 
     <div
       v-if="open"
-      class="absolute bottom-full left-0 z-30 mb-1.5 flex max-h-80 w-80 flex-col overflow-hidden rounded-lg border border-surface-700 bg-surface-900 shadow-xl"
+      class="absolute bottom-full left-0 z-30 mb-1.5 flex max-h-80 w-96 flex-col overflow-hidden rounded-lg border border-surface-700 bg-surface-900 shadow-xl"
     >
       <!-- Header -->
       <div

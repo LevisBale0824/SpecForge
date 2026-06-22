@@ -63,7 +63,7 @@ const allMessages = computed(() => {
       <div
         v-for="msg in allMessages"
         :key="msg.id"
-        class="flex w-full items-start gap-3"
+        class="flex w-full items-start gap-4"
         :class="msg.role === 'user' ? 'justify-end' : 'justify-start'"
       >
         <template v-if="msg.role === 'assistant'">
@@ -71,12 +71,12 @@ const allMessages = computed(() => {
           <img
             :src="agentAvatarSrc"
             alt="Agent"
-            class="mt-0.5 h-9 w-9 flex-shrink-0 rounded-full object-cover"
+            class="mt-1 h-12 w-12 flex-shrink-0 rounded-full object-cover ring-2 ring-surface-700/50"
           />
 
           <!-- Bubble -->
           <div
-            class="max-w-[min(760px,calc(100%-3.5rem))] rounded-lg bg-surface-800/80 px-4 py-3 text-sm leading-relaxed text-surface-200"
+            class="max-w-[min(760px,calc(100%-4rem))] rounded-lg bg-surface-800/80 px-4 py-3 text-base leading-relaxed text-surface-200"
           >
             <div class="mb-1 text-[10px] font-semibold tracking-wider text-accent-emerald">
               Hephaestus
@@ -88,7 +88,7 @@ const allMessages = computed(() => {
         <template v-else>
           <!-- Bubble -->
           <div
-            class="max-w-[min(820px,calc(100%-3.5rem))] rounded-lg bg-accent-cyan/10 px-4 py-3 text-sm leading-relaxed text-surface-100"
+            class="max-w-[min(820px,calc(100%-4rem))] rounded-lg bg-accent-cyan/10 px-4 py-3 text-base leading-relaxed text-surface-100"
           >
             <div class="mb-1 text-[10px] font-semibold tracking-wider text-accent-cyan">Patron</div>
             <MessageContent :message-id="msg.id" />
@@ -98,7 +98,7 @@ const allMessages = computed(() => {
           <img
             :src="userAvatarSrc"
             alt="User"
-            class="mt-0.5 h-9 w-9 flex-shrink-0 rounded-full object-cover"
+            class="mt-1 h-12 w-12 flex-shrink-0 rounded-full object-cover ring-2 ring-surface-700/50"
           />
         </template>
       </div>

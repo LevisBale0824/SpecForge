@@ -25,7 +25,7 @@ const textareaEl = ref<HTMLTextAreaElement | null>(null);
 // `@path/to/deep/file.ts` leaves the user with one visible line and a
 // scroll bar — they can't tell at a glance what got attached. Cap the
 // growth so a giant paste doesn't take over the layout.
-const MAX_TEXTAREA_HEIGHT_PX = 200;
+const MAX_TEXTAREA_HEIGHT_PX = 480;
 function autoResize() {
   const el = textareaEl.value;
   if (!el) return;
@@ -319,26 +319,27 @@ async function handleSend() {
 </script>
 
 <template>
-  <div class="relative border-t border-surface-800 bg-surface-900 px-4 py-3.5">
-    <div class="flex items-center gap-2 max-w-4xl mx-auto mb-2">
+  <div class="relative border-t border-surface-800 bg-surface-900 px-4 py-4">
+    <div class="flex items-center gap-2 max-w-5xl mx-auto mb-2.5">
       <ModelPicker :session-id="pickerSessionId" />
       <AgentPicker :session-id="pickerSessionId" />
     </div>
-    <div class="flex items-end gap-2.5 max-w-4xl mx-auto">
+    <div class="flex items-stretch gap-2.5 max-w-5xl mx-auto">
       <textarea
         ref="textareaEl"
         v-model="inputText"
         :placeholder="t('chat.placeholder')"
         :disabled="backend.isSending.value || backend.isBusy.value"
-        rows="1"
-        class="flex-1 resize-none rounded-lg bg-surface-800 border border-surface-700 px-3.5 py-2.5 text-base text-surface-100 placeholder:text-surface-600 focus:outline-none focus:border-accent-cyan/50 transition-colors"
+        rows="3"
+        class="flex-1 resize-none rounded-lg bg-surface-800 border border-surface-700 px-4 py-3 text-base text-surface-100 placeholder:text-surface-600 focus:outline-none focus:border-accent-cyan/50 transition-colors"
         @keydown="handleKeydown"
         @input="handleInput"
       />
       <button
         v-if="!backend.isBusy.value && !backend.isSending.value"
         :disabled="!inputText.trim()"
-        class="px-3.5 py-2.5 text-base font-medium rounded-lg bg-accent-cyan/15 text-accent-cyan hover:bg-accent-cyan/25 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+        class="flex items-center justify-center self-stretch px-5 rounded-lg bg-accent-cyan/15 text-accent-cyan hover:bg-accent-cyan/25 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+        :title="t('chat.send')"
         @click="handleSend"
       >
         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -346,21 +347,25 @@ async function handleSend() {
             stroke-linecap="round"
             stroke-linejoin="round"
             stroke-width="2"
-            d="M12 19V5m0 0l-7 7m7-7l7 7"
+            d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"
           />
         </svg>
       </button>
       <button
         v-else
-        class="px-3.5 py-2.5 text-base font-medium rounded-lg bg-accent-rose/15 text-accent-rose hover:bg-accent-rose/25 transition-colors"
+        class="flex items-center justify-center self-stretch px-5 rounded-lg bg-accent-rose/15 text-accent-rose hover:bg-accent-rose/25 transition-colors"
+        :title="t('chat.abort')"
         @click="backend.abortSession()"
       >
         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path
-            stroke-linecap="round"
+          <rect
+            x="6"
+            y="6"
+            width="12"
+            height="12"
+            rx="1.5"
             stroke-linejoin="round"
             stroke-width="2"
-            d="M6 18L18 6M6 6l12 12"
           />
         </svg>
       </button>

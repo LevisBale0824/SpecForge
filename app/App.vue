@@ -14,12 +14,24 @@ import { useFloatingWindows } from "./composables/useFloatingWindows";
 import { useProject } from "./composables/useProject";
 import { useBackend } from "./composables/useBackend";
 import { useOpenSpec } from "./composables/useOpenSpec";
+import { useResizable } from "./composables/useResizable";
 import { isElectron, onOpenFolder, selectDirectory } from "./utils/electronBridge";
 import type { MessageDiffEntry } from "./types/message";
 
 const route = useRoute();
 const router = useRouter();
-const sidePanelWidth = ref(300);
+
+// Sidebar drag-resize: clamp to [200, 600], persist to localStorage. The
+// `resize-active` body class (added by the composable during drag) disables
+// text selection so the gesture feels solid.
+const sidebarResize = useResizable({
+  orientation: "horizontal",
+  storageKey: "specforge.sidebar.width",
+  defaultSize: 300,
+  min: 200,
+  max: 600,
+});
+const sidePanelWidth = sidebarResize.size;
 const showSettings = ref(false);
 const showConsole = ref(false);
 const consoleHeight = ref(220);
@@ -238,6 +250,15 @@ function submitManualPath() {
         @open-file="onOpenFile"
         @open-folder="handleOpenFolder"
       />
+      <!-- Sidebar drag handle -->
+      <div
+        class="group relative w-1 flex-shrink-0 cursor-col-resize bg-surface-800/40 transition-colors hover:bg-accent-cyan/40"
+        :class="sidebarResize.isDragging.value ? '!bg-accent-cyan/60' : ''"
+        title="拖拽调整宽度"
+        @pointerdown="sidebarResize.start"
+      >
+        <div class="absolute inset-y-0 -left-1 -right-1" />
+      </div>
 
       <!-- Center Content: chat OR diff comparison (mutually exclusive) -->
       <main class="flex-1 flex flex-col overflow-hidden min-w-0">
