@@ -40,6 +40,20 @@ export default {
     abort: "停止",
     thinking: "思考中...",
   },
+  modelPicker: {
+    label: "模型",
+    default: "默认",
+    empty: "没有可用模型",
+    refresh: "刷新",
+  },
+  agentPicker: {
+    label: "Agent",
+    default: "默认",
+    empty: "没有可用 Agent",
+    refresh: "刷新",
+    search: "搜索 Agent...",
+    noMatch: "没有匹配的 Agent",
+  },
   settings: {
     title: "设置",
     language: "语言",

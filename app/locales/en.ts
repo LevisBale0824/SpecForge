@@ -40,6 +40,20 @@ export default {
     abort: "Stop",
     thinking: "Thinking...",
   },
+  modelPicker: {
+    label: "Model",
+    default: "Default",
+    empty: "No models available",
+    refresh: "Refresh",
+  },
+  agentPicker: {
+    label: "Agent",
+    default: "Default",
+    empty: "No agents available",
+    refresh: "Refresh",
+    search: "Search agents...",
+    noMatch: "No matching agents",
+  },
   settings: {
     title: "Settings",
     language: "Language",

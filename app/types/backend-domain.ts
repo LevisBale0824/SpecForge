@@ -81,3 +81,21 @@ export type BackendProviderConfigState = {
   model_provider?: string;
   model?: string;
 };
+
+// Agent shapes returned by GET /agent. Only `primary` agents (not `subagent`)
+// are user-selectable as the main agent. `hidden: true` should be filtered out
+// of the picker as well. Most fields are optional — server-side custom agents
+// may omit them.
+export type BackendAgentMode = "primary" | "subagent" | string;
+
+export type BackendAgentInfo = {
+  name: string;
+  description?: string;
+  mode?: BackendAgentMode;
+  native?: boolean;
+  hidden?: boolean | null;
+  color?: string | null;
+  model?: string | null;
+  variant?: string | null;
+  prompt?: string | null;
+};

@@ -7,14 +7,14 @@
 import { ref, type Ref } from "vue";
 import { getActiveBackendAdapter } from "../backends/registry";
 import { getActiveBackendKind } from "../backends/registry";
+import { useSessionModel } from "./useSessionModel";
+import { useSessionAgent } from "./useSessionAgent";
 
 export type MessageSendOptions = {
   selectedSessionId: Ref<string>;
   activeDirectory: Ref<string>;
   isSending: Ref<boolean>;
   agent: Ref<string>;
-  modelId: Ref<string>;
-  providerId: Ref<string>;
   variant: Ref<string>;
   toErrorMessage: (error: unknown) => string;
   onSendError?: (message: string) => void;
@@ -37,18 +37,23 @@ export function useBackendMessageSend(options: MessageSendOptions) {
       }
 
       const dir = options.activeDirectory.value || undefined;
-      const modelId = options.modelId.value;
-      const providerId = options.providerId.value;
-      const model = modelId
-        ? { modelID: modelId, ...(providerId ? { providerID: providerId } : {}) }
-        : undefined;
+      // Per-session model selection — if the user picked a model for this
+      // session via ModelPicker, send it; otherwise omit `model` entirely
+      // and let the backend use its configured default.
+      const sel = useSessionModel().getModelForSession(sessionId);
+      const model = sel ? { modelID: sel.modelId, providerID: sel.providerId } : undefined;
+      // Per-session agent selection — if the user picked an agent for this
+      // session via AgentPicker, send it; otherwise fall back to the global
+      // `agent` ref (which is "general" by default).
+      const sessionAgent = useSessionAgent().getAgentForSession(sessionId);
+      const agentName = sessionAgent || options.agent.value || "general";
 
       const parts = buildPromptParts(text, attachments);
       console.info("[useBackendMessageSend] sendPrompt", {
         backendKind: getActiveBackendKind(),
         sessionId,
         directory: dir ?? "<empty>",
-        agent: options.agent.value,
+        agent: agentName,
         model,
         textLength: text.length,
         attachmentsCount: attachments.length,
@@ -57,7 +62,7 @@ export function useBackendMessageSend(options: MessageSendOptions) {
       });
       await adapter.sendPromptAsync(sessionId, {
         directory: dir ?? "",
-        agent: options.agent.value || "general",
+        agent: agentName,
         model,
         variant: options.variant.value || undefined,
         parts,

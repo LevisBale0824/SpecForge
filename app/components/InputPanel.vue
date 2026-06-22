@@ -4,10 +4,19 @@ import { useI18n } from "vue-i18n";
 import { useBackend } from "../composables/useBackend";
 import CommandMenu from "./CommandMenu.vue";
 import FileMenu from "./FileMenu.vue";
+import ModelPicker from "./ModelPicker.vue";
+import AgentPicker from "./AgentPicker.vue";
 import type { CommandInfo } from "../types/command";
 
 const { t } = useI18n();
 const backend = useBackend();
+
+// Sessions are created lazily on the first message — before that,
+// `selectedSessionId` is empty and the picker chips have nothing to bind to.
+// Fall back to a draft sentinel; `useBackend.sendPrompt` migrates any draft
+// selection onto the real session ID once `ensureSession()` creates one.
+const DRAFT_SESSION_ID = "__draft__";
+const pickerSessionId = computed(() => backend.selectedSessionId.value || DRAFT_SESSION_ID);
 
 const inputText = ref("");
 const textareaEl = ref<HTMLTextAreaElement | null>(null);
@@ -311,6 +320,10 @@ async function handleSend() {
 
 <template>
   <div class="relative border-t border-surface-800 bg-surface-900 px-4 py-3.5">
+    <div class="flex items-center gap-2 max-w-4xl mx-auto mb-2">
+      <ModelPicker :session-id="pickerSessionId" />
+      <AgentPicker :session-id="pickerSessionId" />
+    </div>
     <div class="flex items-end gap-2.5 max-w-4xl mx-auto">
       <textarea
         ref="textareaEl"

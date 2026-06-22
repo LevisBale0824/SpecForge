@@ -14,6 +14,10 @@ import { useMessages } from "./useMessages";
 import { useDeltaAccumulator } from "./useDeltaAccumulator";
 import { useSessionStatus } from "./useSessionStatus";
 import { useSessions } from "./useSessions";
+import { useModels } from "./useModels";
+import { useSessionModel } from "./useSessionModel";
+import { useAgents } from "./useAgents";
+import { useSessionAgent } from "./useSessionAgent";
 import { useCommands } from "./useCommands";
 import { useFileIndex } from "./useFileIndex";
 import { useProject } from "./useProject";
@@ -59,8 +63,6 @@ const activeDirectory = ref("");
 const isAborting = ref(false);
 const isSending = ref(false);
 const agent = ref("general");
-const modelId = ref("");
-const providerId = ref("");
 const variant = ref("");
 const workspaceDiffs = ref<FileDiff[]>([]);
 
@@ -138,6 +140,35 @@ const activation = useBackendActivation({
 const sessionsStore = useSessions();
 const commandsStore = useCommands();
 const fileIndexStore = useFileIndex();
+const modelsStore = useModels();
+const sessionModelStore = useSessionModel();
+const agentsStore = useAgents();
+const sessionAgentStore = useSessionAgent();
+
+// Sentinel session ID used to hold per-session model/agent selections BEFORE
+// the real session exists. SpecForge creates sessions lazily on the first
+// message — until then `selectedSessionId` is "". Without a draft slot the
+// ModelPicker/AgentPicker chips would be unrenderable in a brand-new session
+// (no key to bind to), so we let them write to this sentinel and migrate the
+// selection to the real session ID once `ensureSession()` creates one.
+const DRAFT_SESSION_ID = "__draft__";
+
+// Move any draft-slot selections onto a freshly-created real session ID.
+// Called after `ensureSession()` succeeds in both the prompt and command
+// send paths. Idempotent — safe to call when no draft exists.
+function migrateDraftSelections(realSessionId: string): void {
+  if (!realSessionId || realSessionId === DRAFT_SESSION_ID) return;
+  const draftModel = sessionModelStore.getModelForSession(DRAFT_SESSION_ID);
+  if (draftModel && !sessionModelStore.getModelForSession(realSessionId)) {
+    sessionModelStore.setModelForSession(realSessionId, draftModel.providerId, draftModel.modelId);
+    sessionModelStore.clearModelForSession(DRAFT_SESSION_ID);
+  }
+  const draftAgent = sessionAgentStore.getAgentForSession(DRAFT_SESSION_ID);
+  if (draftAgent && !sessionAgentStore.getAgentForSession(realSessionId)) {
+    sessionAgentStore.setAgentForSession(realSessionId, draftAgent);
+    sessionAgentStore.clearAgentForSession(DRAFT_SESSION_ID);
+  }
+}
 
 // Idle fallback timers: when the backend signals task completion via
 // message.updated (finish/completed/error) but doesn't follow up with a
@@ -185,8 +216,15 @@ function clearIdleFallback(sessionId: string): void {
 }
 
 // Reload commands when the backend kind changes (different backend = different commands).
+// Also reset models and per-session model selections — different daemons have
+// different providers and session IDs, so carrying them across would cause
+// stale entries to show in the picker and be sent on the next prompt.
 watch(activeBackendKind, () => {
   commandsStore.reset();
+  modelsStore.resetModels();
+  sessionModelStore.resetAllSessionModels();
+  agentsStore.resetAgents();
+  sessionAgentStore.resetAllSessionAgents();
 });
 
 // Reset the file index when the project directory changes so @ mentions
@@ -287,8 +325,6 @@ const messageSend = useBackendMessageSend({
   activeDirectory,
   isSending,
   agent,
-  modelId,
-  providerId,
   variant,
   toErrorMessage,
 });
@@ -414,7 +450,11 @@ if (electronMode) {
 // new empty session on every switch. Session creation is deferred to the
 // first message (see ensureSession in the sendPrompt flow).
 watch(activation.connectionState, (state) => {
-  if (state === "ready") void refreshSessions();
+  if (state === "ready") {
+    void refreshSessions();
+    void modelsStore.refreshModels();
+    void agentsStore.refreshAgents();
+  }
 });
 
 // ── Public API ────────────────────────────────────────────────────────────
@@ -436,6 +476,10 @@ export function useBackend() {
     if (currentId) msgStore.saveSessionState(currentId);
     msgStore.reset();
     selectedSessionId.value = "";
+    // Clear any leftover draft selections from a previous new-session flow so
+    // the picker chips start clean for this new session.
+    sessionModelStore.clearModelForSession(DRAFT_SESSION_ID);
+    sessionAgentStore.clearAgentForSession(DRAFT_SESSION_ID);
   }
 
   async function sendPromptWithSession(text: string, attachments: string[] = []): Promise<boolean> {
@@ -454,6 +498,11 @@ export function useBackend() {
       msgStore.removeMessage(tempId);
       return false;
     }
+
+    // If the user pre-selected a model/agent via the draft slot (before the
+    // session existed), migrate those selections onto the real session ID so
+    // sendPrompt picks them up.
+    migrateDraftSelections(selectedSessionId.value);
 
     const success = await messageSend.sendPrompt(trimmed, attachments);
     if (!success) {
@@ -493,6 +542,7 @@ export function useBackend() {
       msgStore.removeMessage(tempId);
       return false;
     }
+    migrateDraftSelections(selectedSessionId.value);
 
     isSending.value = true;
     try {
@@ -500,12 +550,18 @@ export function useBackend() {
       if (!adapter.sendCommand) {
         throw new Error("Backend does not support sending commands");
       }
+      // Per-session model selection for slash-commands. The sendCommand API
+      // takes a bare `model: string` (modelID only); the backend routes to
+      // the matching provider itself. If the session has no explicit model
+      // selection we leave it undefined and fall back to the backend default.
+      const sel = useSessionModel().getModelForSession(selectedSessionId.value);
+      const sessionAgent = useSessionAgent().getAgentForSession(selectedSessionId.value);
       await adapter.sendCommand(selectedSessionId.value, {
         directory: activeDirectory.value || undefined,
         command,
         arguments: args,
-        agent: agent.value || undefined,
-        model: modelId.value || undefined,
+        agent: sessionAgent || agent.value || undefined,
+        model: sel?.modelId,
         variant: variant.value || undefined,
       });
       return true;
@@ -751,6 +807,8 @@ export function useBackend() {
     }
     sessionsStore.remove(sessionId);
     sessionStatus.remove(sessionId);
+    sessionModelStore.clearModelForSession(sessionId);
+    sessionAgentStore.clearAgentForSession(sessionId);
     // If the deleted session was active, clear the transcript so the next prompt
     // lazily creates a fresh session.
     if (selectedSessionId.value === sessionId) {
