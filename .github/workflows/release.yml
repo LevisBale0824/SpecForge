@@ -42,6 +42,10 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+        env:
+          # 覆盖 .npmrc 里的中国镜像，CI runner 在美国，用官方源更快更稳
+          ELECTRON_MIRROR: https://github.com/electron/electron/releases/download/v
+          ELECTRON_BUILDER_BINARIES_MIRROR: https://github.com/electron-userland/electron-builder-binaries/releases/download/
 
       - name: Build & Publish
         run: pnpm electron:build

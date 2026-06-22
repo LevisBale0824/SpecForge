@@ -5,6 +5,13 @@
   "type": "module",
   "main": "dist-electron/main.js",
   "packageManager": "pnpm@10.29.3",
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "electron",
+      "esbuild",
+      "electron-winstaller"
+    ]
+  },
   "scripts": {
     "dev": "vite",
     "electron:dev": "ELECTRON=true vite",
