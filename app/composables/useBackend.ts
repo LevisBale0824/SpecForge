@@ -149,10 +149,10 @@ const fileIndexStore = useFileIndex();
 // SSE events, persisting state, or tearing down MCP/PTY resources after the
 // final assistant message. Forcing idle too early makes the UI look done
 // while the session is still busy — the next prompt can then race with the
-// still-running one. 5s is a balance: long enough to absorb normal backend
-// teardown latency, short enough that a crashed backend doesn't leave the
-// UI stuck for too long.
-const IDLE_FALLBACK_GRACE_MS = 5000;
+// still-running one. 30s in practice absorbs backend teardown latency on
+// slower machines while still recovering from a crashed backend in
+// reasonable time.
+const IDLE_FALLBACK_GRACE_MS = 30000;
 const idleFallbackTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
 function scheduleIdleFallback(sessionId: string): void {
