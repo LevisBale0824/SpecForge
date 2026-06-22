@@ -43,11 +43,25 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
         env:
-          # 覆盖 .npmrc 里的中国镜像，CI runner 在美国，用官方源更快更稳
-          ELECTRON_MIRROR: https://github.com/electron/electron/releases/download/v
-          ELECTRON_BUILDER_BINARIES_MIRROR: https://github.com/electron-userland/electron-builder-binaries/releases/download/
+          # 清空 .npmrc 里的中国镜像配置（CI 在美国，直接用 GitHub 官方源）
+          ELECTRON_MIRROR: ""
+          ELECTRON_BUILDER_BINARIES_MIRROR: ""
+          npm_config_electron_mirror: ""
+          npm_config_electron_builder_binaries_mirror: ""
+
+      # electron 42 没有	postinstall，必须显式触发一次下载，
+      # 否则会在 build 时懒加载触发，且在某些环境下会卡死
+      - name: Pre-download Electron binary
+        run: node node_modules/electron/install.js
+        env:
+          ELECTRON_MIRROR: ""
+          npm_config_electron_mirror: ""
 
       - name: Build & Publish
         run: pnpm electron:build
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ELECTRON_MIRROR: ""
+          npm_config_electron_mirror: ""
+          ELECTRON_BUILDER_BINARIES_MIRROR: ""
+          npm_config_electron_builder_binaries_mirror: ""
