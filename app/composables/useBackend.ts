@@ -263,6 +263,9 @@ ge.on("session.status", (payload) => {
 
 // Pull the persisted session list from the backend so previously-created
 // conversations appear in the sidebar (not just ones created this run).
+// Uses replace semantics (reset + upsert) so sessions removed from the
+// backend disappear from the sidebar, and stale entries from a previously-
+// connected backend don't linger after reconnect.
 async function refreshSessions(): Promise<void> {
   try {
     const adapter = getActiveBackendAdapter();
@@ -271,6 +274,7 @@ async function refreshSessions(): Promise<void> {
       directory: activeDirectory.value || undefined,
     })) as SessionInfo[] | undefined;
     if (Array.isArray(result)) {
+      sessionsStore.reset();
       for (const info of result) sessionsStore.upsert(info);
     }
   } catch (error) {
@@ -672,6 +676,11 @@ export function useBackend() {
       msgStore.saveSessionState(selectedSessionId.value);
     }
     msgStore.reset();
+    // Reset sessions too — otherwise the new backend's refresh would upsert
+    // into a map still holding the previous backend's session IDs, causing
+    // cross-backend bleed (e.g. zero sessions showing under opencode, which
+    // can't be opened because opencode's daemon doesn't know about them).
+    sessionsStore.reset();
     selectedSessionId.value = "";
 
     // In Electron, ask main process to restart the CLI with the new kind.
