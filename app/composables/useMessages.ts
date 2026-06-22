@@ -408,7 +408,32 @@ function list(): MessageInfo[] {
   const result: MessageInfo[] = [];
   for (const messageRef of messages.value.values()) {
     const info = messageRef.value.info;
-    if (info) result.push(info);
+    if (info) {
+      result.push(info);
+      continue;
+    }
+    // Tool / reasoning parts can arrive via `message.part.updated` BEFORE the
+    // corresponding `message.updated` envelope. If we skip entries without
+    // info here, the chat view filters them out and the user sees nothing
+    // while the assistant is making tool calls. Synthesize a minimal info so
+    // the message is listable until the real info arrives.
+    const parts = messageRef.value.parts;
+    if (parts.size === 0) continue;
+    let inferredId: string | undefined;
+    let inferredSessionId: string | undefined;
+    for (const partRef of parts) {
+      const p = partRef.value as MessagePart;
+      inferredId ??= p.messageID;
+      inferredSessionId ??= p.sessionID;
+      if (inferredId) break;
+    }
+    if (!inferredId) continue;
+    result.push({
+      id: inferredId,
+      sessionID: inferredSessionId ?? "",
+      role: "assistant",
+      time: { created: 0 },
+    } as MessageInfo);
   }
   return result.sort(byTimeThenId);
 }

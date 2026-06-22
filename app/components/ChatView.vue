@@ -13,16 +13,31 @@ const avatarBaseUrl = import.meta.env.BASE_URL;
 const agentAvatarSrc = `${avatarBaseUrl}avatars/agent.png`;
 const userAvatarSrc = `${avatarBaseUrl}avatars/user.png`;
 
-function hasVisibleText(id: string): boolean {
+// Whether a message has any user-facing content worth showing — text, tool
+// calls, reasoning, subtask markers, etc. Pure-tool messages (sub-agent
+// handoffs, tool-only assistant turns) would be silently dropped if we only
+// checked for text, leaving the user staring at "正在思考" with no clue what
+// the agent is actually doing.
+function hasVisibleParts(id: string): boolean {
   return msgStore.getParts(id).some((part) => {
-    if (part.type !== "text" || part.synthetic) return false;
-    return stripSystemReminder(part.text).trim().length > 0;
+    switch (part.type) {
+      case "text":
+        return !part.synthetic && stripSystemReminder(part.text).trim().length > 0;
+      case "tool":
+      case "reasoning":
+      case "subtask":
+      case "agent":
+      case "patch":
+        return true;
+      default:
+        return false;
+    }
   });
 }
 
 function shouldShowMessage(id: string, role: string): boolean {
   if (role === "user") return msgStore.isDisplayable(id);
-  return msgStore.getStatus(id) === "streaming" || hasVisibleText(id);
+  return msgStore.getStatus(id) === "streaming" || hasVisibleParts(id);
 }
 
 const allMessages = computed(() => {
