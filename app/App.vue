@@ -8,6 +8,7 @@ import FloatingWindow from "./components/FloatingWindow.vue";
 import SettingsPanel from "./components/SettingsPanel.vue";
 import ConsolePanel from "./components/ConsolePanel.vue";
 import DiffViewer from "./components/DiffViewer.vue";
+import FileViewer from "./components/FileViewer.vue";
 import { useRoute, useRouter } from "vue-router";
 import { useFloatingWindows } from "./composables/useFloatingWindows";
 import { useProject } from "./composables/useProject";
@@ -42,6 +43,12 @@ function updateExtent() {
 // Currently-selected workspace diff — shown in a right-side column instead of
 // a floating window so the user can read it alongside the chat.
 const activeDiff = ref<MessageDiffEntry | null>(null);
+
+// Currently-open file in the FileViewer modal. Set when the user clicks a
+// file entry in the Files tree (the `open-file` event bubbles up through
+// SidePanel). Cleared by closing the modal.
+const openFiles = ref<string[]>([]);
+const activeFilePath = ref<string | null>(null);
 
 // Auto-close the diff viewer when the opened file is no longer in the
 // workspace diffs (e.g. user deleted or reverted it externally). Only
@@ -100,9 +107,10 @@ function onWindowClose(key: string) {
 }
 
 function onSelectSession(sessionId: string) {
-  // Selecting a session means leaving the diff view — close any open file and
-  // return to the chat.
+  // Selecting a session means leaving the diff/file view — deactivate any
+  // active file tab and return to the chat.
   activeDiff.value = null;
+  activeFilePath.value = null;
   backend.selectSession(sessionId);
   router.push({ name: "chat" });
 }
@@ -117,12 +125,43 @@ function onAbortSession(sessionId: string) {
 
 function onNewSession() {
   activeDiff.value = null;
+  activeFilePath.value = null;
   backend.startNewSession();
   router.push({ name: "chat" });
 }
 
 function onOpenDiff(diff: MessageDiffEntry) {
   activeDiff.value = diff;
+}
+
+function onOpenFile(path: string) {
+  // Tab behavior: dedupe by path, push if new, always activate. Mirrors
+  // VSCode — clicking a file in the explorer opens/focuses a tab.
+  if (!openFiles.value.includes(path)) {
+    openFiles.value = [...openFiles.value, path];
+  }
+  activeFilePath.value = path;
+}
+
+function onSelectFile(path: string) {
+  activeFilePath.value = path;
+}
+
+function onCloseFile(path: string) {
+  const idx = openFiles.value.indexOf(path);
+  if (idx === -1) return;
+  const next = openFiles.value.filter((p) => p !== path);
+  openFiles.value = next;
+  // If we closed the active tab, focus a neighbor (prefer right, fall back
+  // left). When no tabs remain, drop back to chat.
+  if (activeFilePath.value === path) {
+    activeFilePath.value = next[Math.min(idx, next.length - 1)] ?? null;
+  }
+}
+
+function onCloseAllFiles() {
+  openFiles.value = [];
+  activeFilePath.value = null;
 }
 
 function onCloseDiff() {
@@ -196,6 +235,7 @@ function submitManualPath() {
         @abort-session="onAbortSession"
         @new-session="onNewSession"
         @open-diff="onOpenDiff"
+        @open-file="onOpenFile"
         @open-folder="handleOpenFolder"
       />
 
@@ -229,6 +269,67 @@ function submitManualPath() {
           </div>
           <div class="diff-main">
             <DiffViewer :diff="activeDiff" />
+          </div>
+        </template>
+        <template v-else-if="activeFilePath">
+          <!-- File tabs strip + content -->
+          <div class="flex items-center gap-0.5 border-b border-surface-800 bg-surface-900 px-1">
+            <button
+              v-for="p in openFiles"
+              :key="p"
+              type="button"
+              class="group relative flex max-w-[200px] items-center gap-1.5 truncate px-3 py-2 text-xs transition-colors"
+              :class="
+                p === activeFilePath
+                  ? 'bg-surface-950 text-surface-100'
+                  : 'text-surface-400 hover:bg-surface-800/50 hover:text-surface-200'
+              "
+              :title="p"
+              @click="onSelectFile(p)"
+            >
+              <span
+                class="absolute left-0 top-0 h-0.5 w-full"
+                :class="p === activeFilePath ? 'bg-accent-cyan' : 'bg-transparent'"
+              />
+              <span class="truncate">{{ p.split(/[\\/]/).pop() || p }}</span>
+              <span
+                class="rounded p-0.5 text-surface-500 opacity-0 transition-opacity hover:bg-surface-700 hover:text-surface-100 group-hover:opacity-100"
+                :class="{ '!opacity-100': p === activeFilePath }"
+                title="关闭"
+                @click.stop="onCloseFile(p)"
+              >
+                <svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M6 18L18 6M6 6l12 12"
+                  />
+                </svg>
+              </span>
+            </button>
+            <button
+              type="button"
+              class="ml-auto rounded px-2 py-1 text-xs text-surface-500 transition-colors hover:bg-surface-800 hover:text-surface-200"
+              title="关闭所有标签"
+              @click="onCloseAllFiles"
+            >
+              <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M6 18L18 6M6 6l12 12"
+                />
+              </svg>
+            </button>
+          </div>
+          <div class="flex-1 overflow-hidden">
+            <FileViewer
+              :key="activeFilePath"
+              :path="activeFilePath"
+              :directory="project.state.directoryPath"
+            />
           </div>
         </template>
         <template v-else>

@@ -12,30 +12,105 @@ const emit = defineEmits<{
   "open-file": [path: string];
 }>();
 
-function icon(name: string): string {
+// ---------------------------------------------------------------------------
+// File/folder iconography — inline SVG (Lucide-derived paths).
+// ---------------------------------------------------------------------------
+// Inlining SVGs avoids the runtime network fetch that @iconify/vue requires
+// by default, which is unreliable in a packaged Electron app. Each entry
+// returns one or more <path> `d` strings rendered in a single <svg> stroke
+// container below. Color is applied separately via the `colors` map.
+type IconKind =
+  | "folder"
+  | "folder-open"
+  | "file"
+  | "file-code"
+  | "file-text"
+  | "file-config"
+  | "file-image";
+
+const ICON_PATHS: Record<IconKind, string[]> = {
+  // Lucide `folder`
+  folder: [
+    "M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z",
+  ],
+  // Lucide `folder-open`
+  "folder-open": [
+    "m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.55 6a2 2 0 0 1-1.94 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.93a2 2 0 0 1 1.66.9l.82 1.2a2 2 0 0 0 1.66.9H18a2 2 0 0 1 2 2v2",
+  ],
+  // Lucide `file` (with folded corner)
+  file: [
+    "M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z",
+    "M14 2v4a2 2 0 0 0 2 2h4",
+  ],
+  // Lucide `file-code` — file body + two chevrons
+  "file-code": [
+    "M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z",
+    "M14 2v4a2 2 0 0 0 2 2h4",
+    "m10 12-2 2 2 2",
+    "m14 12 2 2-2 2",
+  ],
+  // Lucide `file-text` — file body + horizontal text lines
+  "file-text": [
+    "M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z",
+    "M14 2v4a2 2 0 0 0 2 2h4",
+    "M16 13H8",
+    "M16 17H8",
+    "M10 9H8",
+  ],
+  // Lucide `file-cog`-ish — file body + small gear hint (config files)
+  "file-config": [
+    "M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z",
+    "M14 2v4a2 2 0 0 0 2 2h4",
+    "M11.5 12.5 11 13l-.5-.5.5-.5.5.5z",
+    "M11 11.5a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3z",
+  ],
+  // Lucide `file-image` — file body + sun circle + mountain line
+  "file-image": [
+    "M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z",
+    "M14 2v4a2 2 0 0 0 2 2h4",
+    "M8.5 14.5 11 12l2.5 2.5L16 12",
+    "M10 11.5a.5.5 0 1 1-1 0 .5.5 0 0 1 1 0z",
+  ],
+};
+
+function fileIconKind(name: string): IconKind {
   const ext = name.split(".").pop()?.toLowerCase() ?? "";
-  if (["ts", "tsx", "js", "jsx", "mjs"].includes(ext)) return "js";
-  if (["vue", "svelte"].includes(ext)) return "vue";
-  if (["css", "scss", "less"].includes(ext)) return "css";
-  if (["md", "mdx"].includes(ext)) return "md";
-  if (["json", "yaml", "yml", "toml"].includes(ext)) return "cfg";
-  if (["py"].includes(ext)) return "py";
-  if (["rs"].includes(ext)) return "rs";
-  if (["go"].includes(ext)) return "go";
+  if (["ts", "tsx", "js", "jsx", "mjs", "vue", "svelte", "py", "rs", "go"].includes(ext))
+    return "file-code";
+  if (["md", "mdx", "txt", "log"].includes(ext)) return "file-text";
+  if (["json", "yaml", "yml", "toml", "ini", "env", "conf"].includes(ext)) return "file-config";
+  if (["png", "jpg", "jpeg", "gif", "svg", "webp", "ico", "bmp"].includes(ext)) return "file-image";
   return "file";
 }
 
-const colors: Record<string, string> = {
-  js: "text-accent-amber",
-  vue: "text-accent-emerald",
-  css: "text-accent-cyan",
-  md: "text-surface-400",
-  cfg: "text-surface-500",
-  py: "text-accent-indigo",
-  rs: "text-accent-rose",
-  go: "text-accent-cyan",
-  file: "text-surface-600",
+// Color tints per extension family. Kept narrow so the tree reads as a calm
+// monochrome with a few accent dots — too many colors turn into noise.
+const FILE_COLOR: Record<string, string> = {
+  ts: "#3b82f6",
+  tsx: "#3b82f6",
+  js: "#f59e0b",
+  jsx: "#f59e0b",
+  mjs: "#f59e0b",
+  vue: "#10b981",
+  svelte: "#f97316",
+  py: "#6366f1",
+  rs: "#f43f5e",
+  go: "#06b6d4",
+  md: "#94a3b8",
+  mdx: "#94a3b8",
+  json: "#f59e0b",
+  yaml: "#f59e0b",
+  yml: "#f59e0b",
+  toml: "#f59e0b",
+  css: "#06b6d4",
+  scss: "#ec4899",
+  less: "#06b6d4",
 };
+
+function fileColor(name: string): string {
+  const ext = name.split(".").pop()?.toLowerCase() ?? "";
+  return FILE_COLOR[ext] ?? "#64748b";
+}
 </script>
 
 <template>
@@ -50,7 +125,22 @@ const colors: Record<string, string> = {
       <span class="w-3 text-center text-surface-600 text-[10px]">
         {{ node.expanded ? "▾" : "›" }}
       </span>
-      <span class="text-accent-amber">📁</span>
+      <svg
+        class="h-4 w-4 shrink-0"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.75"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        :class="node.expanded ? 'text-accent-amber' : 'text-accent-amber/80'"
+      >
+        <path
+          v-for="(d, i) in ICON_PATHS[node.expanded ? 'folder-open' : 'folder']"
+          :key="i"
+          :d="d"
+        />
+      </svg>
       <span class="truncate flex-1">{{ node.name }}</span>
     </button>
 
@@ -61,7 +151,18 @@ const colors: Record<string, string> = {
       :style="{ paddingLeft: `${(depth ?? 0) * 14 + 20}px` }"
       @click="emit('open-file', node.path)"
     >
-      <span :class="colors[icon(node.name)] ?? 'text-surface-600'">📄</span>
+      <svg
+        class="h-4 w-4 shrink-0"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.75"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        :style="{ color: fileColor(node.name) }"
+      >
+        <path v-for="(d, i) in ICON_PATHS[fileIconKind(node.name)]" :key="i" :d="d" />
+      </svg>
       <span class="truncate flex-1">{{ node.name }}</span>
     </button>
 

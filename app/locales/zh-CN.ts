@@ -54,6 +54,15 @@ export default {
     search: "搜索 Agent...",
     noMatch: "没有匹配的 Agent",
   },
+  fileViewer: {
+    loading: "加载中...",
+    error: "加载文件失败",
+    binary: "二进制文件 — 无法预览",
+    copy: "复制",
+    copied: "已复制！",
+    close: "关闭",
+    lines: "行",
+  },
   settings: {
     title: "设置",
     language: "语言",

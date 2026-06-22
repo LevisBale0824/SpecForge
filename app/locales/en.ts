@@ -54,6 +54,15 @@ export default {
     search: "Search agents...",
     noMatch: "No matching agents",
   },
+  fileViewer: {
+    loading: "Loading...",
+    error: "Failed to load file",
+    binary: "Binary file — preview not available",
+    copy: "Copy",
+    copied: "Copied!",
+    close: "Close",
+    lines: "lines",
+  },
   settings: {
     title: "Settings",
     language: "Language",
