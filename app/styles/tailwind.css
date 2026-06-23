@@ -25,9 +25,9 @@
 /* Global resets */
 html {
   /* Root font-size drives all rem-based spacing/typography in Tailwind.
-     Default is 16px; bumping to 17px scales the whole UI ~6% larger
-     without touching every text-* class individually. */
-  font-size: 17px;
+     Kept at the browser default 16px — previous 17px made the whole UI
+     ~6% larger than necessary. */
+  font-size: 16px;
 }
 
 body {
@@ -69,7 +69,7 @@ body.resize-active[data-resize="vertical"] {
 /* ── Markdown content (chat assistant messages) ─────────────────────────── */
 
 .md-content {
-  font-size: 15px;
+  font-size: 14px;
   line-height: 1.65;
   color: var(--color-surface-200);
   word-break: break-word;
