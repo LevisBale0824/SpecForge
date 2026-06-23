@@ -393,12 +393,21 @@ function scheduleDiffRefresh(sessionId: string, delayMs = 500): void {
   pendingDiffRefresh.set(sessionId, timer);
 }
 
-// Bind SSE scope to message store when session changes
+// Bind SSE scope to message store when session changes.
+// NOTE: both `msgStore.bindScope` and `acc.listen` subscribe to delta/part
+// events on the scope. We MUST unbind the previous accumulator before
+// re-binding — otherwise every session switch stacks another listener on
+// the same scope, and deltas get appended N times into the accumulator's
+// module-level Map (which `loadHistory` later merges into the message
+// store, surfacing as duplicated streamed text in the UI).
+let accUnlisten: (() => void) | null = null;
+
 watch(selectedSessionId, (newId) => {
   if (!newId) return;
   const scope = ge.session(selectedSessionId);
   msgStore.bindScope(scope);
-  acc.listen(scope);
+  if (accUnlisten) accUnlisten();
+  accUnlisten = acc.listen(scope);
   scheduleDiffRefresh(newId, 0);
 });
 

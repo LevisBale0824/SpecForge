@@ -96,22 +96,11 @@ const inlineBlocks = computed<DisplayBlock[]>(() => {
       if (!text) continue;
       blocks.push({ kind: "reasoning", id: part.id, text });
     } else if (part.type === "tool") {
-      const toolPart = part as ToolPart;
-      const state = toolPart.state;
-      const title = resolveToolTitle(toolPart.tool, state);
-      const block: DisplayBlock = {
-        kind: "tool",
-        id: toolPart.id,
-        tool: toolPart.tool,
-        state,
-        title,
-      };
-      if (state.status === "completed") {
-        (block as { output?: string }).output = state.output;
-      } else if (state.status === "error") {
-        (block as { error?: string }).error = state.error;
-      }
-      blocks.push(block);
+      // Tool calls hidden from the transcript by design — they clutter the
+      // conversation without adding signal. Tool state is still tracked in
+      // the message store (and surfaces via diffs/file-edited events), so
+      // hiding here only suppresses the chip rendering.
+      continue;
     }
   }
   return blocks;
