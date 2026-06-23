@@ -565,26 +565,33 @@ export function useBackend() {
   async function sendCommandWithSession(text: string): Promise<boolean> {
     const trimmed = text.trim();
     if (!trimmed.startsWith("/")) return false;
-    const [cmd, ...rest] = trimmed.split(/\s+/);
-    const command = cmd.slice(1);
-    if (!command) return false;
-    const args = rest.join(" ");
-
-    const tempId = msgStore.addPendingUserMessage(
-      selectedSessionId.value || "pending",
-      trimmed,
-      agent.value,
-    );
-
-    await ensureSession();
-    if (!selectedSessionId.value) {
-      msgStore.removeMessage(tempId);
-      return false;
-    }
-    migrateDraftSelections(selectedSessionId.value);
-
+    // Guard against rapid duplicate dispatch: flip isSending synchronously
+    // before any awaits. Previously this flag was only set after
+    // `await ensureSession()`, so the InputPanel guard
+    // (`isSending || isBusy`) couldn't intercept clicks that landed during
+    // that async window — a 4-click burst produced 4 server commands.
+    if (isSending.value) return false;
     isSending.value = true;
+    let tempId: string | undefined;
     try {
+      const [cmd, ...rest] = trimmed.split(/\s+/);
+      const command = cmd.slice(1);
+      if (!command) return false;
+      const args = rest.join(" ");
+
+      tempId = msgStore.addPendingUserMessage(
+        selectedSessionId.value || "pending",
+        trimmed,
+        agent.value,
+      );
+
+      await ensureSession();
+      if (!selectedSessionId.value) {
+        msgStore.removeMessage(tempId);
+        return false;
+      }
+      migrateDraftSelections(selectedSessionId.value);
+
       const adapter = getActiveBackendAdapter();
       if (!adapter.sendCommand) {
         throw new Error("Backend does not support sending commands");
@@ -605,7 +612,7 @@ export function useBackend() {
       });
       return true;
     } catch (error) {
-      msgStore.removeMessage(tempId);
+      if (tempId) msgStore.removeMessage(tempId);
       console.error("[useBackend] sendCommand failed:", error);
       return false;
     } finally {
