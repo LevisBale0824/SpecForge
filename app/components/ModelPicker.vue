@@ -8,7 +8,7 @@
 // backend falls back to its configured default model.
 // ---------------------------------------------------------------------------
 
-import { computed, onBeforeUnmount, ref } from "vue";
+import { computed, nextTick, onBeforeUnmount, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { useModels } from "../composables/useModels";
 import { useSessionModel } from "../composables/useSessionModel";
@@ -24,6 +24,8 @@ const sessionModel = useSessionModel();
 
 const open = ref(false);
 const rootRef = ref<HTMLElement | null>(null);
+const filter = ref("");
+const filterInputRef = ref<HTMLInputElement | null>(null);
 
 const current = computed(() => sessionModel.getModelForSession(props.sessionId));
 
@@ -50,9 +52,31 @@ const groups = computed(() => {
   return Array.from(map, ([name, items]) => ({ name, items }));
 });
 
+// Local filter by model name / id / provider name. The list is small so a
+// simple includes() scan on each keystroke is fine — no need to debounce.
+const filteredGroups = computed(() => {
+  const q = filter.value.trim().toLowerCase();
+  if (!q) return groups.value;
+  const out: { name: string; items: AvailableModel[] }[] = [];
+  for (const g of groups.value) {
+    const providerMatches = g.name.toLowerCase().includes(q);
+    const items = providerMatches
+      ? g.items
+      : g.items.filter((m) => m.name.toLowerCase().includes(q) || m.id.toLowerCase().includes(q));
+    if (items.length > 0) out.push({ name: g.name, items });
+  }
+  return out;
+});
+
+const filteredCount = computed(() => filteredGroups.value.reduce((n, g) => n + g.items.length, 0));
+
 function toggle() {
   if (isEmpty.value) return;
   open.value = !open.value;
+  if (open.value) {
+    filter.value = "";
+    nextTick(() => filterInputRef.value?.focus());
+  }
 }
 
 function pick(m: AvailableModel) {
@@ -107,7 +131,7 @@ onBeforeUnmount(() => document.removeEventListener("mousedown", onDocClick));
 
     <div
       v-if="open"
-      class="absolute bottom-full left-0 z-30 mb-1.5 max-h-80 w-96 overflow-y-auto rounded-lg border border-surface-700 bg-surface-900 py-1 shadow-xl"
+      class="absolute bottom-full left-0 z-30 mb-1.5 flex max-h-80 w-96 flex-col overflow-hidden rounded-lg border border-surface-700 bg-surface-900 shadow-xl"
     >
       <!-- Header -->
       <div
@@ -123,56 +147,37 @@ onBeforeUnmount(() => document.removeEventListener("mousedown", onDocClick));
         </button>
       </div>
 
-      <!-- Default option (clear) -->
-      <button
-        type="button"
-        class="flex w-full items-center justify-between px-3 py-1.5 text-left text-sm transition-colors"
-        :class="
-          !current ? 'bg-accent-cyan/10 text-surface-100' : 'text-surface-300 hover:bg-surface-800'
-        "
-        @click="clearSelection"
-      >
-        <span class="flex items-center gap-2">
-          <span class="text-surface-500">★</span>
-          {{ t("modelPicker.default") }}
-        </span>
-        <svg
-          v-if="!current"
-          class="h-3.5 w-3.5 text-accent-cyan"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d="M5 13l4 4L19 7"
-          />
-        </svg>
-      </button>
+      <!-- Filter input -->
+      <div class="px-2 pb-1">
+        <input
+          ref="filterInputRef"
+          v-model="filter"
+          type="text"
+          :placeholder="t('modelPicker.search')"
+          class="w-full rounded border border-surface-700 bg-surface-800 px-2 py-1 text-xs text-surface-200 placeholder:text-surface-600 focus:border-accent-cyan/50 focus:outline-none"
+          @keydown.esc="open = false"
+        />
+      </div>
 
-      <div v-for="group in groups" :key="group.name" class="mt-1">
-        <div class="px-3 py-0.5 text-[10px] font-medium uppercase tracking-wide text-surface-600">
-          {{ group.name }}
-        </div>
+      <div class="flex-1 overflow-y-auto">
+        <!-- Default option (clear) -->
         <button
-          v-for="m in group.items"
-          :key="`${m.providerId}:${m.id}`"
           type="button"
-          class="flex w-full items-center justify-between px-3 py-1.5 pl-6 text-left text-sm transition-colors"
+          class="flex w-full items-center justify-between px-3 py-1.5 text-left text-sm transition-colors"
           :class="
-            current?.providerId === m.providerId && current?.modelId === m.id
+            !current
               ? 'bg-accent-cyan/10 text-surface-100'
               : 'text-surface-300 hover:bg-surface-800'
           "
-          :title="m.id"
-          @click="pick(m)"
+          @click="clearSelection"
         >
-          <span class="truncate">{{ m.name }}</span>
+          <span class="flex items-center gap-2">
+            <span class="text-surface-500">★</span>
+            {{ t("modelPicker.default") }}
+          </span>
           <svg
-            v-if="current?.providerId === m.providerId && current?.modelId === m.id"
-            class="h-3.5 w-3.5 shrink-0 text-accent-cyan"
+            v-if="!current"
+            class="h-3.5 w-3.5 text-accent-cyan"
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
@@ -185,10 +190,48 @@ onBeforeUnmount(() => document.removeEventListener("mousedown", onDocClick));
             />
           </svg>
         </button>
-      </div>
 
-      <div v-if="isEmpty" class="px-3 py-2 text-xs text-surface-500">
-        {{ t("modelPicker.empty") }}
+        <div v-for="group in filteredGroups" :key="group.name" class="mt-1">
+          <div class="px-3 py-0.5 text-[10px] font-medium uppercase tracking-wide text-surface-600">
+            {{ group.name }}
+          </div>
+          <button
+            v-for="m in group.items"
+            :key="`${m.providerId}:${m.id}`"
+            type="button"
+            class="flex w-full items-center justify-between px-3 py-1.5 pl-6 text-left text-sm transition-colors"
+            :class="
+              current?.providerId === m.providerId && current?.modelId === m.id
+                ? 'bg-accent-cyan/10 text-surface-100'
+                : 'text-surface-300 hover:bg-surface-800'
+            "
+            :title="m.id"
+            @click="pick(m)"
+          >
+            <span class="truncate">{{ m.name }}</span>
+            <svg
+              v-if="current?.providerId === m.providerId && current?.modelId === m.id"
+              class="h-3.5 w-3.5 shrink-0 text-accent-cyan"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M5 13l4 4L19 7"
+              />
+            </svg>
+          </button>
+        </div>
+
+        <div v-if="isEmpty" class="px-3 py-2 text-xs text-surface-500">
+          {{ t("modelPicker.empty") }}
+        </div>
+        <div v-else-if="filteredCount === 0" class="px-3 py-2 text-xs text-surface-500">
+          {{ t("modelPicker.noMatch") }}
+        </div>
       </div>
     </div>
   </div>

@@ -45,6 +45,8 @@ export default {
     default: "Default",
     empty: "No models available",
     refresh: "Refresh",
+    search: "Search models...",
+    noMatch: "No matching models",
   },
   agentPicker: {
     label: "Agent",

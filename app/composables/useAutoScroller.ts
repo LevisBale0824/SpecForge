@@ -26,6 +26,7 @@ type ScrollFollowOptions = {
   observeDelayMs?: number;
   smoothEngine?: SmoothEngine;
   smoothOnInitialFollow?: boolean;
+  scrollOnSetup?: boolean;
   enabled?: boolean;
 };
 
@@ -299,6 +300,12 @@ export function useAutoScroller(
     scrollToBottom(smooth);
   }
 
+  function pauseFollow() {
+    clearNativeSmoothMonitor();
+    cancelAnimation();
+    isFollowing.value = false;
+  }
+
   function enableFollow() {
     isFollowing.value = true;
   }
@@ -357,8 +364,13 @@ export function useAutoScroller(
     (el as ElWithHandlers).__touchIntentHandler = touchIntentHandler;
     (el as ElWithHandlers).__pointerDownIntentHandler = pointerDownIntentHandler;
 
-    if (scrollMode.value === "follow" || scrollMode.value === "force") {
+    if (
+      options.scrollOnSetup !== false &&
+      (scrollMode.value === "follow" || scrollMode.value === "force")
+    ) {
       scrollToBottom(smoothOnInitialFollow);
+    } else if (scrollMode.value === "follow") {
+      isFollowing.value = isAtBottom(el);
     }
   }
 
@@ -413,6 +425,7 @@ export function useAutoScroller(
     runWithoutTracking,
     enableFollow,
     resetFollow,
+    pauseFollow,
     resumeFollow,
     scrollToBottom,
     notifyContentChange,

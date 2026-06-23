@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref, watch } from "vue";
 import MessageContent from "./MessageContent.vue";
 import { stripSystemReminder, useMessages } from "../composables/useMessages";
+import { useAutoScroller, type ScrollMode } from "../composables/useAutoScroller";
 
 const msgStore = useMessages();
 
@@ -13,22 +14,18 @@ const avatarBaseUrl = import.meta.env.BASE_URL;
 const agentAvatarSrc = `${avatarBaseUrl}avatars/agent.png`;
 const userAvatarSrc = `${avatarBaseUrl}avatars/user.png`;
 
-// Whether a message has any user-facing content worth showing — text, tool
-// calls, reasoning, subtask markers, etc. Pure-tool messages (sub-agent
-// handoffs, tool-only assistant turns) would be silently dropped if we only
-// checked for text, leaving the user staring at "正在思考" with no clue what
-// the agent is actually doing.
-function hasVisibleParts(id: string): boolean {
+// Whether a message has any content that MessageContent actually renders
+// inline. Keep this aligned with MessageContent's block builder so hidden part
+// types do not leave a bubble with only the agent label.
+function hasRenderableParts(id: string): boolean {
   return msgStore.getParts(id).some((part) => {
     switch (part.type) {
       case "text":
         return !part.synthetic && stripSystemReminder(part.text).trim().length > 0;
       case "tool":
-      case "reasoning":
-      case "subtask":
-      case "agent":
-      case "patch":
         return true;
+      case "reasoning":
+        return part.text.trim().length > 0;
       default:
         return false;
     }
@@ -37,7 +34,7 @@ function hasVisibleParts(id: string): boolean {
 
 function shouldShowMessage(id: string, role: string): boolean {
   if (role === "user") return msgStore.isDisplayable(id);
-  return msgStore.getStatus(id) === "streaming" || hasVisibleParts(id);
+  return msgStore.getStatus(id) === "streaming" || hasRenderableParts(id);
 }
 
 const allMessages = computed(() => {
@@ -46,62 +43,151 @@ const allMessages = computed(() => {
     .filter((message) => shouldShowMessage(message.id, message.role))
     .map((message) => ({ id: message.id, role: message.role }));
 });
+
+const containerEl = ref<HTMLElement>();
+const scrollMode = ref<ScrollMode>("follow");
+const historyScrollLocked = ref(true);
+const { notifyContentChange, showResumeButton, resumeFollow, pauseFollow, isFollowing } =
+  useAutoScroller(containerEl, scrollMode, {
+    smoothOnInitialFollow: false,
+    scrollOnSetup: false,
+  });
+
+const contentSignature = computed(() => {
+  return allMessages.value
+    .map((message) => {
+      const partSignature = msgStore
+        .getParts(message.id)
+        .map((part) => {
+          if (part.type === "text") return `${part.id}:text:${part.text.length}`;
+          if (part.type === "reasoning") return `${part.id}:reasoning:${part.text.length}`;
+          if (part.type === "tool") {
+            const state = part.state;
+            const outputLength = state.status === "completed" ? state.output.length : 0;
+            const errorLength = state.status === "error" ? state.error.length : 0;
+            return `${part.id}:tool:${part.tool}:${state.status}:${outputLength}:${errorLength}`;
+          }
+          return `${part.id}:${part.type}`;
+        })
+        .join(",");
+      return `${message.id}:${message.role}:${msgStore.getStatus(message.id)}:${partSignature}`;
+    })
+    .join("|");
+});
+
+watch(
+  contentSignature,
+  () => {
+    if (historyScrollLocked.value) return;
+    notifyContentChange(false);
+  },
+  { flush: "post" },
+);
+
+watch(
+  () => allMessages.value[0]?.id,
+  () => {
+    if (allMessages.value.length > 1) {
+      historyScrollLocked.value = true;
+      pauseFollow();
+    } else {
+      historyScrollLocked.value = false;
+    }
+  },
+  { flush: "post" },
+);
+
+watch(isFollowing, (following) => {
+  if (following) historyScrollLocked.value = false;
+});
+
+function jumpToLatest() {
+  historyScrollLocked.value = false;
+  resumeFollow(false);
+}
 </script>
 
 <template>
-  <div class="flex-1 overflow-y-auto px-5 py-5 md:px-10 lg:px-14">
-    <!-- Empty state -->
-    <div
-      v-if="allMessages.length === 0"
-      class="flex items-center justify-center h-full text-surface-600 text-sm"
-    >
-      Start a conversation...
-    </div>
-
-    <!-- Messages -->
-    <div v-else class="w-full space-y-5">
+  <div class="relative flex min-h-0 flex-1">
+    <div ref="containerEl" class="min-h-0 flex-1 overflow-y-auto px-5 py-5 md:px-10 lg:px-14">
+      <!-- Empty state -->
       <div
-        v-for="msg in allMessages"
-        :key="msg.id"
-        class="flex w-full items-start gap-3"
-        :class="msg.role === 'user' ? 'justify-end' : 'justify-start'"
+        v-if="allMessages.length === 0"
+        class="flex items-center justify-center h-full text-surface-600 text-sm"
       >
-        <template v-if="msg.role === 'assistant'">
-          <!-- Avatar -->
-          <img
-            :src="agentAvatarSrc"
-            alt="Agent"
-            class="mt-0.5 h-9 w-9 flex-shrink-0 rounded-full object-cover ring-1 ring-surface-700/50"
-          />
+        Start a conversation...
+      </div>
 
-          <!-- Bubble -->
-          <div
-            class="max-w-[min(760px,calc(100%-3.5rem))] rounded-lg bg-surface-800/80 px-4 py-3 text-sm leading-relaxed text-surface-200"
-          >
-            <div class="mb-1 text-[10px] font-semibold tracking-wider text-accent-emerald">
-              Hephaestus
+      <!-- Messages -->
+      <div v-else class="w-full space-y-5">
+        <div
+          v-for="msg in allMessages"
+          :key="msg.id"
+          class="flex w-full items-start gap-3"
+          :class="msg.role === 'user' ? 'justify-end' : 'justify-start'"
+        >
+          <template v-if="msg.role === 'assistant'">
+            <!-- Avatar -->
+            <img
+              :src="agentAvatarSrc"
+              alt="Agent"
+              class="mt-0.5 h-9 w-9 flex-shrink-0 rounded-full object-cover ring-1 ring-surface-700/50"
+            />
+
+            <!-- Bubble -->
+            <div
+              class="max-w-[min(760px,calc(100%-3.5rem))] rounded-lg bg-surface-800/80 px-4 py-3 text-sm leading-relaxed text-surface-200"
+            >
+              <div class="mb-1 text-[10px] font-semibold tracking-wider text-accent-emerald">
+                Hephaestus
+              </div>
+              <MessageContent :message-id="msg.id" />
             </div>
-            <MessageContent :message-id="msg.id" />
-          </div>
-        </template>
+          </template>
 
-        <template v-else>
-          <!-- Bubble -->
-          <div
-            class="max-w-[min(820px,calc(100%-3.5rem))] rounded-lg bg-accent-cyan/10 px-4 py-3 text-sm leading-relaxed text-surface-100"
-          >
-            <div class="mb-1 text-[10px] font-semibold tracking-wider text-accent-cyan">Patron</div>
-            <MessageContent :message-id="msg.id" />
-          </div>
+          <template v-else>
+            <!-- Bubble -->
+            <div
+              class="max-w-[min(820px,calc(100%-3.5rem))] rounded-lg bg-accent-cyan/10 px-4 py-3 text-sm leading-relaxed text-surface-100"
+            >
+              <div class="mb-1 text-[10px] font-semibold tracking-wider text-accent-cyan">
+                Patron
+              </div>
+              <MessageContent :message-id="msg.id" />
+            </div>
 
-          <!-- Avatar -->
-          <img
-            :src="userAvatarSrc"
-            alt="User"
-            class="mt-0.5 h-9 w-9 flex-shrink-0 rounded-full object-cover ring-1 ring-surface-700/50"
-          />
-        </template>
+            <!-- Avatar -->
+            <img
+              :src="userAvatarSrc"
+              alt="User"
+              class="mt-0.5 h-9 w-9 flex-shrink-0 rounded-full object-cover ring-1 ring-surface-700/50"
+            />
+          </template>
+        </div>
       </div>
     </div>
+
+    <button
+      v-if="showResumeButton"
+      type="button"
+      class="absolute bottom-4 left-1/2 z-10 inline-flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-accent-cyan/50 bg-surface-900/90 px-3 py-1.5 text-xs text-accent-cyan shadow-lg backdrop-blur transition-colors hover:bg-accent-cyan/15"
+      title="Jump to latest"
+      @click="jumpToLatest"
+    >
+      <svg
+        width="14"
+        height="14"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      >
+        <line x1="12" y1="5" x2="12" y2="19" />
+        <polyline points="19 12 12 19 5 12" />
+      </svg>
+      <span>Latest</span>
+    </button>
   </div>
 </template>

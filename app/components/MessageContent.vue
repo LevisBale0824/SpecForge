@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, ref, watchEffect } from "vue";
 import { stripSystemReminder, useMessages } from "../composables/useMessages";
 import { renderMarkdown } from "../composables/useMarkdown";
 import {
@@ -11,7 +11,7 @@ import {
   resolveReadWritePath,
   toolColor,
 } from "./ToolWindow/utils";
-import type { ToolPart, ToolState } from "../types/sse";
+import type { MessagePart, ToolState } from "../types/sse";
 
 type DisplayBlock =
   | { kind: "text"; id: string; text: string; html?: string }
@@ -82,6 +82,52 @@ function resolveToolTitle(tool: string, state: ToolState): string | undefined {
   }
 }
 
+function preview(value: unknown, max = 240): string | undefined {
+  if (value === undefined || value === null) return undefined;
+  const text = typeof value === "string" ? value : JSON.stringify(value);
+  return text.length > max ? `${text.slice(0, max)}...` : text;
+}
+
+function summarizePart(part: MessagePart) {
+  if (part.type === "text") {
+    return {
+      id: part.id,
+      type: part.type,
+      synthetic: Boolean(part.synthetic),
+      textLength: part.text.length,
+      text: preview(stripSystemReminder(part.text)),
+    };
+  }
+  if (part.type === "reasoning") {
+    return {
+      id: part.id,
+      type: part.type,
+      textLength: part.text.length,
+      text: preview(part.text),
+    };
+  }
+  if (part.type === "tool") {
+    const state = part.state;
+    return {
+      id: part.id,
+      type: part.type,
+      tool: part.tool,
+      status: state.status,
+      title: resolveToolTitle(part.tool, state),
+      input: state.status === "pending" ? preview(state.raw) : preview(state.input),
+      output:
+        state.status === "completed"
+          ? { length: state.output.length, preview: preview(state.output) }
+          : undefined,
+      error:
+        state.status === "error"
+          ? { length: state.error.length, preview: preview(state.error) }
+          : undefined,
+    };
+  }
+  return { id: part.id, type: part.type };
+}
+
 const inlineBlocks = computed<DisplayBlock[]>(() => {
   const blocks: DisplayBlock[] = [];
   for (const part of msgStore.getParts(props.messageId)) {
@@ -96,11 +142,15 @@ const inlineBlocks = computed<DisplayBlock[]>(() => {
       if (!text) continue;
       blocks.push({ kind: "reasoning", id: part.id, text });
     } else if (part.type === "tool") {
-      // Tool calls hidden from the transcript by design — they clutter the
-      // conversation without adding signal. Tool state is still tracked in
-      // the message store (and surfaces via diffs/file-edited events), so
-      // hiding here only suppresses the chip rendering.
-      continue;
+      blocks.push({
+        kind: "tool",
+        id: part.id,
+        tool: part.tool,
+        state: part.state,
+        title: resolveToolTitle(part.tool, part.state),
+        output: part.state.status === "completed" ? part.state.output : undefined,
+        error: part.state.status === "error" ? part.state.error : undefined,
+      });
     }
   }
   return blocks;
@@ -159,6 +209,65 @@ const renderItems = computed<RenderItem[]>(() => {
   return out;
 });
 
+const lastDebugSnapshot = ref("");
+watchEffect(() => {
+  const parts = msgStore.getParts(props.messageId);
+  if (parts.length === 0 && !isStreaming.value && !isError.value) return;
+  const snapshot = {
+    messageId: props.messageId,
+    role: isUser.value ? "user" : "assistant",
+    status: status.value,
+    parts: parts.map(summarizePart),
+    inlineBlocks: inlineBlocks.value.map((block) =>
+      block.kind === "tool"
+        ? {
+            kind: block.kind,
+            id: block.id,
+            tool: block.tool,
+            status: block.state.status,
+            title: block.title,
+            hasOutput: Boolean(block.output),
+            hasError: Boolean(block.error),
+          }
+        : {
+            kind: block.kind,
+            id: block.id,
+            textLength: block.text.length,
+            text: preview(block.text),
+          },
+    ),
+    renderItems: renderItems.value.map((item) =>
+      item.kind === "tool"
+        ? {
+            kind: item.kind,
+            id: item.block.id,
+            tool: item.block.tool,
+            status: item.block.state.status,
+          }
+        : item.kind === "tool-group"
+          ? {
+              kind: item.kind,
+              id: item.id,
+              count: item.blocks.length,
+              tools: item.blocks.map((block) => ({
+                id: block.id,
+                tool: block.tool,
+                status: block.state.status,
+              })),
+            }
+          : {
+              kind: item.kind,
+              id: item.id,
+              textLength: item.text.length,
+            },
+    ),
+  };
+  const key = JSON.stringify(snapshot);
+  if (key === lastDebugSnapshot.value) return;
+  lastDebugSnapshot.value = key;
+  console.info("[SpecForge message debug]", snapshot);
+});
+
 // Per-group summary counts: e.g. { read: 3, bash: 2, edit: 1 }
 function summarizeGroup(blocks: ToolBlock[]): { tool: string; count: number }[] {
   const counts = new Map<string, number>();
@@ -175,6 +284,24 @@ function groupHasError(blocks: ToolBlock[]): boolean {
 const expandedReasoning = ref<Record<string, boolean>>({});
 function toggleReasoning(id: string) {
   expandedReasoning.value[id] = !expandedReasoning.value[id];
+}
+
+function isReasoningExpanded(id: string): boolean {
+  if (expandedReasoning.value[id] !== undefined) return expandedReasoning.value[id];
+  return renderItems.value.length === 1 && renderItems.value[0]?.kind === "reasoning";
+}
+
+function reasoningPreview(text: string): string {
+  const firstLine = text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .find(Boolean);
+  if (!firstLine) return "";
+  return firstLine.length > 90 ? `${firstLine.slice(0, 90)}...` : firstLine;
+}
+
+function reasoningLineCount(text: string): number {
+  return text.split(/\r?\n/).filter((line) => line.trim()).length;
 }
 
 const expandedTools = ref<Record<string, boolean>>({});
@@ -225,17 +352,29 @@ function toolStatusColor(block: { state: ToolState }): string {
       <!-- Reasoning -->
       <div v-else-if="item.kind === 'reasoning'" class="my-1">
         <button
-          class="flex items-center gap-1 text-[11px] text-surface-500 transition-colors hover:text-surface-300"
+          class="flex w-full min-w-0 items-center gap-1.5 text-left text-[11px] text-surface-500 transition-colors hover:text-surface-300"
           @click="toggleReasoning(item.id)"
         >
-          <span class="text-[9px]">
+          <span class="flex-shrink-0 text-[10px]">
+            {{ isReasoningExpanded(item.id) ? "-" : "+" }}
+          </span>
+          <span class="hidden flex-shrink-0 text-[9px]">
             {{ expandedReasoning[item.id] ? "▾" : "▸" }}
           </span>
           <span>思考过程</span>
+          <span class="flex-shrink-0 text-surface-600">
+            {{ reasoningLineCount(item.text) }} lines
+          </span>
+          <span
+            v-if="!isReasoningExpanded(item.id)"
+            class="min-w-0 flex-1 truncate italic text-surface-400"
+          >
+            {{ reasoningPreview(item.text) }}
+          </span>
         </button>
         <div
-          v-if="expandedReasoning[item.id]"
-          class="mt-1 whitespace-pre-wrap border-l border-surface-700 pl-2 text-[12px] italic text-surface-400"
+          v-if="isReasoningExpanded(item.id)"
+          class="mt-1 whitespace-pre-wrap rounded-md border border-surface-800 bg-surface-900/35 px-2.5 py-2 text-[12px] italic text-surface-400"
         >
           {{ item.text }}
         </div>

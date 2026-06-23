@@ -45,6 +45,8 @@ export default {
     default: "默认",
     empty: "没有可用模型",
     refresh: "刷新",
+    search: "搜索模型...",
+    noMatch: "没有匹配的模型",
   },
   agentPicker: {
     label: "Agent",

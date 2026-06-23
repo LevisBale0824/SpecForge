@@ -115,6 +115,17 @@ function normalizeFileDiffs(value: unknown): FileDiff[] {
   return Array.isArray(diff) ? (diff as FileDiff[]) : [];
 }
 
+function normalizeDirectoryPath(path: string): string {
+  return path.trim().replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
+}
+
+function sessionBelongsToActiveDirectory(info: SessionInfo): boolean {
+  const dir = activeDirectory.value;
+  if (!dir) return false;
+  if (!info.directory) return info.id === selectedSessionId.value;
+  return normalizeDirectoryPath(info.directory) === normalizeDirectoryPath(dir);
+}
+
 // ── Sub-composable instances ──────────────────────────────────────────────
 
 const ge = useGlobalEvents({
@@ -233,6 +244,19 @@ watch(activeDirectory, () => {
   fileIndexStore.reset();
 });
 
+watch(activeDirectory, (dir, previousDir) => {
+  if (previousDir && selectedSessionId.value) {
+    msgStore.saveSessionState(selectedSessionId.value);
+  }
+  msgStore.reset();
+  sessionsStore.reset();
+  selectedSessionId.value = "";
+  workspaceDiffs.value = [];
+  if (dir && activation.connectionState.value === "ready") {
+    void refreshSessions();
+  }
+});
+
 const sessionLifecycle = useBackendSessionLifecycle({
   activeBackendKind,
   selectedSessionId,
@@ -263,11 +287,11 @@ const sessionLifecycle = useBackendSessionLifecycle({
 // Track sessions from the backend so the sidebar can list/switch them.
 ge.on("session.created", (payload) => {
   const info = (payload as { info?: SessionInfo })?.info;
-  if (info) sessionsStore.upsert(info);
+  if (info && sessionBelongsToActiveDirectory(info)) sessionsStore.upsert(info);
 });
 ge.on("session.updated", (payload) => {
   const info = (payload as { info?: SessionInfo })?.info;
-  if (info) sessionsStore.upsert(info);
+  if (info && sessionBelongsToActiveDirectory(info)) sessionsStore.upsert(info);
 });
 ge.on("session.deleted", (payload) => {
   const info = (payload as { info?: SessionInfo })?.info;
@@ -308,12 +332,18 @@ async function refreshSessions(): Promise<void> {
   try {
     const adapter = getActiveBackendAdapter();
     if (!adapter.listSessions) return;
+    if (!activeDirectory.value) {
+      sessionsStore.reset();
+      return;
+    }
     const result = (await adapter.listSessions({
-      directory: activeDirectory.value || undefined,
+      directory: activeDirectory.value,
     })) as SessionInfo[] | undefined;
     if (Array.isArray(result)) {
       sessionsStore.reset();
-      for (const info of result) sessionsStore.upsert(info);
+      for (const info of result) {
+        if (sessionBelongsToActiveDirectory(info)) sessionsStore.upsert(info);
+      }
     }
   } catch (error) {
     console.error("[useBackend] refreshSessions failed:", error);

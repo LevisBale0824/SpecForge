@@ -26,7 +26,7 @@
     "format": "prettier --write \"**/*.{ts,tsx,vue,js,jsx,json,md,css,yml,yaml}\"",
     "format:check": "prettier --check \"**/*.{ts,tsx,vue,js,jsx,json,md,css,yml,yaml}\"",
     "prepare": "husky || true",
-    "electron:build": "vue-tsc --noEmit && ELECTRON=true vite build && electron-builder",
+    "electron:build": "vue-tsc --noEmit && cross-env ELECTRON=true vite build && cross-env ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/ ELECTRON_BUILDER_BINARIES_MIRROR=https://npmmirror.com/mirrors/electron-builder-binaries/ electron-builder",
     "gen:icons": "node scripts/gen-icons.mjs",
     "bridge:build": "tsc -p cli-bridge/tsconfig.json",
     "bridge:start": "node cli-bridge/dist/server.js"
@@ -75,6 +75,7 @@
     "@types/markdown-it": "^14.1.2",
     "@types/node": "^25.2.3",
     "@vitejs/plugin-vue": "^6.0.4",
+    "cross-env": "^7.0.3",
     "electron": "^42.4.0",
     "electron-builder": "^26.15.3",
     "eslint": "^9.18.0",
