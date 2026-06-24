@@ -43,6 +43,7 @@
   "build": {
     "appId": "com.specforge.app",
     "productName": "SpecForge",
+    "artifactName": "${productName}-Setup-${version}.${ext}",
     "directories": {
       "output": "release"
     },
