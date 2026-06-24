@@ -52,6 +52,10 @@ export interface OpenSpecCapability {
   specPath: string;
   /** 该 spec.md 是否存在 */
   hasSpec: boolean;
+  /** `## Purpose` 段内容(若 spec.md 有) */
+  purpose?: string;
+  /** `### Requirement: <Name>` 列表(解析自 spec.md) */
+  requirements?: OpenSpecRequirement[];
 }
 
 // ── Delta Spec(changes/<id>/specs/<cap>/spec.md) ───────────────────────

@@ -28,6 +28,7 @@ import {
   countTaskStats,
   parseDeltaSpec,
   parseProposal,
+  parseSpec,
   parseTasks,
   updateTaskStatuses,
 } from "../utils/openspecParser";
@@ -149,18 +150,19 @@ async function refreshViaFsa(root: FileSystemDirectoryHandle): Promise<void> {
     const specsDir = await openspecDir.getDirectoryHandle("specs");
     for (const entry of await listDirEntries(specsDir)) {
       if (!entry.isDir) continue;
-      let hasSpec = false;
-      try {
-        await (await specsDir.getDirectoryHandle(entry.name)).getFileHandle("spec.md");
-        hasSpec = true;
-      } catch {
-        hasSpec = false;
-      }
-      capabilities.push({
+      const specPath = `specs/${entry.name}/spec.md`;
+      const md = await readTextViaHandle(await specsDir.getDirectoryHandle(entry.name), "spec.md");
+      const cap: OpenSpecState["capabilities"][number] = {
         name: entry.name,
-        specPath: `specs/${entry.name}/spec.md`,
-        hasSpec,
-      });
+        specPath,
+        hasSpec: md !== null,
+      };
+      if (md) {
+        const parsed = parseSpec(md, entry.name, "spec");
+        cap.purpose = parsed.purpose;
+        cap.requirements = parsed.requirements;
+      }
+      capabilities.push(cap);
     }
   } catch {
     // no specs/

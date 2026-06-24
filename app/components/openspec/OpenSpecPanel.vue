@@ -20,8 +20,8 @@ const props = withDefaults(
 
 const expanded = ref<Record<string, boolean>>({});
 const archivedExpanded = ref<Record<string, boolean>>({});
-const capsExpanded = ref(false);
-type ChangeTab = "active" | "archived";
+const capsExpanded = ref<Record<string, boolean>>({});
+type ChangeTab = "active" | "archived" | "capabilities";
 const activeTab = ref<ChangeTab>("active");
 const toggling = ref<Record<string, boolean>>({});
 const validating = ref<Record<string, boolean>>({});
@@ -34,6 +34,10 @@ function toggleExpand(id: string) {
 
 function toggleArchivedExpand(id: string) {
   archivedExpanded.value[id] = !archivedExpanded.value[id];
+}
+
+function toggleCapExpand(name: string) {
+  capsExpanded.value[name] = !capsExpanded.value[name];
 }
 
 async function handleEnable() {
@@ -116,19 +120,11 @@ function progressPct(stats: { progress: number }): number {
     </div>
 
     <template v-else>
-      <!-- Overview — capabilities only; active/archived counts live in tab badges -->
+      <!-- Overview — just refresh; counts live in tab badges -->
       <div class="overview">
-        <button
-          class="caps-toggle"
-          :class="{ expanded: capsExpanded }"
-          :disabled="!state.capabilities.length"
-          @click="capsExpanded = !capsExpanded"
-        >
-          <span class="caps-caret">{{ capsExpanded ? "v" : ">" }}</span>
-          <span class="overview-item">
-            {{ t("openspec.capabilitiesCount", { count: state.capabilities.length }) }}
-          </span>
-        </button>
+        <span class="overview-item">
+          {{ t("openspec.capabilitiesCount", { count: state.capabilities.length }) }}
+        </span>
         <button
           class="refresh-btn"
           :disabled="state.loading"
@@ -139,20 +135,7 @@ function progressPct(stats: { progress: number }): number {
         </button>
       </div>
 
-      <!-- Capabilities list (collapsible) -->
-      <div v-if="capsExpanded && state.capabilities.length" class="caps-list">
-        <span
-          v-for="cap in state.capabilities"
-          :key="cap.name"
-          class="cap-chip"
-          :class="{ 'is-missing': !cap.hasSpec }"
-          :title="cap.hasSpec ? cap.specPath : `${cap.name} (spec.md 缺失)`"
-        >
-          {{ cap.name }}
-        </span>
-      </div>
-
-      <!-- Top-level tabs: Active / Archived (only in dialog variant) -->
+      <!-- Top-level tabs: Active / Archived / Capabilities (only in dialog variant) -->
       <div v-if="props.variant === 'dialog'" class="change-tabs">
         <button
           class="change-tab"
@@ -169,6 +152,14 @@ function progressPct(stats: { progress: number }): number {
         >
           {{ t("openspec.tabArchived") }}
           <span class="change-tab-badge">{{ state.archivedChanges.length }}</span>
+        </button>
+        <button
+          class="change-tab"
+          :class="{ active: activeTab === 'capabilities' }"
+          @click="activeTab = 'capabilities'"
+        >
+          {{ t("openspec.tabCapabilities") }}
+          <span class="change-tab-badge">{{ state.capabilities.length }}</span>
         </button>
       </div>
 
@@ -223,7 +214,7 @@ function progressPct(stats: { progress: number }): number {
       </div>
 
       <!-- Archived changes list (dialog only, read-only) -->
-      <div v-else>
+      <div v-if="activeTab === 'archived'">
         <div v-if="!state.archivedChanges.length" class="state-line empty">
           {{ t("openspec.noArchivedChanges") }}
         </div>
@@ -249,6 +240,75 @@ function progressPct(stats: { progress: number }): number {
 
             <div v-if="archivedExpanded[change.id]" class="change-detail-wrap">
               <OpenSpecChangeDetail :change="change" read-only />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Capabilities list (dialog only, expandable per-cap) -->
+      <div v-if="activeTab === 'capabilities'">
+        <div v-if="!state.capabilities.length" class="state-line empty">
+          {{ t("openspec.noCapabilities") }}
+        </div>
+        <div v-else class="cap-accordion">
+          <div
+            v-for="cap in state.capabilities"
+            :key="cap.name"
+            class="cap-item"
+            :class="{ 'is-missing': !cap.hasSpec }"
+          >
+            <button class="cap-head" @click="toggleCapExpand(cap.name)">
+              <span class="caret">{{ capsExpanded[cap.name] ? "v" : ">" }}</span>
+              <span class="cap-name">{{ cap.name }}</span>
+              <span v-if="!cap.hasSpec" class="cap-missing-mark">
+                {{ t("openspec.capabilityNoSpec") }}
+              </span>
+              <span v-else-if="cap.requirements?.length" class="cap-req-count">
+                {{ t("openspec.capabilityRequirements", { count: cap.requirements.length }) }}
+              </span>
+            </button>
+
+            <div v-if="capsExpanded[cap.name]" class="cap-body">
+              <template v-if="!cap.hasSpec">
+                <div class="cap-empty">{{ t("openspec.capabilityNoSpec") }}</div>
+              </template>
+              <template v-else>
+                <div v-if="cap.purpose" class="cap-purpose">
+                  <div class="cap-section-label">{{ t("openspec.capabilityPurpose") }}</div>
+                  <div class="cap-purpose-text">{{ cap.purpose }}</div>
+                </div>
+                <div v-if="cap.requirements?.length" class="cap-requirements">
+                  <div v-for="req in cap.requirements" :key="req.name" class="cap-req">
+                    <div class="cap-req-header">
+                      <span class="cap-req-name">{{ req.name }}</span>
+                      <span
+                        v-if="req.level"
+                        class="cap-req-level"
+                        :class="`is-${req.level.toLowerCase()}`"
+                      >
+                        {{ req.level }}
+                      </span>
+                    </div>
+                    <div v-if="req.text" class="cap-req-text">{{ req.text }}</div>
+                    <div v-if="req.scenarios?.length" class="cap-scenarios">
+                      <div v-for="(sc, sIdx) in req.scenarios" :key="sIdx" class="cap-scenario">
+                        <div class="cap-scenario-name">{{ sc.name }}</div>
+                        <div
+                          v-for="(step, stepIdx) in sc.steps"
+                          :key="stepIdx"
+                          class="cap-scenario-step"
+                        >
+                          <span class="cap-step-keyword">{{ step.keyword }}</span>
+                          <span class="cap-step-text">{{ step.text }}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div v-if="!cap.purpose && !cap.requirements?.length" class="cap-empty">
+                  {{ t("openspec.capabilityNoSpec") }}
+                </div>
+              </template>
             </div>
           </div>
         </div>
@@ -348,72 +408,212 @@ function progressPct(stats: { progress: number }): number {
   font-size: 12px;
 }
 
-.caps-toggle {
-  display: inline-flex;
+/* ── Capabilities accordion ─────────────────────────────────────────── */
+.cap-accordion {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding-bottom: 24px;
+}
+
+.cap-item {
+  border: 1px solid color-mix(in srgb, var(--color-surface-800, #1e293b) 75%, transparent);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--color-surface-900, #0f172a) 74%, transparent);
+  overflow: hidden;
+}
+
+.cap-item.is-missing {
+  opacity: 0.7;
+}
+
+.cap-head {
+  display: flex;
   align-items: center;
-  gap: 4px;
-  flex: 1;
-  min-width: 0;
+  gap: 10px;
+  width: 100%;
+  padding: 12px 14px;
   background: transparent;
   border: none;
-  padding: 0;
-  color: inherit;
-  font: inherit;
   cursor: pointer;
   text-align: left;
-}
-
-.caps-toggle:disabled {
-  cursor: default;
-}
-
-.caps-caret {
-  flex-shrink: 0;
-  font-size: 9px;
-  color: var(--color-surface-500, #64748b);
-}
-
-.caps-toggle.expanded .caps-caret {
-  color: var(--color-accent-cyan, #22d3ee);
-}
-
-.caps-toggle:hover:not(:disabled) .overview-item {
+  font-size: 13px;
   color: var(--color-surface-200, #e2e8f0);
 }
 
-.caps-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  padding: 0 6px 6px;
+.cap-head:hover {
+  background: color-mix(in srgb, var(--color-surface-800, #1e293b) 22%, transparent);
 }
 
-.is-dialog .caps-list {
-  padding: 0 0 12px;
-  gap: 6px;
-}
-
-.cap-chip {
-  display: inline-block;
-  padding: 2px 8px;
-  font-family: var(--font-mono, monospace);
+.cap-head .caret {
+  flex-shrink: 0;
   font-size: 10px;
+  color: var(--color-surface-500, #64748b);
+}
+
+.cap-name {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-mono, monospace);
+  font-size: 13px;
   color: var(--color-accent-cyan, #22d3ee);
-  background: color-mix(in srgb, var(--color-accent-cyan, #22d3ee) 10%, transparent);
-  border: 1px solid color-mix(in srgb, var(--color-accent-cyan, #22d3ee) 28%, transparent);
-  border-radius: 999px;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.is-dialog .cap-chip {
+.cap-req-count {
+  flex-shrink: 0;
   font-size: 11px;
-  padding: 3px 10px;
+  color: var(--color-surface-400, #94a3b8);
+  font-family: var(--font-mono, monospace);
 }
 
-.cap-chip.is-missing {
+.cap-missing-mark {
+  flex-shrink: 0;
+  font-size: 10px;
+  padding: 2px 8px;
+  border-radius: 3px;
+  color: var(--color-accent-amber, #fbbf24);
+  background: color-mix(in srgb, var(--color-accent-amber, #fbbf24) 12%, transparent);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.cap-body {
+  padding: 0 14px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  border-top: 1px solid color-mix(in srgb, var(--color-surface-800, #1e293b) 70%, transparent);
+}
+
+.cap-section-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-surface-400, #94a3b8);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 4px;
+}
+
+.cap-purpose-text {
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--color-surface-200, #e2e8f0);
+  white-space: pre-wrap;
+}
+
+.cap-requirements {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.cap-req {
+  padding-left: 10px;
+  border-left: 2px solid color-mix(in srgb, var(--color-accent-cyan, #22d3ee) 30%, transparent);
+}
+
+.cap-req-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.cap-req-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-surface-100, #f1f5f9);
+}
+
+.cap-req-level {
+  flex-shrink: 0;
+  font-size: 9px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 3px;
+  letter-spacing: 0.05em;
+  background: var(--color-surface-700, #334155);
+  color: var(--color-surface-200, #e2e8f0);
+}
+
+.cap-req-level.is-must {
+  background: color-mix(in srgb, var(--color-accent-rose, #f43f5e) 22%, transparent);
+  color: var(--color-accent-rose, #f43f5e);
+}
+
+.cap-req-level.is-shall {
+  background: color-mix(in srgb, var(--color-accent-amber, #fbbf24) 22%, transparent);
+  color: var(--color-accent-amber, #fbbf24);
+}
+
+.cap-req-level.is-should {
+  background: color-mix(in srgb, var(--color-accent-cyan, #22d3ee) 22%, transparent);
+  color: var(--color-accent-cyan, #22d3ee);
+}
+
+.cap-req-text {
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--color-surface-300, #cbd5e1);
+  white-space: pre-wrap;
+}
+
+.cap-scenarios {
+  margin-top: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.cap-scenario {
+  padding: 6px 8px;
+  background: color-mix(in srgb, var(--color-surface-950, #020617) 50%, transparent);
+  border-radius: 4px;
+  border-left: 2px solid var(--color-surface-700, #334155);
+}
+
+.cap-scenario-name {
+  font-size: 11px;
+  font-style: italic;
+  color: var(--color-surface-400, #94a3b8);
+  margin-bottom: 3px;
+}
+
+.cap-scenario-step {
+  font-size: 12px;
+  color: var(--color-surface-300, #cbd5e1);
+  display: flex;
+  gap: 6px;
+  line-height: 1.5;
+}
+
+.cap-step-keyword {
+  flex-shrink: 0;
+  font-family: var(--font-mono, monospace);
+  font-size: 10px;
+  font-weight: 700;
+  padding: 0 4px;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--color-accent-amber, #fbbf24) 18%, transparent);
+  color: var(--color-accent-amber, #fbbf24);
+  height: 16px;
+  line-height: 16px;
+  align-self: center;
+}
+
+.cap-step-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.cap-empty {
+  font-size: 12px;
   color: var(--color-surface-500, #64748b);
-  background: transparent;
-  border-color: var(--color-surface-800, #1e293b);
+  font-style: italic;
+  padding: 4px 0;
 }
 
 .change-tabs {

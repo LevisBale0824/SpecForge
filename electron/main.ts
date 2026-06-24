@@ -270,8 +270,21 @@ function safeJoinPosix(rootPath: string, relPosix: string): string {
 // renderer-side OpenSpecState shape (minus the renderer-only fields like
 // loading/error/validation). The renderer merges this into its reactive store.
 
-type GuiCapability = { name: string; specPath: string; hasSpec: boolean };
-type GuiRequirement = Record<string, unknown>;
+type GuiCapability = {
+  name: string;
+  specPath: string;
+  hasSpec: boolean;
+  purpose?: string;
+  requirements?: GuiRequirement[];
+};
+type GuiRequirement = {
+  name: string;
+  level?: string;
+  text?: string;
+  scenarios?: GuiScenario[];
+  capability?: string;
+  source?: string;
+};
 type GuiScenario = { name: string; steps: Array<{ keyword: string; text: string }> };
 type GuiDeltaRequirement = {
   op: "added" | "modified" | "removed" | "renamed";
@@ -353,11 +366,15 @@ async function readOpenSpecState(rootPath: string): Promise<GuiReadStateResult |
       if (!entry.isDirectory()) continue;
       const specPath = `specs/${entry.name}/spec.md`;
       const abs = path.join(specsDir, entry.name, "spec.md");
-      capabilities.push({
-        name: entry.name,
-        specPath,
-        hasSpec: fs.existsSync(abs) && fs.statSync(abs).isFile(),
-      });
+      const hasSpec = fs.existsSync(abs) && fs.statSync(abs).isFile();
+      const cap: GuiCapability = { name: entry.name, specPath, hasSpec };
+      if (hasSpec) {
+        const md = fs.readFileSync(abs, "utf-8");
+        const parsed = parseSpecShim(md, entry.name, "spec");
+        cap.purpose = parsed.purpose;
+        cap.requirements = parsed.requirements;
+      }
+      capabilities.push(cap);
     }
   }
 
@@ -608,9 +625,15 @@ function parseTasksShim(md: string): { tasks: GuiTask[]; stats: GuiTaskStats } {
   };
 }
 
-function parseSpecShim(md: string, capability: string): { requirements: GuiRequirement[] } {
+function parseSpecShim(
+  md: string,
+  capability: string,
+  source: "spec" | "delta" = "delta",
+): { purpose?: string; requirements: GuiRequirement[] } {
   const lines = md.split(/\r?\n/);
   const requirements: GuiRequirement[] = [];
+  let purpose: string | undefined;
+  let inPurpose = false;
   let currentReq: (GuiRequirement & { text: string[]; scenarios: GuiScenario[] }) | null = null;
   let currentScenario: (GuiScenario & { body: string[] }) | null = null;
   const flushScenario = () => {
@@ -643,12 +666,28 @@ function parseSpecShim(md: string, capability: string): { requirements: GuiRequi
         text,
         scenarios: currentReq.scenarios,
         capability,
-        source: "delta",
+        source,
       });
       currentReq = null;
     }
   };
   for (const line of lines) {
+    if (/^##\s+Purpose\s*$/.test(line)) {
+      flushReq();
+      inPurpose = true;
+      purpose = "";
+      continue;
+    }
+    if (inPurpose) {
+      if (/^#{1,2}\s/.test(line)) {
+        inPurpose = false;
+        if (purpose !== undefined) purpose = purpose.trim() || undefined;
+        // 落到下面的 reqM / scM 判断
+      } else {
+        purpose = (purpose ?? "") + line + "\n";
+        continue;
+      }
+    }
     const reqM = /^###\s+Requirement:\s*(.+?)\s*$/i.exec(line);
     const scM = /^####\s+Scenario:\s*(.+?)\s*$/i.exec(line);
     if (reqM) {
@@ -659,7 +698,7 @@ function parseSpecShim(md: string, capability: string): { requirements: GuiRequi
         text: [],
         scenarios: [],
         capability,
-        source: "delta",
+        source,
       };
       continue;
     }
@@ -672,7 +711,8 @@ function parseSpecShim(md: string, capability: string): { requirements: GuiRequi
     else if (currentReq) currentReq.text.push(line);
   }
   flushReq();
-  return { requirements };
+  if (inPurpose && purpose !== undefined) purpose = purpose.trim() || undefined;
+  return { purpose, requirements };
 }
 
 function parseDeltaSpecShim(md: string, capability: string, deltaPath: string): GuiDeltaSpec {
