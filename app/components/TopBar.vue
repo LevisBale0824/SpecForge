@@ -4,6 +4,7 @@ import { useI18n } from "vue-i18n";
 import { useProject } from "../composables/useProject";
 import { useBackend } from "../composables/useBackend";
 import { useOpenSpec } from "../composables/useOpenSpec";
+import { useUpdate } from "../composables/useUpdate";
 import {
   isElectron,
   onWindowMaximizeChange,
@@ -17,6 +18,7 @@ const { t } = useI18n();
 const project = useProject();
 const backend = useBackend();
 const openSpec = useOpenSpec();
+const update = useUpdate();
 const projectState = computed(() => project.state);
 const inElectron = isElectron();
 
@@ -35,6 +37,9 @@ const props = defineProps<{
 const openspecBadge = computed(() => openSpec.state.activeChanges.length);
 
 const projectName = computed(() => projectState.value.directoryName || "");
+
+// Show a subtle dot on the settings gear when an update is ready to install.
+const updateReady = computed(() => update.state.value.status === "downloaded");
 
 const agentLabel = computed(() => {
   switch (backend.activeBackendKind.value) {
@@ -192,10 +197,15 @@ function openFolder() {
         >
       </button>
       <button
-        class="px-2 py-1 text-xs text-surface-400 hover:text-surface-200 hover:bg-surface-800 rounded transition-colors titlebar-nodrag"
+        class="relative px-2 py-1 text-xs text-surface-400 hover:text-surface-200 hover:bg-surface-800 rounded transition-colors titlebar-nodrag"
         :title="t('topbar.settings')"
         @click="emit('toggle-settings')"
       >
+        <span
+          v-if="updateReady"
+          class="absolute top-0.5 right-0.5 w-2 h-2 rounded-full bg-accent-cyan"
+          :title="t('update.ready')"
+        />
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path
             stroke-linecap="round"

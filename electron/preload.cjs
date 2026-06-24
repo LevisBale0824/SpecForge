@@ -38,5 +38,16 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.on("menu:openFolder", handler);
     return () => ipcRenderer.removeListener("menu:openFolder", handler);
   },
+  // ── Auto-updater ───────────────────────────────────────────────────────
+  checkForUpdates: () => ipcRenderer.invoke("update:check"),
+  installUpdate: () => ipcRenderer.invoke("update:install"),
+  getUpdatePrefs: () => ipcRenderer.invoke("update:getPrefs"),
+  setUpdateAutoCheck: (enabled) =>
+    ipcRenderer.invoke("update:setAutoCheck", enabled),
+  onUpdateEvent: (callback) => {
+    const handler = (_event, payload) => callback(payload);
+    ipcRenderer.on("update:event", handler);
+    return () => ipcRenderer.removeListener("update:event", handler);
+  },
   isElectron: true,
 });

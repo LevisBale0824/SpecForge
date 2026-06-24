@@ -81,6 +81,17 @@ pnpm electron:build
 
 构建产物位于 `release/` 目录。
 
+### 发布新版本（触发自动更新）
+
+应用集成了 `electron-updater`，已安装的用户会在启动时自动检查 GitHub Release 并提示升级。发布流程：
+
+1. 更新 `package.json` 的 `version` 字段（语义化版本号）
+2. 提交并打 tag：`git tag v0.3.0 && git push origin v0.3.0`
+3. CI 或本地执行 `pnpm electron:build`，产物中会生成 `release/latest.yml`（autoUpdater 依赖此文件发现新版本）
+4. 将 `release/` 下的安装包与 `latest.yml` 一并上传到 GitHub Release（对应 tag）
+
+> 注意：必须上传 `latest.yml`，否则客户端无法感知新版本。
+
 ## 项目结构
 
 ```

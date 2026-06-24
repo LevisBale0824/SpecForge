@@ -11,6 +11,7 @@ import * as http from "node:http";
 import * as path from "node:path";
 import * as fs from "node:fs";
 import { fileURLToPath } from "node:url";
+import { initAutoUpdater } from "./updater";
 
 // ── Directory reading ─────────────────────────────────────────────────────
 
@@ -1518,6 +1519,9 @@ app.whenReady().then(async () => {
   registerMenu();
   await startServer();
   createWindow();
+  // Initialize auto-updater after the window exists so its webContents can
+  // receive broadcast events. Dev mode is a no-op inside initAutoUpdater.
+  initAutoUpdater();
 });
 
 app.on("window-all-closed", () => {

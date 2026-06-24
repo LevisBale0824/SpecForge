@@ -4,6 +4,8 @@ import { useI18n } from "vue-i18n";
 import { useBackend } from "../composables/useBackend";
 import { useTheme } from "../composables/useTheme";
 import { StorageKeys, storageSet } from "../utils/storageKeys";
+import { isElectron } from "../utils/electronBridge";
+import { useUpdate } from "../composables/useUpdate";
 import type { BackendKind } from "../backends/types";
 
 const { t, locale } = useI18n();
@@ -135,8 +137,23 @@ function close() {
 }
 
 // ── Active tab ────────────────────────────────────────────────────────
-type SettingsTab = "backend" | "appearance";
+type SettingsTab = "backend" | "appearance" | "about";
 const activeTab = ref<SettingsTab>("backend");
+
+// ── About / Update ───────────────────────────────────────────────────────
+const inElectron = isElectron();
+const update = useUpdate();
+const checking = ref(false);
+
+async function checkForUpdates() {
+  if (checking.value) return;
+  checking.value = true;
+  try {
+    await update.checkForUpdates();
+  } finally {
+    checking.value = false;
+  }
+}
 </script>
 
 <template>
@@ -179,6 +196,15 @@ const activeTab = ref<SettingsTab>("backend");
             @click="activeTab = 'appearance'"
           >
             {{ t("settings.tabAppearance") }}
+          </button>
+          <button
+            v-if="inElectron"
+            type="button"
+            class="settings-tab"
+            :class="{ 'is-active': activeTab === 'about' }"
+            @click="activeTab = 'about'"
+          >
+            {{ t("settings.tabAbout") }}
           </button>
         </div>
 
@@ -318,7 +344,7 @@ const activeTab = ref<SettingsTab>("backend");
           </template>
 
           <!-- ── Appearance tab ──────────────────────────────────────── -->
-          <template v-else>
+          <template v-else-if="activeTab === 'appearance'">
             <!-- Language -->
             <div class="setting-section">
               <label class="setting-label">{{ t("settings.language") }}</label>
@@ -370,6 +396,67 @@ const activeTab = ref<SettingsTab>("backend");
                   </div>
                 </button>
               </div>
+            </div>
+          </template>
+
+          <!-- ── About / Update tab ─────────────────────────────────── -->
+          <template v-else-if="activeTab === 'about'">
+            <!-- Check for updates -->
+            <div class="setting-section">
+              <label class="setting-label">{{ t("update.section") }}</label>
+              <button
+                type="button"
+                class="px-3 py-2 text-xs font-medium rounded-lg bg-accent-cyan/15 text-accent-cyan hover:bg-accent-cyan/25 transition-colors inline-flex items-center gap-2 disabled:opacity-50 disabled:cursor-wait"
+                :disabled="checking"
+                @click="checkForUpdates"
+              >
+                <svg
+                  class="w-3.5 h-3.5"
+                  :class="checking ? 'animate-spin' : ''"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2.5"
+                    d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                  />
+                </svg>
+                <span>{{ checking ? t("update.checking") : t("update.checkNow") }}</span>
+              </button>
+              <!-- Live status line -->
+              <p
+                v-if="update.state.value.status === 'progress'"
+                class="text-xs text-surface-400 mt-2"
+              >
+                {{ t("update.downloading") }} · {{ update.state.value.percent }}%
+              </p>
+              <p
+                v-else-if="update.state.value.status === 'downloaded'"
+                class="text-xs text-accent-emerald mt-2"
+              >
+                {{ t("update.ready") }} · v{{ update.state.value.version }}
+              </p>
+            </div>
+
+            <!-- Auto-check toggle -->
+            <div class="setting-section">
+              <label class="setting-label">{{ t("update.autoCheck") }}</label>
+              <button
+                type="button"
+                role="switch"
+                :aria-checked="update.autoUpdate.value"
+                class="toggle-switch"
+                :class="{ 'is-on': update.autoUpdate.value }"
+                @click="update.setAutoUpdate(!update.autoUpdate.value)"
+              >
+                <span class="toggle-knob" />
+              </button>
+              <p class="text-[11px] text-surface-500 mt-1.5">
+                {{ t("update.autoCheckHint") }}
+              </p>
             </div>
           </template>
         </div>
@@ -602,5 +689,38 @@ const activeTab = ref<SettingsTab>("backend");
 .theme-mode-tag.light {
   background: #f1f5f9;
   color: #0f172a;
+}
+
+/* Toggle switch (auto-update preference) */
+.toggle-switch {
+  position: relative;
+  width: 38px;
+  height: 22px;
+  border: 0;
+  border-radius: 11px;
+  background: var(--color-surface-700, #334155);
+  cursor: pointer;
+  transition: background-color 0.18s ease;
+  padding: 0;
+}
+
+.toggle-switch.is-on {
+  background: var(--color-accent-cyan, #22d3ee);
+}
+
+.toggle-knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform 0.18s ease;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+.toggle-switch.is-on .toggle-knob {
+  transform: translateX(16px);
 }
 </style>

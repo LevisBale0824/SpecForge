@@ -10,6 +10,7 @@ import ConsolePanel from "./components/ConsolePanel.vue";
 import DiffViewer from "./components/DiffViewer.vue";
 import FileViewer from "./components/FileViewer.vue";
 import OpenSpecPanel from "./components/openspec/OpenSpecPanel.vue";
+import UpdateToast from "./components/UpdateToast.vue";
 import { useRoute, useRouter } from "vue-router";
 import { useFloatingWindows } from "./composables/useFloatingWindows";
 import { useProject } from "./composables/useProject";
@@ -380,6 +381,8 @@ function submitManualPath() {
 
     <!-- Settings Modal -->
     <SettingsPanel v-model="showSettings" />
+    <!-- Auto-updater global toast -->
+    <UpdateToast />
     <!-- OpenSpec Dialog -->
     <Teleport to="body">
       <div v-if="showOpenSpecDialog" class="openspec-dialog-layer">

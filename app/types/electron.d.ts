@@ -44,6 +44,25 @@ export type {
   OpenSpecValidationResult,
 } from "./openspec";
 
+// ── Auto-updater IPC ────────────────────────────────────────────────────
+export type UpdateEvent =
+  | { status: "checking" }
+  | { status: "available"; version: string; releaseNotes?: unknown }
+  | { status: "up-to-date" }
+  | {
+      status: "progress";
+      percent: number;
+      bytesPerSecond: number;
+      transferred: number;
+      total: number;
+    }
+  | { status: "downloaded"; version: string }
+  | { status: "error"; error: string };
+
+export type UserUpdatePrefs = {
+  autoUpdate: boolean;
+};
+
 export interface ElectronAPI {
   selectDirectory: () => Promise<string | null>;
   readDirectory: (rootPath: string, relPath: string) => Promise<DirEntry[] | null>;
@@ -87,6 +106,16 @@ export interface ElectronAPI {
   consoleKill: (pid: number) => Promise<void>;
   /** Subscribe to stdout/stderr/exit streams for any console subprocess. */
   onConsoleData: (callback: (event: ConsoleDataEvent) => void) => () => void;
+  /** Manual check for updates; resolves with the first terminal event. */
+  checkForUpdates: () => Promise<UpdateEvent>;
+  /** Quit and install a downloaded update. */
+  installUpdate: () => Promise<void>;
+  /** Read persistent updater preferences (auto-check toggle). */
+  getUpdatePrefs: () => Promise<UserUpdatePrefs>;
+  /** Toggle auto-check and persist to userData/user-prefs.json. */
+  setUpdateAutoCheck: (enabled: boolean) => Promise<UserUpdatePrefs>;
+  /** Subscribe to broadcast update events from the main process. */
+  onUpdateEvent: (callback: (event: UpdateEvent) => void) => () => void;
   isElectron: true;
 }
 
