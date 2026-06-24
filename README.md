@@ -83,14 +83,22 @@ pnpm electron:build
 
 ### 发布新版本（触发自动更新）
 
-应用集成了 `electron-updater`，已安装的用户会在启动时自动检查 GitHub Release 并提示升级。发布流程：
+应用集成了 `electron-updater`，已安装的用户会在启动时自动检查 GitHub Release 并提示升级。
+
+**发布走 CI，不要手动 `gh release create` 上传本地构建产物** —— 否则会和 CI 自动构建互相覆盖，产生 `latest.yml` 与 `exe` 不配套的中间态，导致客户端报 `sha512 checksum mismatch`。
+
+发布流程：
 
 1. 更新 `package.json` 的 `version` 字段（语义化版本号）
-2. 提交并打 tag：`git tag v0.3.0 && git push origin v0.3.0`
-3. CI 或本地执行 `pnpm electron:build`，产物中会生成 `release/latest.yml`（autoUpdater 依赖此文件发现新版本）
-4. 将 `release/` 下的安装包与 `latest.yml` 一并上传到 GitHub Release（对应 tag）
+2. 提交并打 tag：`git tag v0.3.0 && git push origin v0.3.0`，或用 `gh release create v0.3.0 --notes "..."` 创建空 release
+3. `.github/workflows/release.yml` 会在 release published 时自动触发，分别在 `windows-latest` 和 `ubuntu-latest` 上构建并上传安装包、blockmap 与 `latest.yml`
+4. CI 跑完后（约 3 分钟）校验产物自洽：
 
-> 注意：必须上传 `latest.yml`，否则客户端无法感知新版本。
+```bash
+node scripts/verify-release.mjs v0.3.0
+```
+
+> ⚠️ 本地 `pnpm electron:build` 产生的 `release/` 与 CI 产物**字节级不同**（构建环境、时间戳差异），属于预期。**不要把本地 `release/` 上传到 GitHub Release**，客户端只认 CI 产物。本地构建仅供安装测试用。
 
 ## 项目结构
 

@@ -42,7 +42,7 @@
 ## 7. 验证
 
 - [x] 7.1 `pnpm typecheck` + `pnpm lint` + `pnpm test`（64 测试全绿,0 lint 错误）；dev 模式 autoUpdater 走 no-op 分支,不会报错
-- [ ] 7.2 本地打包一次，确认 `release/latest.yml` 生成且包含正确版本号（需用户执行 `pnpm electron:build`）
-- [ ] 7.3 模拟「当前版本 < Release 版本」场景，验证自动检查与提示链路（需真实 GitHub Release）
-- [ ] 7.4 手动「检查更新」按钮在「有更新 / 无更新 / 失败」三种场景下的 UI 表现（需真实 Release 配合）
-- [ ] 7.5 关闭「自动检查」开关后重启，确认不再自动触发检查（需打包版本验证）
+- [x] 7.2 本地打包一次，确认 `release/latest.yml` 生成且包含正确版本号 ✓ 实测:v0.3.0~v0.3.6 多次打包,latest.yml 均正确生成
+- [x] 7.3 模拟「当前版本 < Release 版本」场景，验证自动检查与提示链路 ✓ 实测:0.3.1 启动自动拉到 0.3.2,系统代理生效,端到端通过
+- [x] 7.4 手动「检查更新」按钮在「有更新 / 无更新 / 失败」三种场景下的 UI 表现 ✓ 实测:有更新弹对话框、已是最新弹 Toast、网络错误 Toast
+- [x] 7.5 关闭「自动检查」开关后重启，确认不再自动触发检查 ✓ 代码路径验证:initAutoUpdater 读 prefs.autoUpdate,为 false 时跳过 setTimeout 自动检查
