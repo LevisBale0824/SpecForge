@@ -120,22 +120,7 @@ function progressPct(stats: { progress: number }): number {
     </div>
 
     <template v-else>
-      <!-- Overview — just refresh; counts live in tab badges -->
-      <div class="overview">
-        <span class="overview-item">
-          {{ t("openspec.capabilitiesCount", { count: state.capabilities.length }) }}
-        </span>
-        <button
-          class="refresh-btn"
-          :disabled="state.loading"
-          :title="t('openspec.refresh')"
-          @click="refresh()"
-        >
-          R
-        </button>
-      </div>
-
-      <!-- Top-level tabs: Active / Archived / Capabilities (only in dialog variant) -->
+      <!-- Top-level tabs: Active / Archived / Capabilities + refresh icon (dialog only) -->
       <div v-if="props.variant === 'dialog'" class="change-tabs">
         <button
           class="change-tab"
@@ -160,6 +145,54 @@ function progressPct(stats: { progress: number }): number {
         >
           {{ t("openspec.tabCapabilities") }}
           <span class="change-tab-badge">{{ state.capabilities.length }}</span>
+        </button>
+        <button
+          class="refresh-btn"
+          :disabled="state.loading"
+          :title="t('openspec.refresh')"
+          @click="refresh()"
+        >
+          <svg
+            class="refresh-icon"
+            :class="{ 'is-spinning': state.loading }"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+            <polyline points="21 4 21 9 16 9" />
+          </svg>
+        </button>
+      </div>
+
+      <!-- Compact variant: keep the slim overview with refresh icon -->
+      <div v-else class="overview">
+        <span class="overview-item">
+          {{ state.activeChanges.length }} active ·
+          {{ t("openspec.capabilitiesCount", { count: state.capabilities.length }) }}
+        </span>
+        <button
+          class="refresh-btn"
+          :disabled="state.loading"
+          :title="t('openspec.refresh')"
+          @click="refresh()"
+        >
+          <svg
+            class="refresh-icon"
+            :class="{ 'is-spinning': state.loading }"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+            <polyline points="21 4 21 9 16 9" />
+          </svg>
         </button>
       </div>
 
@@ -708,17 +741,45 @@ function progressPct(stats: { progress: number }): number {
 
 .refresh-btn {
   margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
   background: transparent;
-  border: none;
+  border: 1px solid transparent;
+  border-radius: 6px;
   color: var(--color-surface-500, #64748b);
   cursor: pointer;
-  font-size: 14px;
-  line-height: 1;
-  padding: 0 4px;
+  transition:
+    color 0.15s,
+    background 0.15s,
+    border-color 0.15s;
 }
 
 .refresh-btn:hover:not(:disabled) {
-  color: var(--color-surface-200, #e2e8f0);
+  color: var(--color-surface-100, #f1f5f9);
+  background: color-mix(in srgb, var(--color-surface-800, #1e293b) 50%, transparent);
+  border-color: color-mix(in srgb, var(--color-surface-700, #334155) 50%, transparent);
+}
+
+.refresh-icon {
+  width: 15px;
+  height: 15px;
+}
+
+.refresh-icon.is-spinning {
+  animation: spin 0.9s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .refresh-btn:disabled {
