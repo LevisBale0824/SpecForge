@@ -103,6 +103,7 @@ export default {
     failed: "Update check failed",
     ignore: "Ignore this version",
     releaseLink: "Release",
+    releaseLinkHint: "Open the GitHub release page in your browser",
     tagline: "AI coding collaboration workstation",
     autoCheck: "Check automatically",
     autoCheckHint: "Look for new versions on startup.",

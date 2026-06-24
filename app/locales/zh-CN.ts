@@ -103,6 +103,7 @@ export default {
     failed: "检查更新失败",
     ignore: "忽略此版本",
     releaseLink: "Release",
+    releaseLinkHint: "在浏览器中打开 GitHub 发布页",
     tagline: "AI 编程协作工作站",
     autoCheck: "自动检查更新",
     autoCheckHint: "启动时自动查找新版本。",

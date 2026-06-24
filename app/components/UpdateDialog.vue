@@ -34,6 +34,23 @@ const inElectron = isElectron();
 const { state, releaseNotes, currentVersion, downloadUpdate, installUpdate, skipVersion } =
   useUpdate();
 
+/**
+ * Convert release notes to HTML for v-html binding.
+ * Different update sources return notes in different formats:
+ *   - Raw markdown (e.g. `### 新增\n- xxx`) — run through markdown-it
+ *   - Pre-rendered HTML (e.g. GitHub `body_html`) — use as-is
+ * Detect HTML by looking for typical block-level tag patterns; pass through
+ * when matched to avoid markdown-it escaping existing HTML into entities.
+ */
+function toReleaseNotesHtml(content: string): string {
+  const trimmed = (content || "").trim();
+  if (!trimmed) return "";
+  const looksLikeHtml =
+    /^<(\w+)(\s[^>]*)?>/.test(trimmed) ||
+    /<\/(h[1-6]|ul|ol|li|div|p|pre|code)(\s[^>]*)?>/.test(trimmed);
+  return looksLikeHtml ? trimmed : renderMarkdown(trimmed);
+}
+
 // User-dismissed flag: stays dismissed until either a new version shows up
 // or the user manually re-opens via Settings → About.
 const dismissed = ref(false);
@@ -49,10 +66,7 @@ const visible = computed(() => {
   return true;
 });
 
-const releaseNotesHtml = computed(() => {
-  const md = releaseNotes.value || "";
-  return md ? renderMarkdown(md) : "";
-});
+const releaseNotesHtml = computed(() => toReleaseNotesHtml(releaseNotes.value));
 
 const downloading = ref(false);
 async function startDownload() {
@@ -164,8 +178,14 @@ const releaseUrl = computed(
           <!-- Body: release notes -->
           <div class="ud-body">
             <div class="ud-release-title">SpecForge v{{ state.version }}</div>
-            <a :href="releaseUrl" target="_blank" rel="noopener" class="ud-release-link">
-              Release
+            <a
+              :href="releaseUrl"
+              target="_blank"
+              rel="noopener"
+              class="ud-release-link"
+              :title="t('update.releaseLinkHint')"
+            >
+              {{ t("update.releaseLink") }}
               <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path
                   stroke-linecap="round"
@@ -188,14 +208,11 @@ const releaseUrl = computed(
 
           <!-- Footer: actions -->
           <footer class="ud-footer">
-            <!-- Available state: ignore / release / update -->
+            <!-- Available state: ignore / update -->
             <template v-if="state.status === 'available'">
               <button class="ud-btn ud-btn-ghost" @click="ignore">
                 {{ t("update.ignore") }}
               </button>
-              <a :href="releaseUrl" target="_blank" rel="noopener" class="ud-btn ud-btn-link">
-                {{ t("update.releaseLink") }}
-              </a>
               <div class="ud-footer-spacer" />
               <button class="ud-btn ud-btn-primary" :disabled="downloading" @click="startDownload">
                 <svg
@@ -520,15 +537,6 @@ const releaseUrl = computed(
 .ud-btn-ghost:hover {
   color: var(--color-surface-100, #f4f4f5);
   border-color: var(--color-surface-600, #475569);
-}
-
-.ud-btn-link {
-  background: transparent;
-  color: var(--color-surface-400, #94a3b8);
-}
-
-.ud-btn-link:hover {
-  color: var(--color-accent-cyan, #22d3ee);
 }
 
 .ud-btn-disabled {
