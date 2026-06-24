@@ -834,10 +834,12 @@ async function runOpenspecValidate(
     };
   }
   const raw = `${result.stdout.toString("utf8")}\n${result.stderr.toString("utf8")}`.trim();
-  const issues = parseValidationOutput(raw);
+  // Exit code is the authoritative pass/fail signal (openspec validate exits 0
+  // on success). Issue parsing is best-effort detail extraction only.
+  const issues = parseValidationOutput(raw, result.code !== 0);
   return {
     changeId,
-    passed: result.code === 0 && issues.every((i) => i.severity !== "error"),
+    passed: result.code === 0,
     cliAvailable: true,
     issues,
     rawOutput: raw,
@@ -845,7 +847,10 @@ async function runOpenspecValidate(
   };
 }
 
-function parseValidationOutput(raw: string): Array<{
+function parseValidationOutput(
+  raw: string,
+  runFailed: boolean,
+): Array<{
   file: string;
   line?: number;
   message: string;
@@ -870,7 +875,12 @@ function parseValidationOutput(raw: string): Array<{
     if (!line) continue;
     const m = lineRe.exec(line);
     if (!m || !m.groups) continue;
-    const lvl = (m.groups.level || "error").toLowerCase();
+    const explicitLevel = m.groups.level?.toLowerCase();
+    // Success output (e.g. "Change '...' is valid") has no severity prefix and
+    // must never be promoted to an error — that would flip a passing run to
+    // failed. Only treat prefix-less lines as errors on an actually failed run.
+    if (!explicitLevel && !runFailed) continue;
+    const lvl = (explicitLevel || "error").toLowerCase();
     if (lvl === "info") continue;
     out.push({
       file: m.groups.file || "",
