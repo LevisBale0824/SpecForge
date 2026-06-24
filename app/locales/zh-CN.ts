@@ -98,6 +98,11 @@ export default {
     failed: "检查更新失败",
     autoCheck: "自动检查更新",
     autoCheckHint: "启动时自动查找新版本。",
+    proxy: "代理",
+    proxyPlaceholder: "127.0.0.1:7890",
+    proxyApply: "应用",
+    proxyHint:
+      "访问 GitHub 用的本地代理(Clash/V2Ray/sing-box 等)。格式:host:port 或 socks5://host:port。留空则直连。",
   },
   workflow: {
     explore: "需求探索",

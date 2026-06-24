@@ -154,6 +154,12 @@ async function checkForUpdates() {
     checking.value = false;
   }
 }
+
+// Local proxy input mirrors update.proxy with an editable buffer.
+const proxyInput = ref(update.proxy.value);
+async function applyProxy() {
+  await update.setProxy(proxyInput.value);
+}
 </script>
 
 <template>
@@ -456,6 +462,29 @@ async function checkForUpdates() {
               </button>
               <p class="text-[11px] text-surface-500 mt-1.5">
                 {{ t("update.autoCheckHint") }}
+              </p>
+            </div>
+
+            <!-- Proxy -->
+            <div class="setting-section">
+              <label class="setting-label">{{ t("update.proxy") }}</label>
+              <div class="flex gap-2">
+                <input
+                  v-model="proxyInput"
+                  type="text"
+                  :placeholder="t('update.proxyPlaceholder')"
+                  class="setting-input flex-1"
+                  @keydown.enter="applyProxy"
+                />
+                <button
+                  class="px-3 py-2 text-xs font-medium rounded-lg bg-surface-800 text-surface-300 hover:bg-surface-700 hover:text-accent-cyan transition-colors"
+                  @click="applyProxy"
+                >
+                  {{ t("update.proxyApply") }}
+                </button>
+              </div>
+              <p class="text-[11px] text-surface-500 mt-1.5">
+                {{ t("update.proxyHint") }}
               </p>
             </div>
           </template>

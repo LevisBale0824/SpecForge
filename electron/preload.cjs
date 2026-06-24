@@ -44,6 +44,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
   getUpdatePrefs: () => ipcRenderer.invoke("update:getPrefs"),
   setUpdateAutoCheck: (enabled) =>
     ipcRenderer.invoke("update:setAutoCheck", enabled),
+  setUpdateProxy: (proxy) => ipcRenderer.invoke("update:setProxy", proxy),
   onUpdateEvent: (callback) => {
     const handler = (_event, payload) => callback(payload);
     ipcRenderer.on("update:event", handler);

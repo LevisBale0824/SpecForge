@@ -61,6 +61,7 @@ export type UpdateEvent =
 
 export type UserUpdatePrefs = {
   autoUpdate: boolean;
+  proxy: string;
 };
 
 export interface ElectronAPI {
@@ -114,6 +115,8 @@ export interface ElectronAPI {
   getUpdatePrefs: () => Promise<UserUpdatePrefs>;
   /** Toggle auto-check and persist to userData/user-prefs.json. */
   setUpdateAutoCheck: (enabled: boolean) => Promise<UserUpdatePrefs>;
+  /** Persist proxy URL and apply to session immediately. Empty string clears. */
+  setUpdateProxy: (proxy: string) => Promise<UserUpdatePrefs>;
   /** Subscribe to broadcast update events from the main process. */
   onUpdateEvent: (callback: (event: UpdateEvent) => void) => () => void;
   isElectron: true;

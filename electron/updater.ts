@@ -7,7 +7,7 @@
 // - event broadcast to the renderer via `update:event` IPC channel
 // - manual IPC handlers: `update:check`, `update:install`, `update:setAutoCheck`
 // ---------------------------------------------------------------------------
-import { app, BrowserWindow, ipcMain } from "electron";
+import { app, BrowserWindow, ipcMain, session } from "electron";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { autoUpdater } from "electron-updater";
@@ -30,10 +30,12 @@ export type UpdateEvent =
 
 export type UserPrefs = {
   autoUpdate: boolean;
+  proxy: string;
 };
 
 const DEFAULT_USER_PREFS: UserPrefs = {
   autoUpdate: true,
+  proxy: "",
 };
 
 // ── Persistent user prefs ─────────────────────────────────────────────────
@@ -51,6 +53,7 @@ function loadPrefs(): UserPrefs {
     const parsed = JSON.parse(raw) as Partial<UserPrefs>;
     cachedPrefs = {
       autoUpdate: typeof parsed.autoUpdate === "boolean" ? parsed.autoUpdate : true,
+      proxy: typeof parsed.proxy === "string" ? parsed.proxy.trim() : "",
     };
   } catch {
     cachedPrefs = { ...DEFAULT_USER_PREFS };
@@ -117,11 +120,55 @@ function rejectManual(err: Error): void {
 }
 
 /**
+ * Normalize a user-typed proxy string into Chromium proxy_rules format.
+ *
+ * Chromium's proxyRules does NOT accept URL form (no `http://` prefix).
+ * Acceptable inputs we want to support:
+ *   - "127.0.0.1:7890"            → "127.0.0.1:7890"
+ *   - "http://127.0.0.1:7890"     → "127.0.0.1:7890"
+ *   - "socks5://127.0.0.1:10808"  → "socks5://127.0.0.1:10808" (kept; valid)
+ *   - "http=host:80;https=..."     → pass through (already rules form)
+ */
+function normalizeProxyRules(input: string): string {
+  const trimmed = input.trim();
+  if (!trimmed) return "";
+  // Already in rules form (contains '=' or starts with socks)
+  if (trimmed.includes("=")) return trimmed;
+  // Strip http(s):// prefix, leaving host:port. Chromium applies host:port
+  // to all schemes (http/https/ftp).
+  return trimmed.replace(/^https?:\/\//i, "");
+}
+
+/**
+ * Apply the persisted proxy setting to Electron's default session.
+ * electron-updater's HTTP requests go through this session, so this is the
+ * authoritative place to configure proxying. Safe to call multiple times.
+ *
+ * Priority: ELECTRON_UPDATER_PROXY env var > user-prefs.proxy > system default.
+ * Empty string clears any previously configured proxy.
+ */
+async function applyProxy(): Promise<void> {
+  const fromEnv = process.env.ELECTRON_UPDATER_PROXY?.trim();
+  const raw = (fromEnv || loadPrefs().proxy || "").trim();
+  const proxyRules = normalizeProxyRules(raw);
+  try {
+    await session.defaultSession.setProxy({
+      proxyRules: proxyRules || "direct://",
+    });
+    if (proxyRules) {
+      console.log("[updater] proxy applied:", proxyRules);
+    }
+  } catch (err) {
+    console.error("[updater] setProxy failed:", err);
+  }
+}
+
+/**
  * Initialize auto-updater event wiring. Safe to call once per process.
  * Dev-mode no-op: when `VITE_DEV_SERVER_URL` is set the packaged
  * `app-update.yml` doesn't exist, so any autoUpdater call would throw.
  */
-export function initAutoUpdater(): void {
+export async function initAutoUpdater(): Promise<void> {
   if (initialized) return;
   if (process.env.VITE_DEV_SERVER_URL) {
     // Dev: still register IPC so renderer calls don't hang, but never touch
@@ -131,6 +178,9 @@ export function initAutoUpdater(): void {
     return;
   }
   initialized = true;
+
+  // Configure proxy before any autoUpdater network call.
+  await applyProxy();
 
   autoUpdater.autoDownload = true;
   autoUpdater.autoInstallOnAppQuit = true;
@@ -236,4 +286,12 @@ function registerIpc(): void {
     "update:setAutoCheck",
     (_e, enabled: boolean): UserPrefs => setUserPrefs({ autoUpdate: enabled }),
   );
+
+  // Persist proxy URL and apply to the default session immediately so the
+  // next checkForUpdates uses it without a restart.
+  ipcMain.handle("update:setProxy", async (_e, proxy: string): Promise<UserPrefs> => {
+    const next = setUserPrefs({ proxy: typeof proxy === "string" ? proxy.trim() : "" });
+    await applyProxy();
+    return next;
+  });
 }

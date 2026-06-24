@@ -98,6 +98,11 @@ export default {
     failed: "Update check failed",
     autoCheck: "Check automatically",
     autoCheckHint: "Look for new versions on startup.",
+    proxy: "Proxy",
+    proxyPlaceholder: "127.0.0.1:7890",
+    proxyApply: "Apply",
+    proxyHint:
+      "Local proxy for reaching GitHub (e.g. Clash/V2Ray/sing-box). Format: host:port or socks5://host:port. Empty = direct.",
   },
   workflow: {
     explore: "Explore",

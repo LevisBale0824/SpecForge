@@ -36,6 +36,7 @@ const state = ref<{
 });
 
 const autoUpdate = ref(true);
+const proxy = ref("");
 let subscribed = false;
 
 function applyEvent(event: UpdateEvent): void {
@@ -77,6 +78,7 @@ async function ensureSubscribed(): Promise<void> {
   try {
     const prefs = await api.getUpdatePrefs();
     autoUpdate.value = prefs.autoUpdate;
+    proxy.value = prefs.proxy;
   } catch (err) {
     console.error("[useUpdate] getUpdatePrefs failed:", err);
   }
@@ -123,14 +125,29 @@ async function setAutoUpdate(enabled: boolean): Promise<void> {
   }
 }
 
+async function setProxy(url: string): Promise<void> {
+  const api = window.electronAPI;
+  if (!api) return;
+  const trimmed = url.trim();
+  proxy.value = trimmed;
+  try {
+    const prefs = await api.setUpdateProxy(trimmed);
+    proxy.value = prefs.proxy;
+  } catch (err) {
+    console.error("[useUpdate] setUpdateProxy failed:", err);
+  }
+}
+
 export function useUpdate() {
   // Subscribe on first use. Safe to call repeatedly; ensureSubscribed guards.
   void ensureSubscribed();
   return {
     state,
     autoUpdate,
+    proxy,
     checkForUpdates,
     installUpdate,
     setAutoUpdate,
+    setProxy,
   };
 }
