@@ -1,17 +1,30 @@
 <script setup lang="ts">
 import { computed, ref, watchEffect } from "vue";
+import { useI18n } from "vue-i18n";
 import { stripSystemReminder, useMessages } from "../composables/useMessages";
 import { renderMarkdown } from "../composables/useMarkdown";
+import { useSessions } from "../composables/useSessions";
 import {
+  extractCommand,
+  extractSubSessionId,
   formatGlobToolTitle,
   formatListToolTitle,
   formatQueryToolTitle,
   formatReadLikeToolTitle,
   formatWebfetchToolTitle,
+  isSubAgentTool,
+  matchChildSession,
   resolveReadWritePath,
   toolColor,
 } from "./ToolWindow/utils";
 import type { MessagePart, ToolState } from "../types/sse";
+
+const emit = defineEmits<{
+  "navigate-session": [sessionId: string];
+}>();
+
+const { t } = useI18n();
+const sessionsStore = useSessions();
 
 type DisplayBlock =
   | { kind: "text"; id: string; text: string; html?: string }
@@ -22,8 +35,11 @@ type DisplayBlock =
       tool: string;
       state: ToolState;
       title?: string;
+      command?: string;
       output?: string;
       error?: string;
+      subSessionId?: string;
+      subSessionInferred?: boolean;
     };
 
 // A run of consecutive completed tool blocks gets bundled into a single
@@ -128,6 +144,39 @@ function summarizePart(part: MessagePart) {
   return { id: part.id, type: part.type };
 }
 
+// Resolve a jump target (child session id) for each sub-agent tool block.
+// Main path: metadata.sessionId. Fallback: child sessions whose parentID
+// matches this message's session, closest by time, excluding ids already
+// claimed by an earlier block so concurrent tasks don't collide.
+function resolveSubSessions(blocks: DisplayBlock[]): void {
+  const parentSessionId = msgStore.get(props.messageId)?.sessionID;
+  const candidates = [...sessionsStore.sessions.value.values()];
+  const claimed = new Set<string>();
+  for (const b of blocks) {
+    if (b.kind !== "tool") continue;
+    const ref = extractSubSessionId(b.tool, b.state);
+    if (ref) {
+      b.subSessionId = ref.sessionId;
+      b.subSessionInferred = ref.inferred;
+      claimed.add(ref.sessionId);
+    }
+  }
+  if (!parentSessionId) return;
+  for (const b of blocks) {
+    if (b.kind !== "tool" || b.subSessionId || !isSubAgentTool(b.tool)) continue;
+    const start = b.state.status === "pending" ? undefined : b.state.time.start * 1000;
+    const ref = matchChildSession(parentSessionId, candidates, {
+      toolTimeMs: start,
+      exclude: claimed,
+    });
+    if (ref) {
+      b.subSessionId = ref.sessionId;
+      b.subSessionInferred = true;
+      claimed.add(ref.sessionId);
+    }
+  }
+}
+
 const inlineBlocks = computed<DisplayBlock[]>(() => {
   const blocks: DisplayBlock[] = [];
   for (const part of msgStore.getParts(props.messageId)) {
@@ -142,17 +191,23 @@ const inlineBlocks = computed<DisplayBlock[]>(() => {
       if (!text) continue;
       blocks.push({ kind: "reasoning", id: part.id, text });
     } else if (part.type === "tool") {
+      const toolInput =
+        part.state.status === "pending"
+          ? undefined
+          : (part.state.input as Record<string, unknown> | undefined);
       blocks.push({
         kind: "tool",
         id: part.id,
         tool: part.tool,
         state: part.state,
         title: resolveToolTitle(part.tool, part.state),
+        command: extractCommand(toolInput),
         output: part.state.status === "completed" ? part.state.output : undefined,
         error: part.state.status === "error" ? part.state.error : undefined,
       });
     }
   }
+  resolveSubSessions(blocks);
   return blocks;
 });
 
@@ -338,6 +393,10 @@ function toolStatusColor(block: { state: ToolState }): string {
       return "text-accent-rose";
   }
 }
+
+function onJump(sessionId: string): void {
+  emit("navigate-session", sessionId);
+}
 </script>
 
 <template>
@@ -397,7 +456,26 @@ function toolStatusColor(block: { state: ToolState }): string {
             {{ item.block.tool }}
           </span>
           <span
-            v-if="item.block.title"
+            v-if="item.block.subSessionId"
+            class="flex min-w-0 flex-1 items-center truncate font-mono text-[11px]"
+          >
+            <span
+              role="button"
+              tabindex="0"
+              class="cursor-pointer truncate text-accent-cyan underline decoration-dotted underline-offset-2 hover:decoration-solid"
+              :title="
+                item.block.subSessionInferred
+                  ? t('chat.subSessionInferred')
+                  : t('chat.openSubSession')
+              "
+              @click.stop="onJump(item.block.subSessionId!)"
+              @keydown.enter.stop.prevent="onJump(item.block.subSessionId!)"
+              >{{ item.block.title || item.block.tool }}</span
+            >
+            <span class="ml-0.5 text-accent-cyan/80">↗</span>
+          </span>
+          <span
+            v-else-if="item.block.title"
             class="min-w-0 flex-1 truncate font-mono text-[11px] text-surface-300"
             :title="item.block.title"
           >
@@ -418,11 +496,25 @@ function toolStatusColor(block: { state: ToolState }): string {
           />
         </button>
         <div
-          v-if="expandedTools[item.block.id] && (item.block.output || item.block.error)"
-          class="mt-1 max-h-64 overflow-auto whitespace-pre-wrap rounded-md border border-surface-800 bg-black/30 px-2 py-1.5 font-mono text-[11px] text-surface-300"
-          :class="item.block.error ? 'text-accent-rose' : ''"
+          v-if="
+            expandedTools[item.block.id] &&
+            (item.block.command || item.block.output || item.block.error)
+          "
+          class="mt-1 max-h-64 overflow-auto rounded-md border border-surface-800 bg-black/30 px-2 py-1.5 font-mono text-[11px]"
         >
-          {{ item.block.error || item.block.output }}
+          <div v-if="item.block.command" class="whitespace-pre-wrap break-all text-surface-200">
+            <span class="select-none text-accent-emerald/70">$</span> {{ item.block.command }}
+          </div>
+          <div
+            v-if="item.block.output || item.block.error"
+            class="whitespace-pre-wrap text-surface-300"
+            :class="[
+              item.block.error ? 'text-accent-rose' : '',
+              item.block.command ? 'mt-1.5 border-t border-surface-800 pt-1.5' : '',
+            ]"
+          >
+            {{ item.block.error || item.block.output }}
+          </div>
         </div>
       </div>
 
@@ -476,7 +568,26 @@ function toolStatusColor(block: { state: ToolState }): string {
                 {{ block.tool }}
               </span>
               <span
-                v-if="block.title"
+                v-if="block.subSessionId"
+                class="flex min-w-0 flex-1 items-center truncate font-mono text-[11px]"
+              >
+                <span
+                  role="button"
+                  tabindex="0"
+                  class="cursor-pointer truncate text-accent-cyan underline decoration-dotted underline-offset-2 hover:decoration-solid"
+                  :title="
+                    block.subSessionInferred
+                      ? t('chat.subSessionInferred')
+                      : t('chat.openSubSession')
+                  "
+                  @click.stop="onJump(block.subSessionId!)"
+                  @keydown.enter.stop.prevent="onJump(block.subSessionId!)"
+                  >{{ block.title || block.tool }}</span
+                >
+                <span class="ml-0.5 text-accent-cyan/80">↗</span>
+              </span>
+              <span
+                v-else-if="block.title"
                 class="min-w-0 flex-1 truncate font-mono text-[11px] text-surface-300"
                 :title="block.title"
               >
@@ -492,11 +603,22 @@ function toolStatusColor(block: { state: ToolState }): string {
               </span>
             </button>
             <div
-              v-if="expandedTools[block.id] && (block.output || block.error)"
-              class="mt-1 max-h-64 overflow-auto whitespace-pre-wrap rounded-md border border-surface-800 bg-black/30 px-2 py-1.5 font-mono text-[11px] text-surface-300"
-              :class="block.error ? 'text-accent-rose' : ''"
+              v-if="expandedTools[block.id] && (block.command || block.output || block.error)"
+              class="mt-1 max-h-64 overflow-auto rounded-md border border-surface-800 bg-black/30 px-2 py-1.5 font-mono text-[11px]"
             >
-              {{ block.error || block.output }}
+              <div v-if="block.command" class="whitespace-pre-wrap break-all text-surface-200">
+                <span class="select-none text-accent-emerald/70">$</span> {{ block.command }}
+              </div>
+              <div
+                v-if="block.output || block.error"
+                class="whitespace-pre-wrap text-surface-300"
+                :class="[
+                  block.error ? 'text-accent-rose' : '',
+                  block.command ? 'mt-1.5 border-t border-surface-800 pt-1.5' : '',
+                ]"
+              >
+                {{ block.error || block.output }}
+              </div>
             </div>
           </div>
         </div>

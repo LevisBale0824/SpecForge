@@ -357,7 +357,9 @@ function submitManualPath() {
           </div>
         </template>
         <template v-else>
-          <router-view />
+          <router-view v-slot="{ Component }">
+            <component :is="Component" @navigate-session="onSelectSession" />
+          </router-view>
           <InputPanel v-if="isChatRoute()" />
         </template>
       </main>

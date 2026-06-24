@@ -39,6 +39,9 @@ export default {
     send: "发送",
     abort: "停止",
     thinking: "思考中...",
+    openSubSession: "跳转到子会话",
+    subSessionInferred: "推测匹配的子会话(点击查看)",
+    sessionNotReady: "子会话尚未就绪",
   },
   modelPicker: {
     label: "模型",

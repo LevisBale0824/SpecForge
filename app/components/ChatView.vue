@@ -4,6 +4,10 @@ import MessageContent from "./MessageContent.vue";
 import { stripSystemReminder, useMessages } from "../composables/useMessages";
 import { useAutoScroller, type ScrollMode } from "../composables/useAutoScroller";
 
+defineEmits<{
+  "navigate-session": [sessionId: string];
+}>();
+
 const msgStore = useMessages();
 
 // Public-dir asset URLs must be prefixed with BASE_URL so they resolve under
@@ -141,7 +145,10 @@ function jumpToLatest() {
               <div class="mb-1 text-[10px] font-semibold tracking-wider text-accent-emerald">
                 Hephaestus
               </div>
-              <MessageContent :message-id="msg.id" />
+              <MessageContent
+                :message-id="msg.id"
+                @navigate-session="$emit('navigate-session', $event)"
+              />
             </div>
           </template>
 
@@ -153,7 +160,10 @@ function jumpToLatest() {
               <div class="mb-1 text-[10px] font-semibold tracking-wider text-accent-cyan">
                 Patron
               </div>
-              <MessageContent :message-id="msg.id" />
+              <MessageContent
+                :message-id="msg.id"
+                @navigate-session="$emit('navigate-session', $event)"
+              />
             </div>
 
             <!-- Avatar -->

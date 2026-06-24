@@ -39,6 +39,9 @@ export default {
     send: "Send",
     abort: "Stop",
     thinking: "Thinking...",
+    openSubSession: "Open sub-session",
+    subSessionInferred: "Inferred sub-session (click to open)",
+    sessionNotReady: "Sub-session not ready yet",
   },
   modelPicker: {
     label: "Model",

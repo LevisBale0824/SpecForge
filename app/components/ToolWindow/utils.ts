@@ -1,3 +1,10 @@
+import type { SessionInfo, ToolState } from "../../types/sse";
+
+export function extractCommand(input: Record<string, unknown> | undefined): string | undefined {
+  const command = typeof input?.command === "string" ? input.command.trim() : "";
+  return command || undefined;
+}
+
 export function formatGlobToolTitle(
   input: Record<string, unknown> | undefined,
 ): string | undefined {
@@ -170,4 +177,69 @@ export function guessLanguageFromPath(path?: string): string {
     default:
       return "text";
   }
+}
+
+// ── Sub-agent session navigation ─────────────────────────────────────────
+// Primary id source is metadata.sessionId; on interrupt/abort opencode omits
+// it (upstream bug #22348/#13910), so we fall back to output text then parentID.
+
+export type SubSessionRef = { sessionId: string; inferred: boolean };
+
+const SUBAGENT_TOOLS = new Set(["task", "batch"]);
+
+export function isSubAgentTool(tool: string): boolean {
+  return SUBAGENT_TOOLS.has(tool);
+}
+
+const SESSION_ID_KEYS = ["sessionId", "session_id", "subSessionID", "sub_session_id"] as const;
+
+// matches "task_id: <id>" in the tool output text
+const TASK_ID_RE = /task_id:\s*([A-Za-z0-9_-]+)/;
+
+export function extractSubSessionId(tool: string, state: ToolState): SubSessionRef | undefined {
+  if (!isSubAgentTool(tool)) return undefined;
+  const metadata =
+    state.status === "pending"
+      ? undefined
+      : (state.metadata as Record<string, unknown> | undefined);
+  if (metadata) {
+    for (const key of SESSION_ID_KEYS) {
+      const v = metadata[key];
+      if (typeof v === "string" && v.trim()) {
+        return { sessionId: v.trim(), inferred: false };
+      }
+    }
+  }
+  if (state.status === "completed") {
+    const m = TASK_ID_RE.exec(state.output);
+    if (m?.[1]) return { sessionId: m[1], inferred: true };
+  }
+  return undefined;
+}
+
+export function matchChildSession(
+  parentSessionId: string | undefined,
+  candidates: SessionInfo[],
+  opts: { toolTimeMs?: number; exclude?: Set<string> } = {},
+): SubSessionRef | undefined {
+  if (!parentSessionId) return undefined;
+  const exclude = opts.exclude ?? new Set<string>();
+  const kids = candidates.filter((s) => s.parentID === parentSessionId && !exclude.has(s.id));
+  if (kids.length === 0) return undefined;
+  const toolTimeMs = opts.toolTimeMs;
+  if (toolTimeMs === undefined) {
+    const latest = [...kids].sort((a, b) => (b.time.created ?? 0) - (a.time.created ?? 0))[0];
+    return latest ? { sessionId: latest.id, inferred: true } : undefined;
+  }
+  let best: SessionInfo | undefined;
+  let bestDiff = Infinity;
+  for (const k of kids) {
+    const createdMs = (k.time.created ?? 0) * 1000;
+    const diff = Math.abs(createdMs - toolTimeMs);
+    if (diff < bestDiff) {
+      bestDiff = diff;
+      best = k;
+    }
+  }
+  return best ? { sessionId: best.id, inferred: true } : undefined;
 }
