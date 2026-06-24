@@ -14,7 +14,7 @@
   },
   "scripts": {
     "dev": "vite",
-    "electron:dev": "ELECTRON=true vite",
+    "electron:dev": "cross-env ELECTRON=true vite",
     "build": "vue-tsc --noEmit && vite build",
     "preview": "vite preview",
     "test": "vitest run",
