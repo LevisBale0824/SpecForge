@@ -4,8 +4,11 @@
 // Module-level singleton (same pattern as useAgents). Subscribes to
 // `update:event` broadcasts on first import (in Electron mode) and exposes:
 // - reactive `state` (status / version / percent / error / lastCheckedAt)
-// - `autoUpdate` preference (persisted via main process)
-// - actions: checkForUpdates(), installUpdate(), setAutoUpdate()
+// - `releaseNotes` markdown for the currently-available version
+// - `currentVersion` (read from main process via app.getVersion)
+// - `autoUpdate` / `proxy` preferences (persisted via main process)
+// - actions: checkForUpdates(), downloadUpdate(), installUpdate(),
+//   setAutoUpdate(), setProxy(), skipVersion()
 // In browser mode everything is a no-op; UI can still be mounted safely.
 // ---------------------------------------------------------------------------
 
@@ -35,6 +38,8 @@ const state = ref<{
   lastCheckedAt: 0,
 });
 
+const releaseNotes = ref("");
+const currentVersion = ref("");
 const autoUpdate = ref(true);
 const proxy = ref("");
 let subscribed = false;
@@ -47,6 +52,7 @@ function applyEvent(event: UpdateEvent): void {
     case "available":
       state.value.status = "available";
       state.value.version = event.version;
+      releaseNotes.value = event.releaseNotes ?? "";
       state.value.lastCheckedAt = Date.now();
       break;
     case "up-to-date":
@@ -76,11 +82,12 @@ async function ensureSubscribed(): Promise<void> {
   subscribed = true;
   api.onUpdateEvent(applyEvent);
   try {
-    const prefs = await api.getUpdatePrefs();
+    const [prefs, version] = await Promise.all([api.getUpdatePrefs(), api.getAppVersion()]);
     autoUpdate.value = prefs.autoUpdate;
     proxy.value = prefs.proxy;
+    currentVersion.value = version;
   } catch (err) {
-    console.error("[useUpdate] getUpdatePrefs failed:", err);
+    console.error("[useUpdate] init failed:", err);
   }
 }
 
@@ -102,6 +109,17 @@ async function checkForUpdates(): Promise<UpdateEvent | null> {
     state.value.status = "error";
     state.value.error = message;
     return { status: "error", error: message };
+  }
+}
+
+/** Trigger download of the available update (user must initiate). */
+async function downloadUpdate(): Promise<void> {
+  const api = window.electronAPI;
+  if (!api) return;
+  try {
+    await api.downloadUpdate();
+  } catch (err) {
+    console.error("[useUpdate] downloadUpdate failed:", err);
   }
 }
 
@@ -138,16 +156,35 @@ async function setProxy(url: string): Promise<void> {
   }
 }
 
+/** Persist "ignore this version" so future auto-checks suppress it. */
+async function skipVersion(version: string | null): Promise<void> {
+  const api = window.electronAPI;
+  if (!api) return;
+  try {
+    await api.skipUpdateVersion(version);
+    // Reset visible state so the dialog closes.
+    state.value.status = "idle";
+    state.value.version = "";
+    releaseNotes.value = "";
+  } catch (err) {
+    console.error("[useUpdate] skipVersion failed:", err);
+  }
+}
+
 export function useUpdate() {
   // Subscribe on first use. Safe to call repeatedly; ensureSubscribed guards.
   void ensureSubscribed();
   return {
     state,
+    releaseNotes,
+    currentVersion,
     autoUpdate,
     proxy,
     checkForUpdates,
+    downloadUpdate,
     installUpdate,
     setAutoUpdate,
     setProxy,
+    skipVersion,
   };
 }

@@ -1,11 +1,12 @@
 <script setup lang="ts">
 // ---------------------------------------------------------------------------
-// UpdateToast — global, self-contained update notification
+// UpdateToast — lightweight feedback for non-blocking update outcomes
 // ---------------------------------------------------------------------------
-// Renders a single toast in the bottom-right that reflects the current
-// update state: available → prompt to view, progress → progress bar,
-// downloaded → "restart and install", error → brief failure message.
-// Manual "up-to-date" feedback also flows through here via the manual flag.
+// Only handles brief status hints after manual checks:
+//   - up-to-date: "you're on the latest version" (auto-dismiss)
+//   - error:      "check failed: <reason>" (manual-only; auto errors are
+//                 suppressed server-side)
+// Available / progress / downloaded states are handled by UpdateDialog.
 // ---------------------------------------------------------------------------
 
 import { computed, ref, watch } from "vue";
@@ -15,12 +16,8 @@ import { isElectron } from "../utils/electronBridge";
 
 const { t } = useI18n();
 const inElectron = isElectron();
-const { state, installUpdate } = useUpdate();
+const { state } = useUpdate();
 
-// Visibility rules:
-// - "available" / "progress" / "downloaded": visible
-// - "error": only when triggered manually (auto errors are server-side silent)
-// - manual "up-to-date": visible briefly via local flag
 const manualUpToDate = ref(false);
 let upToDateTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -39,68 +36,18 @@ watch(
 
 const visible = computed(() => {
   if (!inElectron) return false;
-  const s = state.value.status;
-  if (s === "available" || s === "progress" || s === "downloaded") return true;
-  if (s === "error" && state.value.error) return true;
   if (manualUpToDate.value) return true;
+  if (state.value.status === "error" && state.value.error) return true;
   return false;
 });
-
-const installing = ref(false);
-async function restart() {
-  if (installing.value) return;
-  installing.value = true;
-  try {
-    await installUpdate();
-  } finally {
-    installing.value = false;
-  }
-}
 </script>
 
 <template>
   <Teleport to="body">
     <Transition name="update-toast">
       <div v-if="visible" class="update-toast">
-        <!-- Available -->
-        <template v-if="state.status === 'available'">
-          <div class="ut-icon ut-icon-info">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M12 4v12m0 4h.01M4 12a8 8 0 1116 0 8 8 0 01-16 0z"
-              />
-            </svg>
-          </div>
-          <div class="ut-body">
-            <div class="ut-title">{{ t("update.available") }}</div>
-            <div class="ut-sub">v{{ state.version }} · {{ t("update.downloading") }}</div>
-            <div class="ut-progress-track">
-              <div class="ut-progress-bar ut-progress-indeterminate" />
-            </div>
-          </div>
-        </template>
-
-        <!-- Progress -->
-        <template v-else-if="state.status === 'progress'">
-          <div class="ut-icon ut-icon-info">
-            <svg class="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-width="2" d="M4 12a8 8 0 018-8" />
-            </svg>
-          </div>
-          <div class="ut-body">
-            <div class="ut-title">{{ t("update.downloading") }}</div>
-            <div class="ut-sub">{{ state.percent }}%</div>
-            <div class="ut-progress-track">
-              <div class="ut-progress-bar" :style="{ width: state.percent + '%' }" />
-            </div>
-          </div>
-        </template>
-
-        <!-- Downloaded -->
-        <template v-else-if="state.status === 'downloaded'">
+        <!-- Up-to-date (manual) -->
+        <template v-if="manualUpToDate">
           <div class="ut-icon ut-icon-success">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path
@@ -112,12 +59,8 @@ async function restart() {
             </svg>
           </div>
           <div class="ut-body">
-            <div class="ut-title">{{ t("update.ready") }}</div>
-            <div class="ut-sub">v{{ state.version }}</div>
+            <div class="ut-title">{{ t("update.upToDate") }}</div>
           </div>
-          <button class="ut-btn ut-btn-primary" :disabled="installing" @click="restart">
-            {{ t("update.install") }}
-          </button>
         </template>
 
         <!-- Error (manual only) -->
@@ -137,23 +80,6 @@ async function restart() {
             <div class="ut-sub ut-sub-error">{{ state.error }}</div>
           </div>
         </template>
-
-        <!-- Up-to-date (manual) -->
-        <template v-else-if="manualUpToDate">
-          <div class="ut-icon ut-icon-success">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2.5"
-                d="M5 13l4 4L19 7"
-              />
-            </svg>
-          </div>
-          <div class="ut-body">
-            <div class="ut-title">{{ t("update.upToDate") }}</div>
-          </div>
-        </template>
       </div>
     </Transition>
   </Teleport>
@@ -168,7 +94,7 @@ async function restart() {
   display: flex;
   align-items: center;
   gap: 0.75rem;
-  min-width: 280px;
+  min-width: 240px;
   max-width: 360px;
   padding: 0.85rem 1rem;
   background: var(--color-surface-900, #18181b);
@@ -186,11 +112,6 @@ async function restart() {
   width: 28px;
   height: 28px;
   border-radius: 8px;
-}
-
-.ut-icon-info {
-  background: color-mix(in srgb, var(--color-accent-cyan, #22d3ee) 18%, transparent);
-  color: var(--color-accent-cyan, #22d3ee);
 }
 
 .ut-icon-success {
@@ -225,63 +146,6 @@ async function restart() {
 
 .ut-sub-error {
   color: var(--color-accent-rose, #f43f5e);
-}
-
-.ut-progress-track {
-  position: relative;
-  height: 3px;
-  margin-top: 0.5rem;
-  background: var(--color-surface-800, #27272a);
-  border-radius: 2px;
-  overflow: hidden;
-}
-
-.ut-progress-bar {
-  height: 100%;
-  background: var(--color-accent-cyan, #22d3ee);
-  border-radius: 2px;
-  transition: width 0.2s ease;
-}
-
-.ut-progress-indeterminate {
-  width: 40% !important;
-  animation: ut-indeterminate 1.4s ease-in-out infinite;
-}
-
-@keyframes ut-indeterminate {
-  0% {
-    transform: translateX(-100%);
-  }
-  100% {
-    transform: translateX(280%);
-  }
-}
-
-.ut-btn {
-  flex: 0 0 auto;
-  padding: 0.4rem 0.85rem;
-  font-size: 12px;
-  font-weight: 600;
-  border: 0;
-  border-radius: 6px;
-  cursor: pointer;
-  transition:
-    background-color 0.15s ease,
-    opacity 0.15s ease;
-}
-
-.ut-btn-primary {
-  background: var(--color-accent-cyan, #22d3ee);
-  color: var(--color-surface-950, #0f172a);
-}
-
-.ut-btn-primary:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--color-accent-cyan, #22d3ee) 85%, white);
-}
-
-.ut-btn-primary:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
 }
 
 .update-toast-enter-active,

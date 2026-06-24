@@ -40,11 +40,14 @@ contextBridge.exposeInMainWorld("electronAPI", {
   },
   // ── Auto-updater ───────────────────────────────────────────────────────
   checkForUpdates: () => ipcRenderer.invoke("update:check"),
+  downloadUpdate: () => ipcRenderer.invoke("update:download"),
   installUpdate: () => ipcRenderer.invoke("update:install"),
+  getAppVersion: () => ipcRenderer.invoke("update:getVersion"),
   getUpdatePrefs: () => ipcRenderer.invoke("update:getPrefs"),
   setUpdateAutoCheck: (enabled) =>
     ipcRenderer.invoke("update:setAutoCheck", enabled),
   setUpdateProxy: (proxy) => ipcRenderer.invoke("update:setProxy", proxy),
+  skipUpdateVersion: (version) => ipcRenderer.invoke("update:skipVersion", version),
   onUpdateEvent: (callback) => {
     const handler = (_event, payload) => callback(payload);
     ipcRenderer.on("update:event", handler);

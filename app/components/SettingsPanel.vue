@@ -160,6 +160,16 @@ const proxyInput = ref(update.proxy.value);
 async function applyProxy() {
   await update.setProxy(proxyInput.value);
 }
+
+// Update status line under the "check now" button.
+const updateStatus = computed(() => {
+  const s = update.state.value.status;
+  if (s === "checking") return t("update.checking");
+  if (s === "progress") return `${t("update.downloading")} · ${update.state.value.percent}%`;
+  if (s === "downloaded") return `${t("update.ready")} · v${update.state.value.version}`;
+  if (s === "available") return `${t("update.available")} · v${update.state.value.version}`;
+  return "";
+});
 </script>
 
 <template>
@@ -407,43 +417,42 @@ async function applyProxy() {
 
           <!-- ── About / Update tab ─────────────────────────────────── -->
           <template v-else-if="activeTab === 'about'">
-            <!-- Check for updates -->
+            <!-- Current version + check for updates -->
             <div class="setting-section">
               <label class="setting-label">{{ t("update.section") }}</label>
-              <button
-                type="button"
-                class="px-3 py-2 text-xs font-medium rounded-lg bg-accent-cyan/15 text-accent-cyan hover:bg-accent-cyan/25 transition-colors inline-flex items-center gap-2 disabled:opacity-50 disabled:cursor-wait"
-                :disabled="checking"
-                @click="checkForUpdates"
-              >
-                <svg
-                  class="w-3.5 h-3.5"
-                  :class="checking ? 'animate-spin' : ''"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
+              <div class="flex items-center gap-3">
+                <span class="text-xs text-surface-400">
+                  {{ t("update.currentVersion") }}:
+                  <span class="text-surface-200 font-medium"
+                    >v{{ update.currentVersion.value || "—" }}</span
+                  >
+                </span>
+                <button
+                  type="button"
+                  class="px-3 py-1.5 text-xs font-medium rounded-lg bg-accent-cyan/15 text-accent-cyan hover:bg-accent-cyan/25 transition-colors inline-flex items-center gap-2 disabled:opacity-50 disabled:cursor-wait"
+                  :disabled="checking"
+                  @click="checkForUpdates"
                 >
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    stroke-width="2.5"
-                    d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-                  />
-                </svg>
-                <span>{{ checking ? t("update.checking") : t("update.checkNow") }}</span>
-              </button>
+                  <svg
+                    class="w-3.5 h-3.5"
+                    :class="checking ? 'animate-spin' : ''"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2.5"
+                      d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                    />
+                  </svg>
+                  <span>{{ checking ? t("update.checking") : t("update.checkNow") }}</span>
+                </button>
+              </div>
               <!-- Live status line -->
-              <p
-                v-if="update.state.value.status === 'progress'"
-                class="text-xs text-surface-400 mt-2"
-              >
-                {{ t("update.downloading") }} · {{ update.state.value.percent }}%
-              </p>
-              <p
-                v-else-if="update.state.value.status === 'downloaded'"
-                class="text-xs text-accent-emerald mt-2"
-              >
-                {{ t("update.ready") }} · v{{ update.state.value.version }}
+              <p v-if="updateStatus" class="text-xs text-surface-400 mt-2">
+                {{ updateStatus }}
               </p>
             </div>
 

@@ -47,7 +47,7 @@ export type {
 // ── Auto-updater IPC ────────────────────────────────────────────────────
 export type UpdateEvent =
   | { status: "checking" }
-  | { status: "available"; version: string; releaseNotes?: unknown }
+  | { status: "available"; version: string; releaseNotes: string }
   | { status: "up-to-date" }
   | {
       status: "progress";
@@ -62,6 +62,7 @@ export type UpdateEvent =
 export type UserUpdatePrefs = {
   autoUpdate: boolean;
   proxy: string;
+  skippedVersion: string | null;
 };
 
 export interface ElectronAPI {
@@ -109,14 +110,20 @@ export interface ElectronAPI {
   onConsoleData: (callback: (event: ConsoleDataEvent) => void) => () => void;
   /** Manual check for updates; resolves with the first terminal event. */
   checkForUpdates: () => Promise<UpdateEvent>;
+  /** User-triggered download of the available update. */
+  downloadUpdate: () => Promise<void>;
   /** Quit and install a downloaded update. */
   installUpdate: () => Promise<void>;
+  /** Current app version (from package.json via app.getVersion). */
+  getAppVersion: () => Promise<string>;
   /** Read persistent updater preferences (auto-check toggle). */
   getUpdatePrefs: () => Promise<UserUpdatePrefs>;
   /** Toggle auto-check and persist to userData/user-prefs.json. */
   setUpdateAutoCheck: (enabled: boolean) => Promise<UserUpdatePrefs>;
   /** Persist proxy URL and apply to session immediately. Empty string clears. */
   setUpdateProxy: (proxy: string) => Promise<UserUpdatePrefs>;
+  /** Persist "ignore this version" choice; null clears it. */
+  skipUpdateVersion: (version: string | null) => Promise<UserUpdatePrefs>;
   /** Subscribe to broadcast update events from the main process. */
   onUpdateEvent: (callback: (event: UpdateEvent) => void) => () => void;
   isElectron: true;
