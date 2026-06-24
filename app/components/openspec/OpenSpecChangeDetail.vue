@@ -13,6 +13,7 @@ const props = defineProps<{
   validation?: OpenSpecValidationResult;
   cliUnavailable?: boolean;
   toggling?: boolean;
+  readOnly?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -106,7 +107,12 @@ function opLabel(op: string): string {
         <span class="tab-badge">{{ change.deltaSpecs.length }}</span>
       </button>
 
-      <button class="validate-btn" :disabled="cliUnavailable || false" @click="emit('validate')">
+      <button
+        v-if="!readOnly"
+        class="validate-btn"
+        :disabled="cliUnavailable || false"
+        @click="emit('validate')"
+      >
         {{ t("openspec.validate") }}
       </button>
     </div>
@@ -142,7 +148,7 @@ function opLabel(op: string): string {
               v-for="task in group.tasks"
               :key="task.id"
               :task="task"
-              :disabled="toggling"
+              :disabled="readOnly || toggling"
               @toggle="(id, done) => emit('toggle-task', id, done)"
             />
           </ul>

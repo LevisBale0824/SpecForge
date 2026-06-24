@@ -9,6 +9,7 @@ import SettingsPanel from "./components/SettingsPanel.vue";
 import ConsolePanel from "./components/ConsolePanel.vue";
 import DiffViewer from "./components/DiffViewer.vue";
 import FileViewer from "./components/FileViewer.vue";
+import OpenSpecPanel from "./components/openspec/OpenSpecPanel.vue";
 import { useRoute, useRouter } from "vue-router";
 import { useFloatingWindows } from "./composables/useFloatingWindows";
 import { useProject } from "./composables/useProject";
@@ -34,6 +35,7 @@ const sidebarResize = useResizable({
 const sidePanelWidth = sidebarResize.size;
 const showSettings = ref(false);
 const showConsole = ref(false);
+const showOpenSpecDialog = ref(false);
 const consoleHeight = ref(220);
 const consolePanelEl = ref<InstanceType<typeof ConsolePanel> | null>(null);
 const backend = useBackend();
@@ -52,7 +54,7 @@ function updateExtent() {
   fw.setExtent(window.innerWidth, window.innerHeight);
 }
 
-// Currently-selected workspace diff — shown in a right-side column instead of
+// Currently-selected workspace diff, shown in a right-side column instead of
 // a floating window so the user can read it alongside the chat.
 const activeDiff = ref<MessageDiffEntry | null>(null);
 
@@ -119,10 +121,11 @@ function onWindowClose(key: string) {
 }
 
 function onSelectSession(sessionId: string) {
-  // Selecting a session means leaving the diff/file view — deactivate any
+  // Selecting a session means leaving the diff/file view, deactivate any
   // active file tab and return to the chat.
   activeDiff.value = null;
   activeFilePath.value = null;
+  showOpenSpecDialog.value = false;
   backend.selectSession(sessionId);
   router.push({ name: "chat" });
 }
@@ -138,17 +141,20 @@ function onAbortSession(sessionId: string) {
 function onNewSession() {
   activeDiff.value = null;
   activeFilePath.value = null;
+  showOpenSpecDialog.value = false;
   backend.startNewSession();
   router.push({ name: "chat" });
 }
 
 function onOpenDiff(diff: MessageDiffEntry) {
+  showOpenSpecDialog.value = false;
   activeDiff.value = diff;
 }
 
 function onOpenFile(path: string) {
+  showOpenSpecDialog.value = false;
   // Tab behavior: dedupe by path, push if new, always activate. Mirrors
-  // VSCode — clicking a file in the explorer opens/focuses a tab.
+  // VSCode-style behavior: clicking a file in the explorer opens or focuses a tab.
   if (!openFiles.value.includes(path)) {
     openFiles.value = [...openFiles.value, path];
   }
@@ -227,8 +233,10 @@ function submitManualPath() {
     <!-- Top Bar -->
     <TopBar
       :console-active="showConsole"
+      :openspec-active="showOpenSpecDialog"
       @toggle-settings="showSettings = !showSettings"
       @toggle-console="toggleConsole"
+      @toggle-openspec="showOpenSpecDialog = !showOpenSpecDialog"
       @open-folder="handleOpenFolder"
     />
 
@@ -254,7 +262,7 @@ function submitManualPath() {
       <div
         class="group relative w-1 flex-shrink-0 cursor-col-resize bg-surface-800/40 transition-colors hover:bg-accent-cyan/40"
         :class="sidebarResize.isDragging.value ? '!bg-accent-cyan/60' : ''"
-        title="拖拽调整宽度"
+        title="??????"
         @pointerdown="sidebarResize.start"
       >
         <div class="absolute inset-y-0 -left-1 -right-1" />
@@ -267,12 +275,7 @@ function submitManualPath() {
             <span class="diff-toolbar-title" :title="activeDiff.file">
               {{ activeDiff.file }}
             </span>
-            <button
-              type="button"
-              class="diff-toolbar-close"
-              title="关闭对比视图"
-              @click="onCloseDiff"
-            >
+            <button type="button" class="diff-toolbar-close" title="??????" @click="onCloseDiff">
               <svg
                 width="14"
                 height="14"
@@ -316,7 +319,7 @@ function submitManualPath() {
               <span
                 class="rounded p-0.5 text-surface-500 opacity-0 transition-opacity hover:bg-surface-700 hover:text-surface-100 group-hover:opacity-100"
                 :class="{ '!opacity-100': p === activeFilePath }"
-                title="关闭"
+                title="??"
                 @click.stop="onCloseFile(p)"
               >
                 <svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -332,7 +335,7 @@ function submitManualPath() {
             <button
               type="button"
               class="ml-auto rounded px-2 py-1 text-xs text-surface-500 transition-colors hover:bg-surface-800 hover:text-surface-200"
-              title="关闭所有标签"
+              title="??????"
               @click="onCloseAllFiles"
             >
               <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -375,6 +378,43 @@ function submitManualPath() {
 
     <!-- Settings Modal -->
     <SettingsPanel v-model="showSettings" />
+    <!-- OpenSpec Dialog -->
+    <Teleport to="body">
+      <div v-if="showOpenSpecDialog" class="openspec-dialog-layer">
+        <div class="openspec-dialog-backdrop" @click="showOpenSpecDialog = false" />
+        <section class="openspec-dialog" role="dialog" aria-modal="true" aria-label="OpenSpec">
+          <header class="openspec-dialog-header">
+            <div class="openspec-dialog-title-group">
+              <span class="openspec-dialog-title">OpenSpec</span>
+              <span class="openspec-dialog-subtitle">Spec workflow</span>
+            </div>
+            <button
+              type="button"
+              class="openspec-dialog-close"
+              title="Close OpenSpec"
+              @click="showOpenSpecDialog = false"
+            >
+              <svg
+                width="15"
+                height="15"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+            </button>
+          </header>
+          <div class="openspec-dialog-body">
+            <OpenSpecPanel variant="dialog" />
+          </div>
+        </section>
+      </div>
+    </Teleport>
 
     <!-- Floating Window Overlay (tool-call windows) -->
     <div class="fixed inset-0 pointer-events-none" style="z-index: 9999">
@@ -470,6 +510,90 @@ function submitManualPath() {
 }
 
 .diff-main {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.openspec-dialog-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 34px;
+}
+
+.openspec-dialog-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(2, 6, 23, 0.68);
+}
+
+.openspec-dialog {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: min(1120px, calc(100vw - 68px));
+  height: min(780px, calc(100vh - 68px));
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--color-surface-700, #334155) 76%, transparent);
+  border-radius: 8px;
+  background: var(--color-surface-950, #020617);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.46);
+}
+
+.openspec-dialog-header {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px 11px;
+  border-bottom: 1px solid color-mix(in srgb, var(--color-surface-800, #1e293b) 78%, transparent);
+  background: color-mix(in srgb, var(--color-surface-900, #0f172a) 86%, transparent);
+}
+
+.openspec-dialog-title-group {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.openspec-dialog-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--color-surface-100, #f1f5f9);
+}
+
+.openspec-dialog-subtitle {
+  font-size: 11px;
+  color: var(--color-surface-500, #64748b);
+}
+
+.openspec-dialog-close {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--color-surface-500, #64748b);
+  cursor: pointer;
+}
+
+.openspec-dialog-close:hover {
+  background: color-mix(in srgb, var(--color-accent-rose, #f43f5e) 18%, transparent);
+  color: var(--color-accent-rose, #f43f5e);
+}
+
+.openspec-dialog-body {
   flex: 1;
   min-height: 0;
   overflow: hidden;

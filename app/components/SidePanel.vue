@@ -4,7 +4,6 @@ import { useI18n } from "vue-i18n";
 import SessionTree from "./SessionTree.vue";
 import FileTree from "./FileTree.vue";
 import MessageFileChanges from "./MessageFileChanges.vue";
-import OpenSpecPanel from "./openspec/OpenSpecPanel.vue";
 import SidePanelSection from "./SidePanelSection.vue";
 import { useProject } from "../composables/useProject";
 import { useMessages } from "../composables/useMessages";
@@ -30,18 +29,17 @@ const props = withDefaults(
   },
 );
 
-// ── Collapsible sections ─────────────────────────────────────────────────
+// Collapsible sections.
 // Each section can be independently collapsed. When all expanded, they share
 // the available height evenly (flex: 1 1 0). A collapsed section contributes
 // only its header height.
 
-type SectionId = "sessions" | "files" | "diff" | "openspec";
-// All sections start collapsed — the user opts in to each one.
+type SectionId = "sessions" | "files" | "diff";
+// All sections start collapsed; the user opts in to each one.
 const collapsed = ref<Record<SectionId, boolean>>({
   sessions: true,
   files: true,
   diff: true,
-  openspec: true,
 });
 
 function toggleSection(id: SectionId) {
@@ -62,7 +60,7 @@ function handleOpenDiff(diff: MessageDiffEntry) {
   emit("open-diff", diff);
 }
 
-// ── Diff data ────────────────────────────────────────────────────────────
+// Diff data.
 
 const workspaceDiffEntries = computed<MessageDiffEntry[]>(() =>
   props.workspaceDiffs
@@ -91,7 +89,7 @@ const sections = computed(() => [
     title: t("sidebar.sessions"),
     // Count only root sessions (those without a parentID). Sub-agent
     // sessions are nested under their parent and shouldn't inflate the
-    // top-level count — otherwise "5 sessions" might really be 1 parent
+    // top-level count; otherwise "5 sessions" might really be 1 parent
     // + 4 sub-agents.
     badge: props.sessions.filter((s) => !s.parentID).length,
     collapsed: collapsed.value.sessions,
@@ -110,13 +108,6 @@ const sections = computed(() => [
     title: "Diff",
     badge: activeDiffCount.value,
     collapsed: collapsed.value.diff,
-    canCreate: false,
-  },
-  {
-    id: "openspec" as const,
-    title: t("sidebar.openspec"),
-    badge: 0,
-    collapsed: collapsed.value.openspec,
     canCreate: false,
   },
 ]);
@@ -170,11 +161,6 @@ const sections = computed(() => [
           @open-diff="handleOpenDiff"
         />
         <div v-else class="section-empty">No file changes</div>
-      </template>
-
-      <!-- OpenSpec -->
-      <template v-else>
-        <OpenSpecPanel />
       </template>
     </SidePanelSection>
   </aside>

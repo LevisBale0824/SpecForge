@@ -3,6 +3,7 @@ import { computed, onMounted, onUnmounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { useProject } from "../composables/useProject";
 import { useBackend } from "../composables/useBackend";
+import { useOpenSpec } from "../composables/useOpenSpec";
 import {
   isElectron,
   onWindowMaximizeChange,
@@ -15,18 +16,23 @@ import {
 const { t } = useI18n();
 const project = useProject();
 const backend = useBackend();
+const openSpec = useOpenSpec();
 const projectState = computed(() => project.state);
 const inElectron = isElectron();
 
 const emit = defineEmits<{
   "toggle-settings": [];
   "toggle-console": [];
+  "toggle-openspec": [];
   "open-folder": [];
 }>();
 
 const props = defineProps<{
   consoleActive?: boolean;
+  openspecActive?: boolean;
 }>();
+
+const openspecBadge = computed(() => openSpec.state.activeChanges.length);
 
 const projectName = computed(() => projectState.value.directoryName || "");
 
@@ -152,6 +158,38 @@ function openFolder() {
           <path d="M7 9l3 3-3 3" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
           <line x1="13" y1="15" x2="17" y2="15" stroke-width="2" stroke-linecap="round" />
         </svg>
+      </button>
+      <button
+        class="relative px-2 py-1 text-xs rounded transition-colors titlebar-nodrag"
+        :class="
+          props.openspecActive
+            ? 'text-accent-cyan bg-accent-cyan/10'
+            : 'text-surface-400 hover:text-surface-200 hover:bg-surface-800'
+        "
+        :title="t('topbar.openspec')"
+        :aria-pressed="props.openspecActive"
+        @click="emit('toggle-openspec')"
+      >
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            d="M9 4H6a2 2 0 00-2 2v12a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-3"
+          />
+          <rect x="9" y="2" width="6" height="4" rx="1" stroke-width="2" />
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            d="M9 12h6M9 16h4"
+          />
+        </svg>
+        <span
+          v-if="openspecBadge > 0"
+          class="absolute -top-0.5 -right-0.5 min-w-[15px] h-[15px] px-1 rounded-full bg-accent-cyan text-[9px] font-bold leading-[15px] text-center text-surface-950"
+          >{{ openspecBadge }}</span
+        >
       </button>
       <button
         class="px-2 py-1 text-xs text-surface-400 hover:text-surface-200 hover:bg-surface-800 rounded transition-colors titlebar-nodrag"

@@ -411,8 +411,11 @@ function readChangeDir(rootPath: string, relDir: string, archived: boolean): Gui
     }
   }
 
-  const proposalRel = `${relDir.split(path.sep).join("/")}/proposal.md`;
-  const tasksRel = `${relDir.split(path.sep).join("/")}/tasks.md`;
+  // relDir 是相对 openspec 根的路径(如 changes/<id>),readTextFile 接收相对
+  // 项目根的路径,所以这里要拼上 openspec/ 前缀,否则会去 <root>/changes/ 找文件。
+  const relUnderOpenspec = `${relDir.split(path.sep).join("/")}`;
+  const proposalRel = `openspec/${relUnderOpenspec}/proposal.md`;
+  const tasksRel = `openspec/${relUnderOpenspec}/tasks.md`;
   const designAbs = path.join(absDir, "design.md");
 
   const proposalMd = readTextFile(rootPath, proposalRel);

@@ -34,8 +34,12 @@ function onToggle(e: Event) {
       <span class="task-title">{{ task.title }}</span>
     </label>
 
+    <!-- 详情块(Requirement/Verification/...):仅勾选后展开 -->
     <div
-      v-if="task.requirement || task.verification || task.estimate || task.dependsOn || task.result"
+      v-if="
+        task.status === 'completed' &&
+        (task.requirement || task.verification || task.estimate || task.dependsOn || task.result)
+      "
       class="task-meta"
     >
       <div v-if="task.requirement" class="meta-line">
@@ -92,7 +96,9 @@ function onToggle(e: Event) {
 
 .task-title {
   flex: 1;
+  min-width: 0;
   word-break: break-word;
+  color: var(--color-surface-200, #e2e8f0);
 }
 
 .is-completed .task-title {
