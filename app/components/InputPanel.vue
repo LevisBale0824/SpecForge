@@ -274,10 +274,11 @@ function handleFileHover(index: number) {
 
 // ── Send ───────────────────────────────────────────────────────────────────
 // Extract @<rel/path> tokens from text. Only matches an @ at line start or
-// after whitespace; path charset excludes spaces so the token terminates at
-// the next space. Mirrors the menu's @ detection so what you see is what
-// gets sent.
-const ATTACHMENT_RE = /(^|\s)@([a-zA-Z0-9._\-/]+)/g;
+// after whitespace, AND requires the token to contain "." or "/" — a file
+// path always has an extension or a separator, whereas code annotations and
+// mentions (@Override, @Autowired, @username) are bare identifiers. This
+// keeps pasted Java/Spring/Python/TS code from being parsed as file refs.
+const ATTACHMENT_RE = /(^|\s)@([a-zA-Z0-9._\-/]*[./][a-zA-Z0-9._\-/]*)/g;
 
 function parseFileAttachments(text: string): string[] {
   const out: string[] = [];

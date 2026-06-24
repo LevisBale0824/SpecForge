@@ -100,39 +100,29 @@ export function useBackendMessageSend(options: MessageSendOptions) {
 /**
  * Build the `parts` array for `/prompt_async`.
  *
- * - OpenCode / Zero: native file parts — `{type:"file", source:{type:"file",
- *   path}}`. The backend reads the file and injects its content into the
- *   agent context (this is the whole point of @ mentions).
- * - CLI Bridge: the request body shape differs and file parts aren't
- *   supported — degrade by appending the file list as plain text so the
- *   agent at least sees which files were referenced.
+ * `@` in the input is only a file-picker trigger (autocomplete UI). Once a
+ * file is selected, the `@path` token stays literally in the text the user
+ * typed. We do NOT construct opencode `file` parts for attachments:
+ *
+ *   - opencode's `FilePart` schema requires `source.text` (client-inlined
+ *     content), which burns tokens by resending the file every turn.
+ *   - Sending a file part without `source` returns 200 but the agent gets
+ *     empty content and never replies (server doesn't read `url` itself).
+ *
+ * Instead, all backends get a single text part. The `@` is stripped from
+ * each `@path` mention so the agent sees clean filenames and reads them
+ * on-demand via its `read` tool — minimal tokens, on-demand loading.
  */
 function buildPromptParts(text: string, attachments: string[]): Array<Record<string, unknown>> {
-  const kind = getActiveBackendKind();
-  if (kind === "cli-bridge" || attachments.length === 0) {
-    if (kind === "cli-bridge" && attachments.length > 0) {
-      console.warn(
-        "[useBackendMessageSend] CLI Bridge does not support file parts; attaching as text.",
-        attachments,
-      );
-      const list = attachments.map((p) => `- @${p}`).join("\n");
-      return [{ type: "text", text: `${text}\n\nAttached files:\n${list}` }];
-    }
+  if (attachments.length === 0) {
     return [{ type: "text", text }];
   }
-
-  const parts: Array<Record<string, unknown>> = [{ type: "text", text }];
+  // Strip the leading `@` from each `@path` mention. The `@` is just the
+  // picker trigger and has no meaning to the agent; the inline path already
+  // tells the agent which file to read.
+  let normalized = text;
   for (const relPath of attachments) {
-    parts.push({
-      type: "file",
-      source: { type: "file", path: relPath },
-    });
+    normalized = normalized.split(`@${relPath}`).join(relPath);
   }
-  console.info("[useBackendMessageSend] buildPromptParts", {
-    backendKind: kind,
-    attachmentsCount: attachments.length,
-    attachments,
-    partsCount: parts.length,
-  });
-  return parts;
+  return [{ type: "text", text: normalized }];
 }
