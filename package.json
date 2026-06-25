@@ -1,6 +1,6 @@
 {
   "name": "specforge",
-  "version": "0.3.6",
+  "version": "0.4.0",
   "private": true,
   "type": "module",
   "main": "dist-electron/main.js",
@@ -55,7 +55,13 @@
       "target": "nsis"
     },
     "linux": {
-      "target": "AppImage"
+      "target": "AppImage",
+      "category": "Development",
+      "maintainer": "LevisBale0824 <291241443@qq.com>",
+      "vendor": "SpecForge",
+      "synopsis": "AI 编程协作工作站",
+      "description": "SpecForge — 集成 OpenSpec 工作流、交互式 Code Agent 执行与代码审查的现代化 AI 辅助开发工作台。",
+      "artifactName": "${productName}.${ext}"
     },
     "publish": {
       "provider": "github",

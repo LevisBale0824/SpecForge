@@ -57,6 +57,13 @@ jobs:
           ELECTRON_MIRROR: ""
           npm_config_electron_mirror: ""
 
+      # Generate PNG icons from build/icon.svg. Required so electron-builder
+      # has correct icons for both Windows (.ico) and Linux (.png + AppImage
+      # internal .DirIcon). Without this, AppImage ships with the default
+      # Electron icon.
+      - name: Generate icons
+        run: pnpm gen:icons
+
       - name: Build & Publish
         run: |
           echo "=== [1/3] vue-tsc ==="

@@ -81,6 +81,47 @@ pnpm electron:build
 
 构建产物位于 `release/` 目录。
 
+### Linux 安装与自动更新
+
+Linux 端以 **AppImage** 单文件格式发布，文件名固定为 `SpecForge.AppImage`（不带版本号，方便自动更新）。
+
+#### 首次安装
+
+```bash
+# 1. 下载最新版本（从 GitHub Release）
+#    https://github.com/LevisBale0824/SpecForge/releases/latest
+
+# 2. 赋予执行权限
+chmod +x SpecForge.AppImage
+
+# 3. 双击运行，或命令行启动
+./SpecForge.AppImage
+```
+
+如需集成到桌面菜单（GNOME/KDE 应用列表）：
+
+```bash
+./SpecForge.AppImage --install
+```
+
+会在 `~/.local/share/applications/specforge.desktop` 写入菜单项，`Exec=` 指向当前 AppImage 路径。
+
+> 也可以用 [AppImageLauncher](https://github.com/TheAssassin/AppImageLauncher) 获得首次运行弹窗集成体验，效果相同。
+
+#### 自动更新
+
+启动时检查 GitHub Release，发现新版本会在应用内弹出更新对话框（含版本对比 + release notes）。用户确认后下载新的 AppImage，退出时 electron-updater 会用新版本字节**替换当前运行的 AppImage 文件路径**（文件名保持 `SpecForge.AppImage` 不变），重启即新版本。
+
+**前置条件**：
+
+- AppImage 所在目录**必须对当前用户可写**（推荐 `~/Applications/`、`~/Apps/` 或 `~/Downloads/`）
+- 不要放在 `/opt/`、`/usr/local/bin/` 等需要 root 的位置，否则替换会失败
+- AppImage 文件名**不要手工改名**（不要加上版本号等），否则 `--install` 生成的 `.desktop` 会指向错误路径
+
+#### 集成元数据
+
+AppImage 内嵌了 `.desktop`、图标（`.DirIcon`）和应用元数据（`category=Development`、`maintainer` 等）。这些由 electron-builder 在构建时根据 `package.json > build.linux` 自动生成，每次构建版本号自动跟随 `package.json > version`，**不需要手动维护 .desktop 文件**。
+
 ### 发布新版本（触发自动更新）
 
 应用集成了 `electron-updater`，已安装的用户会在启动时自动检查 GitHub Release 并提示升级。

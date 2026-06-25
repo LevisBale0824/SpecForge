@@ -12,6 +12,7 @@ import * as path from "node:path";
 import * as fs from "node:fs";
 import { fileURLToPath } from "node:url";
 import { initAutoUpdater } from "./updater";
+import { installDesktopEntry, isLinuxAppImage } from "./linux-integration";
 
 // ── Directory reading ─────────────────────────────────────────────────────
 
@@ -1515,6 +1516,26 @@ function createWindow() {
 // ── App lifecycle ──────────────────────────────────────────────────────────
 
 app.whenReady().then(async () => {
+  // AppImage 集成入口:./SpecForge.AppImage --install
+  // 写入 ~/.local/share/applications/specforge.desktop 后立即退出。
+  if (process.argv.includes("--install")) {
+    try {
+      if (isLinuxAppImage()) {
+        const result = installDesktopEntry();
+        console.log(
+          `[--install] ${result.alreadyExisted ? "updated" : "created"} ${result.desktopPath}`,
+        );
+        console.log(`[--install] Exec="${result.execPath}"`);
+      } else {
+        console.error("[--install] 仅在 AppImage 模式下可用");
+      }
+    } catch (e) {
+      console.error("[--install] failed:", e instanceof Error ? e.message : e);
+    }
+    app.quit();
+    return;
+  }
+
   registerIpcHandlers();
   registerMenu();
   await startServer();
