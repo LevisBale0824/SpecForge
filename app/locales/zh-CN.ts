@@ -42,6 +42,12 @@ export default {
     openSubSession: "跳转到子会话",
     subSessionInferred: "推测匹配的子会话(点击查看)",
     sessionNotReady: "子会话尚未就绪",
+    childSession: {
+      title: "子 agent 会话",
+      hint: "由父任务自动驱动,无法直接发送消息。",
+      backToParent: "返回主会话",
+      orphanHint: "无法找到父会话,请在侧边栏选择其他会话。",
+    },
   },
   modelPicker: {
     label: "模型",

@@ -21,6 +21,30 @@ const pickerSessionId = computed(() => backend.selectedSessionId.value || DRAFT_
 const inputText = ref("");
 const textareaEl = ref<HTMLTextAreaElement | null>(null);
 
+// Sub-agent sessions are driven by their parent task's tool call, not by the
+// user. If the user clicks into one from the sidebar or a "↗" jump link, the
+// input box must not accept messages — otherwise a user turn lands inside a
+// conversation the parent agent owns, which collides with the in-flight task
+// and leaves the sub-session stuck in a "running" state that never resolves.
+// Detect via SessionInfo.parentID and replace the input area with a read-only
+// banner + a "back to parent" jump.
+const selectedSession = computed(() => {
+  const id = backend.selectedSessionId.value;
+  if (!id) return null;
+  return backend.sessions.value.find((s) => s.id === id) ?? null;
+});
+const isChildSession = computed(() => !!selectedSession.value?.parentID);
+const parentSessionId = computed(() => selectedSession.value?.parentID ?? null);
+const parentExists = computed(() => {
+  const pid = parentSessionId.value;
+  if (!pid) return false;
+  return backend.sessions.value.some((s) => s.id === pid);
+});
+function backToParent() {
+  const pid = parentSessionId.value;
+  if (pid && parentExists.value) backend.selectSession(pid);
+}
+
 // Auto-resize the textarea to fit content. Without this, picking a long
 // `@path/to/deep/file.ts` leaves the user with one visible line and a
 // scroll bar — they can't tell at a glance what got attached. Cap the
@@ -321,74 +345,122 @@ async function handleSend() {
 
 <template>
   <div class="relative border-t border-surface-800 bg-surface-900 px-4 py-4">
-    <div class="flex items-center gap-2 max-w-5xl mx-auto mb-2.5">
-      <ModelPicker :session-id="pickerSessionId" />
-      <AgentPicker :session-id="pickerSessionId" />
-    </div>
-    <div class="flex items-stretch gap-2.5 max-w-5xl mx-auto">
-      <textarea
-        ref="textareaEl"
-        v-model="inputText"
-        :placeholder="t('chat.placeholder')"
-        :disabled="backend.isSending.value || backend.isBusy.value"
-        rows="3"
-        class="flex-1 resize-none rounded-lg bg-surface-800 border border-surface-700 px-4 py-3 text-base text-surface-100 placeholder:text-surface-600 focus:outline-none focus:border-accent-cyan/50 transition-colors"
-        @keydown="handleKeydown"
-        @input="handleInput"
-      />
-      <button
-        v-if="!backend.isBusy.value && !backend.isSending.value"
-        :disabled="!inputText.trim()"
-        class="flex items-center justify-center self-stretch px-5 rounded-lg bg-accent-cyan/15 text-accent-cyan hover:bg-accent-cyan/25 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-        :title="t('chat.send')"
-        @click="handleSend"
+    <!-- Sub-agent session: replace the input area with a read-only banner.
+         The composer (textarea + ModelPicker + AgentPicker + menus) is hidden
+         entirely, because none of those controls make sense for a session the
+         user can't write to. -->
+    <div
+      v-if="isChildSession"
+      class="max-w-5xl mx-auto rounded-lg border border-surface-700 bg-surface-800/60 px-4 py-4 flex items-center gap-3"
+    >
+      <svg
+        class="w-5 h-5 shrink-0 text-surface-400"
+        fill="none"
+        stroke="currentColor"
+        viewBox="0 0 24 24"
       >
-        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+          d="M8 7h8M8 12h5M8 17h8M4 4v16"
+        />
+      </svg>
+      <div class="flex-1 min-w-0">
+        <p class="text-sm font-medium text-surface-200">
+          {{ t("chat.childSession.title") }}
+        </p>
+        <p class="text-xs text-surface-500 mt-0.5">
+          {{ parentExists ? t("chat.childSession.hint") : t("chat.childSession.orphanHint") }}
+        </p>
+      </div>
+      <button
+        v-if="parentExists"
+        class="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-accent-cyan/15 text-accent-cyan text-sm hover:bg-accent-cyan/25 transition-colors whitespace-nowrap"
+        @click="backToParent"
+      >
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path
             stroke-linecap="round"
             stroke-linejoin="round"
             stroke-width="2"
-            d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"
+            d="M15 19l-7-7 7-7"
           />
         </svg>
-      </button>
-      <button
-        v-else
-        class="flex items-center justify-center self-stretch px-5 rounded-lg bg-accent-rose/15 text-accent-rose hover:bg-accent-rose/25 transition-colors"
-        :title="t('chat.abort')"
-        @click="backend.abortSession()"
-      >
-        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <rect
-            x="6"
-            y="6"
-            width="12"
-            height="12"
-            rx="1.5"
-            stroke-linejoin="round"
-            stroke-width="2"
-          />
-        </svg>
+        {{ t("chat.childSession.backToParent") }}
       </button>
     </div>
 
-    <CommandMenu
-      v-if="showMenu"
-      :commands="commands"
-      :query="slashQuery"
-      :selected-index="selectedIndex"
-      :loading="commandsLoading"
-      @select="acceptSelection"
-      @hover="handleHover"
-    />
-    <FileMenu
-      v-else-if="showFileMenu"
-      :files="files"
-      :query="fileQuery"
-      :selected-index="selectedFileIndex"
-      :loading="filesLoading"
-      @select="acceptFileSelection"
-      @hover="handleFileHover"
-    />
+    <template v-else>
+      <div class="flex items-center gap-2 max-w-5xl mx-auto mb-2.5">
+        <ModelPicker :session-id="pickerSessionId" />
+        <AgentPicker :session-id="pickerSessionId" />
+      </div>
+      <div class="flex items-stretch gap-2.5 max-w-5xl mx-auto">
+        <textarea
+          ref="textareaEl"
+          v-model="inputText"
+          :placeholder="t('chat.placeholder')"
+          :disabled="backend.isSending.value || backend.isBusy.value"
+          rows="3"
+          class="flex-1 resize-none rounded-lg bg-surface-800 border border-surface-700 px-4 py-3 text-base text-surface-100 placeholder:text-surface-600 focus:outline-none focus:border-accent-cyan/50 transition-colors"
+          @keydown="handleKeydown"
+          @input="handleInput"
+        />
+        <button
+          v-if="!backend.isBusy.value && !backend.isSending.value"
+          :disabled="!inputText.trim()"
+          class="flex items-center justify-center self-stretch px-5 rounded-lg bg-accent-cyan/15 text-accent-cyan hover:bg-accent-cyan/25 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+          :title="t('chat.send')"
+          @click="handleSend"
+        >
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"
+            />
+          </svg>
+        </button>
+        <button
+          v-else
+          class="flex items-center justify-center self-stretch px-5 rounded-lg bg-accent-rose/15 text-accent-rose hover:bg-accent-rose/25 transition-colors"
+          :title="t('chat.abort')"
+          @click="backend.abortSession()"
+        >
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <rect
+              x="6"
+              y="6"
+              width="12"
+              height="12"
+              rx="1.5"
+              stroke-linejoin="round"
+              stroke-width="2"
+            />
+          </svg>
+        </button>
+      </div>
+
+      <CommandMenu
+        v-if="showMenu"
+        :commands="commands"
+        :query="slashQuery"
+        :selected-index="selectedIndex"
+        :loading="commandsLoading"
+        @select="acceptSelection"
+        @hover="handleHover"
+      />
+      <FileMenu
+        v-else-if="showFileMenu"
+        :files="files"
+        :query="fileQuery"
+        :selected-index="selectedFileIndex"
+        :loading="filesLoading"
+        @select="acceptFileSelection"
+        @hover="handleFileHover"
+      />
+    </template>
   </div>
 </template>

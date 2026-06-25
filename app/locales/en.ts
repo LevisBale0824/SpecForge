@@ -42,6 +42,12 @@ export default {
     openSubSession: "Open sub-session",
     subSessionInferred: "Inferred sub-session (click to open)",
     sessionNotReady: "Sub-session not ready yet",
+    childSession: {
+      title: "Sub-agent session",
+      hint: "Driven by its parent task. You can't send messages here.",
+      backToParent: "Back to parent session",
+      orphanHint: "Parent session not found. Pick another session from the sidebar.",
+    },
   },
   modelPicker: {
     label: "Model",
