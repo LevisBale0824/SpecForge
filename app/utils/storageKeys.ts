@@ -17,6 +17,7 @@ export const StorageKeys = {
     locale: `${PREFIX}ui:locale`,
     sidebarWidth: `${PREFIX}ui:sidebarWidth`,
     theme: `${PREFIX}ui:theme`,
+    followSystemTheme: `${PREFIX}ui:followSystemTheme`,
   },
 } as const;
 

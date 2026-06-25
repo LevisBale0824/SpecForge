@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import CodeContent from "../CodeContent.vue";
 import { useFloatingWindow } from "../../composables/useFloatingWindow";
+import { DEFAULT_SYNTAX_THEME } from "../../utils/themeTokens";
 
 export type ReasoningEntry = {
   id: string;
@@ -13,7 +14,7 @@ withDefaults(
     theme?: string;
   }>(),
   {
-    theme: "github-dark",
+    theme: DEFAULT_SYNTAX_THEME,
   },
 );
 

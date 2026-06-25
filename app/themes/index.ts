@@ -11,10 +11,20 @@
 //   light → surface-950 = lightest (app background), surface-100 = darkest (text)
 // The class names never change; only the values flip.
 //
-// Curated for development: high contrast, neutral backgrounds, syntax-friendly
-// accents. Inspired by popular editor palettes (One Dark, Dracula, Nord,
-// Tokyo Night, GitHub, Solarized).
+// `syntaxTokens` provides the 7 CSS variables consumed by Shiki's
+// `css-variables` theme — code blocks recolor instantly when the UI theme
+// changes, without re-invoking the highlighter.
 // ---------------------------------------------------------------------------
+
+export interface SyntaxTokens {
+  "--shiki-background": string;
+  "--shiki-foreground": string;
+  "--shiki-token-constant": string;
+  "--shiki-token-string": string;
+  "--shiki-token-comment": string;
+  "--shiki-token-keyword": string;
+  "--shiki-token-function": string;
+}
 
 export interface ThemeColors {
   "--color-surface-950": string;
@@ -43,15 +53,17 @@ export interface Theme {
   /** 5 preview swatches for the settings card. */
   swatches: [string, string, string, string, string];
   colors: ThemeColors;
+  /** Shiki css-variables theme tokens, recolor code blocks without re-render. */
+  syntaxTokens: SyntaxTokens;
 }
 
 export const themes: Theme[] = [
-  // ── Dark: deep sea blue (default) ───────────────────────────────────────
-  // Neutral near-black with cyan accent. Easy on the eyes, default choice.
+  // ── Dark: default (balanced neutral, project default) ───────────────────
+  // Near-black neutral with cyan accent. Easy on the eyes, default choice.
   {
-    id: "deep_sea_blue_dark",
-    name: "深海蓝",
-    nameEn: "Deep Sea Blue",
+    id: "default_dark",
+    name: "平衡",
+    nameEn: "Default",
     mode: "dark",
     swatches: ["#09090b", "#27272a", "#22d3ee", "#34d399", "#818cf8"],
     colors: {
@@ -72,113 +84,125 @@ export const themes: Theme[] = [
       "--color-accent-rose": "#fb7185",
       "--color-accent-indigo": "#818cf8",
     },
-  },
-  // ── Dark: midnight (One Dark inspired) ──────────────────────────────────
-  // Slate-blue background, blue primary. The most popular editor palette family.
-  {
-    id: "midnight_dark",
-    name: "午夜暗",
-    nameEn: "Midnight",
-    mode: "dark",
-    swatches: ["#0a0e1a", "#1e293b", "#3b82f6", "#10b981", "#a78bfa"],
-    colors: {
-      "--color-surface-950": "#0a0e1a",
-      "--color-surface-900": "#0f172a",
-      "--color-surface-800": "#1e293b",
-      "--color-surface-700": "#334155",
-      "--color-surface-600": "#475569",
-      "--color-surface-500": "#64748b",
-      "--color-surface-400": "#94a3b8",
-      "--color-surface-300": "#cbd5e1",
-      "--color-surface-200": "#e2e8f0",
-      "--color-surface-100": "#f1f5f9",
-      "--color-accent-cyan": "#3b82f6",
-      "--color-accent-cyan-dim": "#1e40af",
-      "--color-accent-emerald": "#10b981",
-      "--color-accent-amber": "#f59e0b",
-      "--color-accent-rose": "#ef4444",
-      "--color-accent-indigo": "#a78bfa",
+    syntaxTokens: {
+      "--shiki-background": "#0b0d10",
+      "--shiki-foreground": "#e4e4e7",
+      "--shiki-token-constant": "#22d3ee",
+      "--shiki-token-string": "#34d399",
+      "--shiki-token-comment": "#71717a",
+      "--shiki-token-keyword": "#fb7185",
+      "--shiki-token-function": "#818cf8",
     },
   },
-  // ── Dark: violet (Dracula inspired) ─────────────────────────────────────
-  // Deep purple background with vibrant accent. High energy, high contrast.
+  // ── Dark: ocean (深海, blue-cyan accent) ────────────────────────────────
+  // Inspired by opencode-visualizer-cn's ocean preset. Deep blue with cyan glow.
   {
-    id: "violet_dark",
-    name: "紫罗兰暗",
-    nameEn: "Violet Dark",
+    id: "ocean_dark",
+    name: "深海",
+    nameEn: "Ocean",
     mode: "dark",
-    swatches: ["#110a1a", "#241634", "#a855f7", "#ec4899", "#60a5fa"],
+    swatches: ["#0b1f33", "#13293d", "#4cc9f0", "#76e4f7", "#56cfe1"],
     colors: {
-      "--color-surface-950": "#110a1a",
-      "--color-surface-900": "#1a0f2e",
-      "--color-surface-800": "#241634",
-      "--color-surface-700": "#3a2455",
-      "--color-surface-600": "#4e3570",
-      "--color-surface-500": "#6c4f93",
-      "--color-surface-400": "#987bb8",
-      "--color-surface-300": "#c4afd6",
-      "--color-surface-200": "#e0d2ec",
-      "--color-surface-100": "#f1eaf7",
-      "--color-accent-cyan": "#a855f7",
-      "--color-accent-cyan-dim": "#6b21a8",
-      "--color-accent-emerald": "#10b981",
-      "--color-accent-amber": "#f59e0b",
-      "--color-accent-rose": "#ec4899",
-      "--color-accent-indigo": "#60a5fa",
+      "--color-surface-950": "#0a192d",
+      "--color-surface-900": "#0b1f33",
+      "--color-surface-800": "#102542",
+      "--color-surface-700": "#13293d",
+      "--color-surface-600": "#1a3556",
+      "--color-surface-500": "#3b6080",
+      "--color-surface-400": "#6f9bbb",
+      "--color-surface-300": "#a8c8de",
+      "--color-surface-200": "#d3e4f1",
+      "--color-surface-100": "#eef6fb",
+      "--color-accent-cyan": "#4cc9f0",
+      "--color-accent-cyan-dim": "#2ec4ff",
+      "--color-accent-emerald": "#76e4f7",
+      "--color-accent-amber": "#fbbf24",
+      "--color-accent-rose": "#fb7185",
+      "--color-accent-indigo": "#56cfe1",
+    },
+    syntaxTokens: {
+      "--shiki-background": "#0b1f33",
+      "--shiki-foreground": "#d3e4f1",
+      "--shiki-token-constant": "#4cc9f0",
+      "--shiki-token-string": "#76e4f7",
+      "--shiki-token-comment": "#5b7a96",
+      "--shiki-token-keyword": "#a78bfa",
+      "--shiki-token-function": "#56cfe1",
     },
   },
-  // ── Dark: Nord (Polar Night) ────────────────────────────────────────────
-  // Cool blue-gray, arctic palette. Calm, restrained, excellent for long sessions.
+  // ── Dark: forest (林境, Everforest-inspired) ────────────────────────────
+  // Deep neutral green-gray base with warm gold accent — avoids the flat
+  // all-green look by keeping the bg desaturated and using amber as the
+  // primary accent for real contrast.
   {
-    id: "nord_dark",
-    name: "极夜",
-    nameEn: "Nord",
+    id: "forest_dark",
+    name: "林境",
+    nameEn: "Forest",
     mode: "dark",
-    swatches: ["#2e3440", "#3b4252", "#88c0d0", "#a3be8c", "#5e81ac"],
+    swatches: ["#1e2520", "#2b352e", "#d3c6aa", "#a7c080", "#e69875"],
     colors: {
-      "--color-surface-950": "#2e3440",
-      "--color-surface-900": "#3b4252",
-      "--color-surface-800": "#434c5e",
-      "--color-surface-700": "#4c566a",
-      "--color-surface-600": "#5e6477",
-      "--color-surface-500": "#7b88a8",
-      "--color-surface-400": "#9ba8c0",
-      "--color-surface-300": "#c4cee0",
-      "--color-surface-200": "#d8dee9",
-      "--color-surface-100": "#eceff4",
-      "--color-accent-cyan": "#88c0d0",
-      "--color-accent-cyan-dim": "#5e81ac",
-      "--color-accent-emerald": "#a3be8c",
-      "--color-accent-amber": "#ebcb8b",
-      "--color-accent-rose": "#bf616a",
-      "--color-accent-indigo": "#b48ead",
+      "--color-surface-950": "#1e2520",
+      "--color-surface-900": "#272e29",
+      "--color-surface-800": "#2b352e",
+      "--color-surface-700": "#364039",
+      "--color-surface-600": "#4a554e",
+      "--color-surface-500": "#6b7872",
+      "--color-surface-400": "#9aa39e",
+      "--color-surface-300": "#c4ccc7",
+      "--color-surface-200": "#e0e4e1",
+      "--color-surface-100": "#f2f4f2",
+      "--color-accent-cyan": "#a7c080",
+      "--color-accent-cyan-dim": "#87a35e",
+      "--color-accent-emerald": "#a7c080",
+      "--color-accent-amber": "#dbbc7f",
+      "--color-accent-rose": "#e67e80",
+      "--color-accent-indigo": "#d3c6aa",
+    },
+    syntaxTokens: {
+      "--shiki-background": "#1e2520",
+      "--shiki-foreground": "#d3c6aa",
+      "--shiki-token-constant": "#dbbc7f",
+      "--shiki-token-string": "#a7c080",
+      "--shiki-token-comment": "#7a8079",
+      "--shiki-token-keyword": "#e67e80",
+      "--shiki-token-function": "#d3c6aa",
     },
   },
-  // ── Dark: Tokyo Night ───────────────────────────────────────────────────
-  // Modern muted blue-purple. Clean, balanced, very popular for code editors.
+  // ── Dark: sakura (樱粉, Tokyo-night inspired pink) ───────────────────────
+  // Neutral deep aubergine base (not muddy plum) with sakura pink + soft
+  // lavender accents — cleaner than the literal pink-on-pink approach.
   {
-    id: "tokyo_night_dark",
-    name: "东京夜",
-    nameEn: "Tokyo Night",
+    id: "sakura_dark",
+    name: "樱粉",
+    nameEn: "Sakura",
     mode: "dark",
-    swatches: ["#1a1b26", "#1f2335", "#7aa2f7", "#9ece6a", "#bb9af7"],
+    swatches: ["#1a1420", "#241a2c", "#ff9ec7", "#c4a7e7", "#9ece6a"],
     colors: {
-      "--color-surface-950": "#1a1b26",
-      "--color-surface-900": "#16161e",
-      "--color-surface-800": "#1f2335",
-      "--color-surface-700": "#292e42",
-      "--color-surface-600": "#3b4261",
-      "--color-surface-500": "#565f89",
-      "--color-surface-400": "#7a88a3",
-      "--color-surface-300": "#a9b1d6",
-      "--color-surface-200": "#c0caf5",
-      "--color-surface-100": "#e6e7fa",
-      "--color-accent-cyan": "#7dcfff",
-      "--color-accent-cyan-dim": "#7aa2f7",
+      "--color-surface-950": "#16121d",
+      "--color-surface-900": "#1a1420",
+      "--color-surface-800": "#241a2c",
+      "--color-surface-700": "#2f2440",
+      "--color-surface-600": "#3e3354",
+      "--color-surface-500": "#5b5274",
+      "--color-surface-400": "#87809e",
+      "--color-surface-300": "#b4aec3",
+      "--color-surface-200": "#dcd6e6",
+      "--color-surface-100": "#f3eff7",
+      "--color-accent-cyan": "#ff9ec7",
+      "--color-accent-cyan-dim": "#e679a8",
       "--color-accent-emerald": "#9ece6a",
       "--color-accent-amber": "#e0af68",
       "--color-accent-rose": "#f7768e",
-      "--color-accent-indigo": "#bb9af7",
+      "--color-accent-indigo": "#c4a7e7",
+    },
+    syntaxTokens: {
+      "--shiki-background": "#1a1420",
+      "--shiki-foreground": "#dcd6e6",
+      "--shiki-token-constant": "#e0af68",
+      "--shiki-token-string": "#9ece6a",
+      "--shiki-token-comment": "#5b5274",
+      "--shiki-token-keyword": "#c4a7e7",
+      "--shiki-token-function": "#ff9ec7",
     },
   },
   // ── Light: slate gray (GitHub inspired) ─────────────────────────────────
@@ -207,32 +231,14 @@ export const themes: Theme[] = [
       "--color-accent-rose": "#e11d48",
       "--color-accent-indigo": "#6366f1",
     },
-  },
-  // ── Light: ocean blue ───────────────────────────────────────────────────
-  // Bright sky background with blue accent. Fresh and focused.
-  {
-    id: "ocean_blue_light",
-    name: "海洋蓝",
-    nameEn: "Ocean Blue",
-    mode: "light",
-    swatches: ["#f0f9ff", "#bae6fd", "#0284c7", "#0d9488", "#6366f1"],
-    colors: {
-      "--color-surface-950": "#f0f9ff",
-      "--color-surface-900": "#e0f2fe",
-      "--color-surface-800": "#bae6fd",
-      "--color-surface-700": "#7dd3fc",
-      "--color-surface-600": "#38bdf8",
-      "--color-surface-500": "#0ea5e9",
-      "--color-surface-400": "#0284c7",
-      "--color-surface-300": "#0369a1",
-      "--color-surface-200": "#075985",
-      "--color-surface-100": "#0c4a6e",
-      "--color-accent-cyan": "#0284c7",
-      "--color-accent-cyan-dim": "#0e7490",
-      "--color-accent-emerald": "#0d9488",
-      "--color-accent-amber": "#d97706",
-      "--color-accent-rose": "#e11d48",
-      "--color-accent-indigo": "#6366f1",
+    syntaxTokens: {
+      "--shiki-background": "#f8fafc",
+      "--shiki-foreground": "#0f172a",
+      "--shiki-token-constant": "#0ea5e9",
+      "--shiki-token-string": "#10b981",
+      "--shiki-token-comment": "#64748b",
+      "--shiki-token-keyword": "#e11d48",
+      "--shiki-token-function": "#6366f1",
     },
   },
   // ── Light: Solarized Light ──────────────────────────────────────────────
@@ -261,10 +267,31 @@ export const themes: Theme[] = [
       "--color-accent-rose": "#dc322f",
       "--color-accent-indigo": "#6c71c4",
     },
+    syntaxTokens: {
+      "--shiki-background": "#fdf6e3",
+      "--shiki-foreground": "#073642",
+      "--shiki-token-constant": "#268bd2",
+      "--shiki-token-string": "#859900",
+      "--shiki-token-comment": "#8b8670",
+      "--shiki-token-keyword": "#dc322f",
+      "--shiki-token-function": "#6c71c4",
+    },
   },
 ];
 
-export const DEFAULT_THEME_ID = "deep_sea_blue_dark";
+export const DEFAULT_THEME_ID = "default_dark";
+
+/**
+ * Light/dark pairing for follow-system mode. Each dark theme maps to a light
+ * counterpart; themes missing a pair fall back to themselves (no flip).
+ */
+export const SYSTEM_MODE_PAIRS: Record<string, string> = {
+  default_dark: "slate_gray_light",
+  slate_gray_light: "default_dark",
+  ocean_dark: "solarized_light",
+  solarized_light: "ocean_dark",
+  // forest_dark and sakura_dark have no natural light counterpart — keep as-is.
+};
 
 export function getThemeById(id: string): Theme | undefined {
   return themes.find((t) => t.id === id);

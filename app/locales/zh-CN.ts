@@ -88,6 +88,8 @@ export default {
     restartAgent: "重启 Agent",
     restarting: "重启中...",
     theme: "主题",
+    followSystem: "跟随系统深浅模式",
+    followSystemHint: "根据操作系统设置自动切换深/浅主题；未配对的 theme 维持原样。",
     tabBackend: "后端",
     tabAppearance: "外观",
     tabAbout: "关于",

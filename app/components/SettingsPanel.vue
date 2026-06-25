@@ -11,7 +11,7 @@ import type { BackendKind } from "../backends/types";
 
 const { t, locale } = useI18n();
 const backend = useBackend();
-const { currentThemeId, themes: themeList, applyTheme } = useTheme();
+const { currentThemeId, themes: themeList, applyTheme, followSystem, setFollowSystem } = useTheme();
 
 defineProps<{
   modelValue: boolean;
@@ -530,13 +530,32 @@ const linkGroups = computed(() => [
               <div class="section-heading">
                 <h2>{{ t("settings.theme") }}</h2>
               </div>
-              <div class="theme-grid">
+
+              <label class="follow-system-row">
+                <span class="follow-system-label">
+                  <span class="follow-system-title">{{ t("settings.followSystem") }}</span>
+                  <small class="follow-system-hint">{{ t("settings.followSystemHint") }}</small>
+                </span>
+                <button
+                  type="button"
+                  class="toggle-switch"
+                  role="switch"
+                  :aria-checked="followSystem"
+                  :class="{ 'is-on': followSystem }"
+                  @click="setFollowSystem(!followSystem)"
+                >
+                  <span class="toggle-thumb" />
+                </button>
+              </label>
+
+              <div class="theme-grid" :class="{ 'is-disabled': followSystem }">
                 <button
                   v-for="th in themeList"
                   :key="th.id"
                   type="button"
                   class="theme-card"
                   :class="{ 'is-active': currentThemeId === th.id }"
+                  :disabled="followSystem"
                   :title="locale === 'zh-CN' ? th.name : th.nameEn"
                   @click="applyTheme(th.id)"
                 >
@@ -1290,6 +1309,77 @@ const linkGroups = computed(() => [
   margin-top: 0.85rem;
 }
 
+.theme-grid.is-disabled {
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+.follow-system-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.65rem 0.75rem;
+  margin-top: 0.85rem;
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--color-surface-700, #3f3f46) 50%, transparent);
+  background: color-mix(in srgb, var(--color-surface-800, #27272a) 30%, transparent);
+}
+
+.follow-system-label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.follow-system-title {
+  font-size: 0.85rem;
+  font-weight: 650;
+  color: var(--color-surface-200, #e4e4e7);
+}
+
+.follow-system-hint {
+  font-size: 0.72rem;
+  color: var(--color-surface-500, #71717a);
+  line-height: 1.35;
+}
+
+.toggle-switch {
+  flex: 0 0 auto;
+  position: relative;
+  width: 38px;
+  height: 22px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--color-surface-700, #3f3f46) 70%, transparent);
+  background: color-mix(in srgb, var(--color-surface-900, #18181b) 80%, transparent);
+  cursor: pointer;
+  padding: 0;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.toggle-switch.is-on {
+  background: color-mix(in srgb, var(--color-accent-cyan, #22d3ee) 40%, transparent);
+  border-color: color-mix(in srgb, var(--color-accent-cyan, #22d3ee) 60%, transparent);
+}
+
+.toggle-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--color-surface-200, #e4e4e7);
+  transition: transform 0.15s ease;
+}
+
+.toggle-switch.is-on .toggle-thumb {
+  transform: translateX(16px);
+}
+
 .theme-card {
   display: flex;
   flex-direction: column;
@@ -1300,6 +1390,10 @@ const linkGroups = computed(() => [
   background: color-mix(in srgb, var(--color-surface-800, #27272a) 36%, transparent);
   cursor: pointer;
   text-align: left;
+}
+
+.theme-card:disabled {
+  cursor: not-allowed;
 }
 
 .theme-card:hover,

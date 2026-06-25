@@ -88,6 +88,8 @@ export default {
     restartAgent: "Restart Agent",
     restarting: "Restarting...",
     theme: "Theme",
+    followSystem: "Follow system dark/light",
+    followSystemHint: "Auto-switch based on OS preference; themes without a pair stay as-is.",
     tabBackend: "Backend",
     tabAppearance: "Appearance",
     tabAbout: "About",
