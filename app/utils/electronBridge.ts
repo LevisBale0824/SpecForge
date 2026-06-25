@@ -36,6 +36,14 @@ export async function readWorkspaceDiff(
   return null;
 }
 
+export async function openExternalUrl(url: string): Promise<boolean> {
+  if (window.electronAPI) {
+    return window.electronAPI.openExternalUrl(url);
+  }
+  window.open(url, "_blank", "noopener,noreferrer");
+  return true;
+}
+
 export function onOpenFolder(callback: (path: string) => void): (() => void) | null {
   if (window.electronAPI) {
     return window.electronAPI.onOpenFolder(callback);

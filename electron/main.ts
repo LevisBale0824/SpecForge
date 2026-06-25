@@ -4,6 +4,7 @@ import {
   ipcMain,
   dialog,
   Menu,
+  shell,
   type MenuItemConstructorOptions,
 } from "electron";
 import { spawn, execSync, type ChildProcess } from "node:child_process";
@@ -1119,6 +1120,18 @@ async function restartServer(): Promise<void> {
 // ── IPC handlers ───────────────────────────────────────────────────────────
 
 function registerIpcHandlers() {
+  ipcMain.handle("openExternalUrl", async (_e, url: string) => {
+    try {
+      const parsed = new URL(url);
+      if (!["http:", "https:"].includes(parsed.protocol)) return false;
+      await shell.openExternal(parsed.toString());
+      return true;
+    } catch (err) {
+      console.error("[electron] openExternalUrl failed:", err);
+      return false;
+    }
+  });
+
   ipcMain.handle("selectDirectory", async () => {
     const result = await dialog.showOpenDialog({
       properties: ["openDirectory"],

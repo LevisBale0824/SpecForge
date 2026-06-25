@@ -67,6 +67,7 @@ export type UserUpdatePrefs = {
 
 export interface ElectronAPI {
   selectDirectory: () => Promise<string | null>;
+  openExternalUrl: (url: string) => Promise<boolean>;
   readDirectory: (rootPath: string, relPath: string) => Promise<DirEntry[] | null>;
   readWorkspaceDiff: (rootPath: string) => Promise<WorkspaceFileDiff[]>;
   getServerStatus: () => Promise<ServerStatus>;

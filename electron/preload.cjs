@@ -4,6 +4,7 @@ const { contextBridge, ipcRenderer } = require("electron");
 
 contextBridge.exposeInMainWorld("electronAPI", {
   selectDirectory: () => ipcRenderer.invoke("selectDirectory"),
+  openExternalUrl: (url) => ipcRenderer.invoke("openExternalUrl", url),
   readDirectory: (rootPath, relPath) =>
     ipcRenderer.invoke("readDirectory", rootPath, relPath || ""),
   readWorkspaceDiff: (rootPath) => ipcRenderer.invoke("readWorkspaceDiff", rootPath),
