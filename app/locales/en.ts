@@ -13,6 +13,7 @@ export default {
   sidebar: {
     sessions: "Sessions",
     files: "Files",
+    refreshFiles: "Refresh file list",
     openspec: "OpenSpec",
     noSessions: "No sessions yet",
     newSession: "New Session",

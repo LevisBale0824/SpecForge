@@ -311,6 +311,15 @@ ge.on("message.updated", (payload) => {
 ge.on("file.edited", () => {
   if (selectedSessionId.value) scheduleDiffRefresh(selectedSessionId.value, 800);
   else scheduleWorkspaceDiffRefresh(800);
+  // The backend reports that the agent (or an external tool) modified files
+  // on disk. Without an fs watcher we only learn about this here, so we must
+  // invalidate both file views:
+  //   1. `useFileIndex` powers the `@` mention menu — once `loaded=true` it
+  //      never re-reads disk, so reset() to force a reload on next `@`.
+  //   2. `useProject.scheduleRefreshTree` re-reads already-loaded directory
+  //      nodes, so new/deleted entries show up in the sidebar Files tree.
+  fileIndexStore.reset();
+  project.scheduleRefreshTree(400);
   // OpenSpec 面板也需要刷新(proposal/tasks/spec 文件可能被 agent 改了)
   void import("./useOpenSpec").then((m) => m.useOpenSpec().scheduleRefresh(800));
 });
@@ -915,6 +924,12 @@ export function useBackend() {
     files: fileIndexStore.files,
     filesLoading: fileIndexStore.loading,
     ensureFilesLoaded,
+    // Drop the cached @ file index so the next `@` re-reads disk. Used by
+    // focus/visibility handlers — external edits (rm/mv/CLI) made while the
+    // window stayed focused bypass the `file.edited` SSE event.
+    reloadFileIndex: () => {
+      fileIndexStore.reset();
+    },
 
     // Global events (for SSE subscription)
     globalEvents: ge,

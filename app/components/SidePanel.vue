@@ -54,6 +54,7 @@ const emit = defineEmits<{
   "open-file": [path: string];
   "open-diff": [diff: MessageDiffEntry];
   "open-folder": [];
+  "refresh-files": [];
 }>();
 
 function handleOpenDiff(diff: MessageDiffEntry) {
@@ -101,6 +102,8 @@ const sections = computed(() => [
     badge: 0,
     collapsed: collapsed.value.files,
     canCreate: true,
+    canRefresh: true,
+    refreshTitle: t("sidebar.refreshFiles"),
     actionIcon: "folder" as const,
   },
   {
@@ -122,9 +125,12 @@ const sections = computed(() => [
       :badge="section.badge"
       :collapsed="section.collapsed"
       :can-create="section.canCreate"
+      :can-refresh="section.canRefresh"
+      :refresh-title="section.refreshTitle"
       :action-icon="section.actionIcon"
       @toggle="toggleSection(section.id)"
       @new="section.id === 'files' ? emit('open-folder') : emit('new-session')"
+      @refresh="emit('refresh-files')"
     >
       <!-- Sessions -->
       <template v-if="section.id === 'sessions'">

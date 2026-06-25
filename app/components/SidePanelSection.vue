@@ -4,12 +4,15 @@ defineProps<{
   badge?: number;
   collapsed?: boolean;
   canCreate?: boolean;
+  canRefresh?: boolean;
+  refreshTitle?: string;
   actionIcon?: "plus" | "folder";
 }>();
 
 defineEmits<{
   toggle: [];
   new: [];
+  refresh: [];
 }>();
 </script>
 
@@ -34,6 +37,22 @@ defineEmits<{
       <span v-if="badge !== undefined && badge > 0" class="section-badge">
         {{ badge }}
       </span>
+      <button
+        v-if="canRefresh"
+        type="button"
+        class="section-refresh"
+        :title="refreshTitle || '刷新'"
+        @click.stop="$emit('refresh')"
+      >
+        <svg class="refresh-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            d="M4 4v6h6M20 20v-6h-6M5 10a8 8 0 0114-3M19 14a8 8 0 01-14 3"
+          />
+        </svg>
+      </button>
       <button
         v-if="canCreate"
         type="button"
@@ -137,7 +156,8 @@ defineEmits<{
   color: var(--color-accent-cyan, #06b6d4);
 }
 
-.section-new {
+.section-new,
+.section-refresh {
   flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
@@ -154,12 +174,14 @@ defineEmits<{
   cursor: pointer;
 }
 
-.folder-icon {
+.folder-icon,
+.refresh-icon {
   width: 13px;
   height: 13px;
 }
 
-.section-new:hover {
+.section-new:hover,
+.section-refresh:hover {
   background: color-mix(in srgb, var(--color-accent-cyan, #06b6d4) 18%, transparent);
   color: var(--color-accent-cyan, #06b6d4);
 }

@@ -13,6 +13,7 @@ export default {
   sidebar: {
     sessions: "会话",
     files: "文件",
+    refreshFiles: "刷新文件列表",
     openspec: "OpenSpec",
     noSessions: "暂无会话",
     newSession: "新建会话",

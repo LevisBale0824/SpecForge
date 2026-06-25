@@ -90,6 +90,10 @@ function onFocusRefresh(): void {
   project.scheduleRefreshTree();
   openspec.scheduleRefresh();
   backend.scheduleWorkspaceDiffRefresh(400);
+  // Also invalidate the @ mention menu's cached file list — external edits
+  // (rm/mv/CLI) don't fire the `file.edited` SSE event, so we have to pick
+  // them up here.
+  backend.reloadFileIndex();
 }
 
 function onVisibilityChange(): void {
@@ -130,6 +134,17 @@ function onSelectSession(sessionId: string) {
   showOpenSpecDialog.value = false;
   backend.selectSession(sessionId);
   router.push({ name: "chat" });
+}
+
+function onRefreshFiles(): void {
+  // Manual refresh from the sidebar Files header. Re-reads already-loaded
+  // directory nodes, invalidates the @ mention cache, and re-syncs the diff
+  // + OpenSpec panels. Mirrors onFocusRefresh but immediate (no debounce)
+  // and triggered on demand so the user sees new/deleted files at once.
+  project.scheduleRefreshTree(0);
+  openspec.scheduleRefresh(0);
+  backend.scheduleWorkspaceDiffRefresh(0);
+  backend.reloadFileIndex();
 }
 
 function onDeleteSession(sessionId: string) {
@@ -259,6 +274,7 @@ function submitManualPath() {
         @open-diff="onOpenDiff"
         @open-file="onOpenFile"
         @open-folder="handleOpenFolder"
+        @refresh-files="onRefreshFiles"
       />
       <!-- Sidebar drag handle -->
       <div
