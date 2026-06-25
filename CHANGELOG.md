@@ -5,6 +5,27 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，
 项目遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.4.1] - 2026-06-26
+
+### 新增 (Added)
+
+- 🎨 **主题系统升级**：6 套预设主题（default / ocean / forest / sakura + slate / solarized），每套主题独立配色代码块高亮
+- 🌗 **跟随系统深浅模式**：根据 OS `prefers-color-scheme` 自动在配对主题间切换
+- 🔄 **文件列表自动刷新**：检测到 `file.edited` 事件自动刷新侧边栏文件树 + `@` 附件菜单
+- 🔧 **侧边栏文件区新增手动刷新按钮**
+- 🪟 **设置面板新增 openExternalUrl IPC**：外链通过系统浏览器打开（HTTP/HTTPS 白名单）
+- 🐧 **Linux AppImage 桌面集成完善** + 发布流程自洽校验脚本
+
+### 修复 (Fixed)
+
+- 💬 **子 agent 会话禁用输入框**：避免误发消息导致会话卡死在 running 状态
+
+### 变更 (Changed)
+
+- 🎨 代码语法高亮改用 Shiki 的 `css-variables` 主题，UI 主题切换无需重渲染代码块
+
+---
+
 ## [1.0.0] - 2026-06-13
 
 ### 新增 (Added)
