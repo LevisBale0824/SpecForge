@@ -7,7 +7,7 @@ import { useTheme } from "../composables/useTheme";
 import { StorageKeys, storageSet } from "../utils/storageKeys";
 import { isElectron, openExternalUrl } from "../utils/electronBridge";
 import { useUpdate } from "../composables/useUpdate";
-import { renderMarkdown } from "../composables/useMarkdown";
+import { toReleaseNotesHtml } from "../utils/releaseNotes";
 import type { BackendKind } from "../backends/types";
 
 const { t, locale } = useI18n();
@@ -208,11 +208,7 @@ const isUpToDate = computed(() => update.state.value.status === "up-to-date");
 // actually available — the static "Highlights" placeholder was removed so
 // the About panel no longer shows misleading product copy while no update
 // check has happened yet.
-const releaseNotesHtml = computed(() => {
-  const raw = update.releaseNotes.value?.trim();
-  if (!raw) return "";
-  return renderMarkdown(raw);
-});
+const releaseNotesHtml = computed(() => toReleaseNotesHtml(update.releaseNotes.value));
 const hasReleaseNotes = computed(
   () => update.state.value.status === "available" && releaseNotesHtml.value.length > 0,
 );

@@ -25,31 +25,13 @@
 import { computed, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { useUpdate } from "../composables/useUpdate";
-import { useMarkdown } from "../composables/useMarkdown";
 import { isElectron } from "../utils/electronBridge";
+import { toReleaseNotesHtml } from "../utils/releaseNotes";
 
 const { t } = useI18n();
-const { render: renderMarkdown } = useMarkdown();
 const inElectron = isElectron();
 const { state, releaseNotes, currentVersion, downloadUpdate, installUpdate, skipVersion } =
   useUpdate();
-
-/**
- * Convert release notes to HTML for v-html binding.
- * Different update sources return notes in different formats:
- *   - Raw markdown (e.g. `### 新增\n- xxx`) — run through markdown-it
- *   - Pre-rendered HTML (e.g. GitHub `body_html`) — use as-is
- * Detect HTML by looking for typical block-level tag patterns; pass through
- * when matched to avoid markdown-it escaping existing HTML into entities.
- */
-function toReleaseNotesHtml(content: string): string {
-  const trimmed = (content || "").trim();
-  if (!trimmed) return "";
-  const looksLikeHtml =
-    /^<(\w+)(\s[^>]*)?>/.test(trimmed) ||
-    /<\/(h[1-6]|ul|ol|li|div|p|pre|code)(\s[^>]*)?>/.test(trimmed);
-  return looksLikeHtml ? trimmed : renderMarkdown(trimmed);
-}
 
 // User-dismissed flag: stays dismissed until either a new version shows up
 // or the user manually re-opens via Settings → About.
