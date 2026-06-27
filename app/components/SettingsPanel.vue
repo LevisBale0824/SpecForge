@@ -152,6 +152,17 @@ async function checkForUpdates() {
 }
 
 const proxyInput = ref(update.proxy.value);
+// useUpdate.proxy is populated asynchronously by ensureSubscribed() (IPC
+// round-trip). The snapshot above likely captured "" before that resolved,
+// so sync the persisted value back into the input once it arrives. User
+// typing only mutates proxyInput (not update.proxy), so this watcher fires
+// exactly once per session when the IPC resolves.
+watch(
+  () => update.proxy.value,
+  (val) => {
+    proxyInput.value = val;
+  },
+);
 async function applyProxy() {
   await update.setProxy(proxyInput.value);
 }
