@@ -107,12 +107,19 @@ function childrenOf(sessionId: string): SessionInfo[] {
 
 function formatTime(timestamp?: number): string {
   if (!timestamp) return "";
-  const date = new Date(timestamp * 1000);
+  // Tolerate both second and millisecond precision. The opencode server has
+  // been observed sending ms values on some endpoints; treating those as
+  // seconds (the historical convention) pushes the date into the far future,
+  // makes `diffMs` hugely negative, and every session renders as "just now".
+  // 1e12 ≈ year 2001 in ms / year 33658 in seconds — a clean threshold.
+  const ms = timestamp > 1e12 ? timestamp : timestamp * 1000;
+  const date = new Date(ms);
   const now = new Date();
   const diffMs = now.getTime() - date.getTime();
+  // Negative diff (future timestamp) usually means clock skew or a unit
+  // detection miss; fall through to "just now" rather than a negative age.
+  if (diffMs < 60000) return t("sidebar.justNow");
   const diffMins = Math.floor(diffMs / 60000);
-
-  if (diffMins < 1) return t("sidebar.justNow");
   if (diffMins < 60) return `${diffMins}m`;
   const diffHours = Math.floor(diffMins / 60);
   if (diffHours < 24) return `${diffHours}h`;

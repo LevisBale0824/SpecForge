@@ -19,6 +19,27 @@ const reasoningParts = computed(() =>
 );
 
 const isStreaming = computed(() => status.value === "streaming");
+
+// Format the message's created timestamp for the bubble header. Same ms/seconds
+// heuristic as ChatView — server endpoints disagree on units, and a wrong
+// guess pushes the date into the far future and renders as garbage.
+function formatMessageTime(timestamp?: number): string {
+  if (!timestamp) return "";
+  const ms = timestamp > 1e12 ? timestamp : timestamp * 1000;
+  const date = new Date(ms);
+  if (Number.isNaN(date.getTime())) return "";
+  const now = new Date();
+  const sameDay = date.toDateString() === now.toDateString();
+  if (sameDay) {
+    return date.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+  }
+  return date.toLocaleString(undefined, {
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
 </script>
 
 <template>
@@ -37,6 +58,9 @@ const isStreaming = computed(() => status.value === "streaming");
           :class="isUser ? 'text-accent-cyan' : 'text-accent-emerald'"
         >
           {{ isUser ? "You" : message.agent || "Assistant" }}
+        </span>
+        <span v-if="formatMessageTime(message.time?.created)" class="text-[10px] text-surface-500">
+          {{ formatMessageTime(message.time?.created) }}
         </span>
         <span v-if="isStreaming" class="animate-pulse text-[10px] text-accent-amber">
           streaming...

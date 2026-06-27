@@ -41,11 +41,38 @@ function shouldShowMessage(id: string, role: string): boolean {
   return msgStore.getStatus(id) === "streaming" || hasRenderableParts(id);
 }
 
+// Format a message timestamp for the bubble header. Tolerates both second
+// and millisecond precision (opencode server is inconsistent across endpoints)
+// — same heuristic as SessionTree's formatTime. Today's messages show HH:mm;
+// older messages prefix the date so the timeline stays readable when scrolling
+// back through history.
+function formatMessageTime(timestamp?: number): string {
+  if (!timestamp) return "";
+  const ms = timestamp > 1e12 ? timestamp : timestamp * 1000;
+  const date = new Date(ms);
+  if (Number.isNaN(date.getTime())) return "";
+  const now = new Date();
+  const sameDay = date.toDateString() === now.toDateString();
+  if (sameDay) {
+    return date.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+  }
+  return date.toLocaleString(undefined, {
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 const allMessages = computed(() => {
   return msgStore
     .list()
     .filter((message) => shouldShowMessage(message.id, message.role))
-    .map((message) => ({ id: message.id, role: message.role }));
+    .map((message) => ({
+      id: message.id,
+      role: message.role,
+      created: message.time?.created,
+    }));
 });
 
 const containerEl = ref<HTMLElement>();
@@ -142,8 +169,13 @@ function jumpToLatest() {
             <div
               class="max-w-[min(760px,calc(100%-3.5rem))] rounded-lg bg-surface-800/80 px-4 py-3 text-sm leading-relaxed text-surface-200"
             >
-              <div class="mb-1 text-[10px] font-semibold tracking-wider text-accent-emerald">
-                Hephaestus
+              <div class="mb-1 flex items-center gap-2">
+                <span class="text-[10px] font-semibold tracking-wider text-accent-emerald">
+                  Hephaestus
+                </span>
+                <span v-if="formatMessageTime(msg.created)" class="text-[10px] text-surface-500">{{
+                  formatMessageTime(msg.created)
+                }}</span>
               </div>
               <MessageContent
                 :message-id="msg.id"
@@ -157,8 +189,13 @@ function jumpToLatest() {
             <div
               class="max-w-[min(820px,calc(100%-3.5rem))] rounded-lg bg-accent-cyan/10 px-4 py-3 text-sm leading-relaxed text-surface-100"
             >
-              <div class="mb-1 text-[10px] font-semibold tracking-wider text-accent-cyan">
-                Patron
+              <div class="mb-1 flex items-center gap-2">
+                <span class="text-[10px] font-semibold tracking-wider text-accent-cyan">
+                  Patron
+                </span>
+                <span v-if="formatMessageTime(msg.created)" class="text-[10px] text-surface-500">{{
+                  formatMessageTime(msg.created)
+                }}</span>
               </div>
               <MessageContent
                 :message-id="msg.id"
