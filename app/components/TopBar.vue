@@ -26,6 +26,7 @@ const emit = defineEmits<{
   "toggle-settings": [];
   "toggle-console": [];
   "toggle-openspec": [];
+  "toggle-help": [];
   "open-folder": [];
 }>();
 
@@ -205,6 +206,29 @@ function openFolder() {
           class="absolute -top-0.5 -right-0.5 min-w-[15px] h-[15px] px-1 rounded-full bg-accent-cyan text-[9px] font-bold leading-[15px] text-center text-surface-950"
           >{{ openspecBadge }}</span
         >
+      </button>
+      <button
+        class="relative px-2 py-1 text-xs text-surface-400 hover:text-surface-200 hover:bg-surface-800 rounded transition-colors titlebar-nodrag"
+        :title="t('topbar.help')"
+        @click="emit('toggle-help')"
+      >
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <circle
+            cx="12"
+            cy="12"
+            r="10"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+          />
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"
+          />
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 17h.01" />
+        </svg>
       </button>
       <button
         class="relative px-2 py-1 text-xs text-surface-400 hover:text-surface-200 hover:bg-surface-800 rounded transition-colors titlebar-nodrag"

@@ -40,6 +40,14 @@ const USED_ICONS = [
   "plug-zap",
   "key-round",
   "arrow-down",
+  // HelpModal carousel icons
+  "sparkles",
+  "boxes",
+  "folder-open",
+  "messages-square",
+  "sliders-horizontal",
+  "workflow",
+  "folder-tree",
 ];
 
 function main() {

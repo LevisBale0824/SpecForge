@@ -161,6 +161,53 @@ export default {
     console: "控制台",
     openspec: "OpenSpec",
     agentLabel: "Agent",
+    help: "帮助",
+  },
+  help: {
+    title: "使用指南",
+    ariaLabel: "SpecForge 使用指南",
+    prev: "上一页",
+    next: "下一页",
+    done: "完成",
+    dotLabel: "第 {n} 张",
+    intro: {
+      title: "欢迎使用 SpecForge",
+      body: "AI 驱动的编码协作工作站，把会话、OpenSpec 工作流、文件浏览整合到一个界面。下面按使用顺序带你了解核心功能。",
+    },
+    agent: {
+      title: "1 · 选择 Code Agent",
+      body: "顶栏的 Agent 选择器可在 OpenCode 与 Zero 之间切换，进程由 SpecForge 自动管理。",
+    },
+    project: {
+      title: "2 · 打开项目",
+      body: "点击侧边栏的「打开项目」选择一个本地文件夹。SpecForge 会以它为根目录启动会话、扫描 OpenSpec 与文件树。",
+    },
+    sessions: {
+      title: "3 · 新建会话",
+      body: "项目打开后，侧边栏「新建会话」即可开始与 AI 对话。复杂任务会自动派生子 agent 并行处理。",
+      bullets: ["点击「新建会话」开始对话", "子会话由父任务自动驱动", "点击子会话徽标可跳转查看"],
+    },
+    model: {
+      title: "4 · 选择模型",
+      body: "顶栏「模型」按钮打开模型列表，按需切换不同 LLM。",
+    },
+    openspec: {
+      title: "5 · OpenSpec 工作流",
+      body: "启用 OpenSpec 后，提案 / 任务 / Spec 增量 / 校验四步帮你做精细化变更。",
+      bullets: ["探索：厘清需求", "设计：明确方案", "实施：按任务推进", "归档：总结验收"],
+    },
+    files: {
+      title: "6 · 文件浏览",
+      body: "侧边栏「文件」标签打开项目文件树，点击文件即时预览，也可在编辑器中打开。",
+    },
+    appearance: {
+      title: "7 · 主题与语言",
+      body: "设置 → 外观可切换 6 套主题、中英文，以及跟随系统深浅模式。",
+    },
+    update: {
+      title: "8 · 更新与代理",
+      body: "设置 → 关于支持自动检查更新、跳过本次、配置 GitHub 代理。",
+    },
   },
   render: {
     copyCode: "复制代码",

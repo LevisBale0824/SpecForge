@@ -6,6 +6,7 @@ import StatusBar from "./components/StatusBar.vue";
 import InputPanel from "./components/InputPanel.vue";
 import FloatingWindow from "./components/FloatingWindow.vue";
 import SettingsPanel from "./components/SettingsPanel.vue";
+import HelpModal from "./components/HelpModal.vue";
 import ConsolePanel from "./components/ConsolePanel.vue";
 import DiffViewer from "./components/DiffViewer.vue";
 import FileViewer from "./components/FileViewer.vue";
@@ -36,6 +37,7 @@ const sidebarResize = useResizable({
 });
 const sidePanelWidth = sidebarResize.size;
 const showSettings = ref(false);
+const showHelp = ref(false);
 const showConsole = ref(false);
 const showOpenSpecDialog = ref(false);
 const consoleHeight = ref(220);
@@ -252,6 +254,7 @@ function submitManualPath() {
       :console-active="showConsole"
       :openspec-active="showOpenSpecDialog"
       @toggle-settings="showSettings = !showSettings"
+      @toggle-help="showHelp = !showHelp"
       @toggle-console="toggleConsole"
       @toggle-openspec="showOpenSpecDialog = !showOpenSpecDialog"
       @open-folder="handleOpenFolder"
@@ -398,6 +401,8 @@ function submitManualPath() {
 
     <!-- Settings Modal -->
     <SettingsPanel v-model="showSettings" />
+    <!-- Help / quick-start carousel -->
+    <HelpModal v-model="showHelp" />
     <!-- Auto-updater global toast -->
     <UpdateToast />
     <!-- Auto-updater prompt dialog (available/progress/downloaded) -->

@@ -163,6 +163,62 @@ export default {
     console: "Console",
     openspec: "OpenSpec",
     agentLabel: "Agent",
+    help: "Help",
+  },
+  help: {
+    title: "Quick Guide",
+    ariaLabel: "SpecForge quick guide",
+    prev: "Previous",
+    next: "Next",
+    done: "Done",
+    dotLabel: "Slide {n}",
+    intro: {
+      title: "Welcome to SpecForge",
+      body: "An AI coding workstation that brings sessions, the OpenSpec workflow and file browsing into one window. The following slides walk through the core features in the order you'll use them.",
+    },
+    agent: {
+      title: "1 · Pick a Code Agent",
+      body: "The Agent picker in the topbar toggles between OpenCode and Zero. Processes are managed by SpecForge.",
+    },
+    project: {
+      title: "2 · Open a Project",
+      body: "Click Open Project in the sidebar and choose a local folder. SpecForge uses it as the root for sessions, OpenSpec scanning, and the file tree.",
+    },
+    sessions: {
+      title: "3 · Start a Session",
+      body: "Once a project is open, click New Session in the sidebar to chat with the AI. Complex tasks automatically spawn sub-agents that run in parallel.",
+      bullets: [
+        "Click New Session to start chatting",
+        "Sub-sessions are driven by their parent",
+        "Click the sub-session badge to jump in",
+      ],
+    },
+    model: {
+      title: "4 · Choose a Model",
+      body: "Open the Model menu in the topbar to switch between available LLMs.",
+    },
+    openspec: {
+      title: "5 · OpenSpec Workflow",
+      body: "With OpenSpec enabled, Proposal / Tasks / Spec Deltas / Validation guide focused changes.",
+      bullets: [
+        "Explore: clarify requirements",
+        "Propose: define the design",
+        "Apply: drive tasks forward",
+        "Archive: review and accept",
+      ],
+    },
+    files: {
+      title: "6 · File Browser",
+      body: "Open the Files tab in the sidebar to browse the project tree, preview on click, or open in your editor.",
+    },
+    appearance: {
+      title: "7 · Theme & Language",
+      body: "Settings → Appearance offers 6 themes, EN / 中文, and a follow-system dark/light mode.",
+    },
+    update: {
+      title: "8 · Updates & Proxy",
+      body: "Settings → About supports auto-check, skip-this-version, and a GitHub proxy.",
+    },
   },
   render: {
     copyCode: "Copy code",
