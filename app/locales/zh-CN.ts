@@ -9,6 +9,7 @@ export default {
     error: "连接错误",
     startFailed: "无法启动 {agent} agent:{reason}",
     serverDown: "服务器未启动(CLI 未安装或端口被占用?)",
+    serverStopped: "后台 agent server 已停止,请点击「重启 Agent」按钮恢复连接",
   },
   sidebar: {
     sessions: "会话",
@@ -87,6 +88,9 @@ export default {
     enableWorkflow: "启用四步工作流",
     restartAgent: "重启 Agent",
     restarting: "重启中...",
+    stopAgent: "停止 Agent",
+    stopAgentHint: "强制停止后台 Agent 进程，释放端口。下次启动 SpecForge 会自动重新拉起。",
+    stoppingAgent: "停止中...",
     theme: "主题",
     followSystem: "跟随系统深浅模式",
     followSystemHint: "根据操作系统设置自动切换深/浅主题；未配对的 theme 维持原样。",

@@ -38,3 +38,7 @@ npm-debug.log*
 .omo/
 .playwright-mcp/
 .agents/
+.opencode/
+
+# Generated runtime artifacts (corepack pinning, etc.)
+.generated/corepack/

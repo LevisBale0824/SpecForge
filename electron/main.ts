@@ -8,12 +8,22 @@ import {
   type MenuItemConstructorOptions,
 } from "electron";
 import { spawn, execSync, type ChildProcess } from "node:child_process";
-import * as http from "node:http";
 import * as path from "node:path";
 import * as fs from "node:fs";
 import { fileURLToPath } from "node:url";
 import { initAutoUpdater } from "./updater";
 import { installDesktopEntry, isLinuxAppImage } from "./linux-integration";
+import { initPaths } from "./paths";
+import { registerInstance, unregisterInstance, hasOtherLiveInstances } from "./instanceCoordinator";
+import {
+  startServer,
+  stopAllServers,
+  restartServer,
+  switchAgent,
+  getServerStatus,
+  getAgentConfig,
+  type AgentConfig,
+} from "./serverPool";
 
 // ── Directory reading ─────────────────────────────────────────────────────
 
@@ -53,7 +63,22 @@ async function readDirectoryEntries(dirPath: string): Promise<DirEntry[]> {
   const result: DirEntry[] = [];
   for (const entry of entries) {
     const name = entry.name;
-    const isDir = entry.isDirectory();
+    // Dirent.isDirectory() returns false for symlinks-to-directories:
+    // readdir { withFileTypes: true } does not follow symlinks, so a symlink
+    // to a folder reports isSymbolicLink()=true and isDirectory()=false.
+    // Stat the target to get the real type so symlinked folders show up as
+    // expandable directories instead of being mislabeled as files.
+    let isDir = entry.isDirectory();
+    if (!isDir && entry.isSymbolicLink()) {
+      try {
+        isDir = fs.statSync(path.join(dirPath, name)).isDirectory();
+      } catch {
+        // Broken symlink, permission denied, or target outside reachable
+        // scope — fall back to "file" so it at least shows up rather than
+        // vanishing silently.
+        isDir = false;
+      }
+    }
     if (isDir && IGNORED_DIRS.has(name)) continue;
     result.push({ name, kind: isDir ? "directory" : "file", path: name });
   }
@@ -896,227 +921,6 @@ function parseValidationOutput(
   return out;
 }
 
-// ── Server management ─────────────────────────────────────────────────────
-
-type AgentKind = "opencode" | "zero";
-
-type AgentConfig = {
-  kind: AgentKind;
-  opencodePort: number;
-  zeroPort: number;
-};
-
-const DEFAULT_AGENT_CONFIG: AgentConfig = {
-  kind: "opencode",
-  opencodePort: 13284,
-  zeroPort: 13286,
-};
-
-// Agent kind is intentionally NOT persisted across launches. Boot always starts
-// opencode (the safe default). If the user previously switched to an agent
-// whose CLI isn't installed, persisting that choice would brick every
-// subsequent launch. Switching during a session updates this in-memory value.
-let agentConfig: AgentConfig = { ...DEFAULT_AGENT_CONFIG };
-
-let serverProcess: ChildProcess | null = null;
-let serverStatus: { running: boolean; port: number; pid: number } = {
-  running: false,
-  port: 0,
-  pid: 0,
-};
-
-// Auto-respawn state. Each spawned ChildProcess is tracked in
-// `intentionallyKilled` when stopServer() deliberately terminates it; the
-// exit handler consults this set rather than a module-level boolean so it
-// survives the race where stopServer→startServer resets state before the
-// old proc's exit event fires. `consecutiveFailures` drives exponential
-// backoff and eventually gives up (so a missing CLI doesn't burn CPU forever).
-const intentionallyKilled = new WeakSet<ChildProcess>();
-let respawnTimer: ReturnType<typeof setTimeout> | null = null;
-let consecutiveFailures = 0;
-const MAX_RESPAWN_ATTEMPTS = 10;
-const MAX_RESPAWN_BACKOFF_MS = 30_000;
-
-function clearRespawnTimer(): void {
-  if (respawnTimer) {
-    clearTimeout(respawnTimer);
-    respawnTimer = null;
-  }
-}
-
-/**
- * Kill a spawned CLI process and its entire descendant tree.
- *
- * Why this exists: both Windows and Unix spawn a wrapper process that forks
- * the actual daemon. Killing only the wrapper leaves the daemon orphaned and
- * still bound to the port, so the next spawn on the same port fails with
- * EADDRINUSE.
- *
- * - Windows: `spawn(cmd, args, { shell: true })` launches
- *   `cmd.exe → opencode.cmd → node.exe`. `taskkill /F /T /PID` walks the
- *   tree and kills every descendant.
- * - Unix: the CLI bin (an npm shebang script or compiled launcher) forks a
- *   daemon child. We spawn with `detached: true` so the child becomes its
- *   own process-group leader (pgid == pid), then `process.kill(-pid)` sends
- *   the signal to the entire group — wrapper, daemon, and any grandchildren.
- */
-function killProcessTree(proc: ChildProcess): void {
-  if (!proc.pid) return;
-  if (process.platform === "win32") {
-    try {
-      execSync(`taskkill /F /T /PID ${proc.pid}`, { stdio: "ignore" });
-    } catch (err) {
-      // Most likely the process already exited between the .killed check and
-      // this call. The exit handler has run (or will run) and updated state.
-      console.warn(`[electron] taskkill /T failed for PID ${proc.pid}:`, err);
-    }
-  } else {
-    // Send the signal to the entire process group. Requires the child to
-    // have been spawned with detached:true so pgid == pid. Falls back to a
-    // direct signal if the group kill fails (e.g. already reaped).
-    try {
-      process.kill(-proc.pid, "SIGTERM");
-    } catch {
-      try {
-        proc.kill("SIGTERM");
-      } catch {
-        // already dead — ignore
-      }
-    }
-  }
-}
-
-function scheduleRespawn(kind: string, reason: string): void {
-  if (consecutiveFailures >= MAX_RESPAWN_ATTEMPTS) {
-    console.error(
-      `[electron] giving up respawn for ${kind} after ${MAX_RESPAWN_ATTEMPTS} consecutive failures (last reason: ${reason})`,
-    );
-    return;
-  }
-  consecutiveFailures += 1;
-  const backoff = Math.min(1000 * 2 ** (consecutiveFailures - 1), MAX_RESPAWN_BACKOFF_MS);
-  console.warn(
-    `[electron] ${kind} died (${reason}), respawning in ${backoff}ms (attempt ${consecutiveFailures}/${MAX_RESPAWN_ATTEMPTS})`,
-  );
-  clearRespawnTimer();
-  respawnTimer = setTimeout(() => {
-    respawnTimer = null;
-    void startServer();
-  }, backoff);
-}
-
-async function healthCheck(port: number, timeoutMs = 15000): Promise<boolean> {
-  const start = Date.now();
-  while (Date.now() - start < timeoutMs) {
-    try {
-      await new Promise<void>((resolve, reject) => {
-        const req = http.get(`http://localhost:${port}/global/health`, (res) => {
-          res.resume();
-          if (res.statusCode === 200) resolve();
-          else reject(new Error(`status ${res.statusCode}`));
-        });
-        req.on("error", reject);
-        req.setTimeout(2000, () => {
-          req.destroy();
-          reject(new Error("timeout"));
-        });
-      });
-      return true;
-    } catch {
-      await new Promise((r) => setTimeout(r, 500));
-    }
-  }
-  return false;
-}
-
-async function startServer(): Promise<void> {
-  if (serverProcess) return;
-  // Cancel any pending respawn from a previous failure — this is a fresh
-  // attempt (manual restart, agent switch, or initial boot).
-  clearRespawnTimer();
-
-  const isWin = process.platform === "win32";
-  const kind = agentConfig.kind;
-  const port = kind === "zero" ? agentConfig.zeroPort : agentConfig.opencodePort;
-  const baseCmd = kind === "zero" ? "zero" : "opencode";
-  const cmd = isWin ? `${baseCmd}.cmd` : baseCmd;
-
-  const proc = spawn(cmd, ["serve", "--port", String(port)], {
-    stdio: ["ignore", "pipe", "pipe"],
-    // On Unix, detached:true makes the child a process-group leader so we
-    // can later kill the whole tree via process.kill(-pid). On Windows this
-    // flag is irrelevant for our purposes (we use taskkill /T instead).
-    detached: !isWin,
-    shell: isWin,
-  });
-  serverProcess = proc;
-
-  proc.stdout?.on("data", (data: Buffer) => {
-    console.log(`[${kind}]`, data.toString().trim());
-  });
-
-  proc.stderr?.on("data", (data: Buffer) => {
-    console.error(`[${kind}]`, data.toString().trim());
-  });
-
-  proc.on("error", (err) => {
-    console.error(`[electron] Failed to start ${kind}:`, err);
-    // Only mutate global state if this proc is still current (not replaced).
-    if (serverProcess === proc) {
-      serverProcess = null;
-      serverStatus = { running: false, port: 0, pid: 0 };
-    }
-    if (!intentionallyKilled.has(proc)) {
-      scheduleRespawn(kind, `spawn error: ${err.message}`);
-    }
-  });
-
-  proc.on("exit", (code) => {
-    console.log(`[electron] ${kind} exited with code`, code);
-    if (serverProcess === proc) {
-      serverProcess = null;
-      serverStatus = { running: false, port: 0, pid: 0 };
-    }
-    if (!intentionallyKilled.has(proc)) {
-      scheduleRespawn(kind, `exit code ${code}`);
-    }
-    intentionallyKilled.delete(proc);
-  });
-
-  const healthy = await healthCheck(port);
-  // If we were superseded while healthCheck was running (another startServer
-  // replaced us, or stopServer cleared serverProcess), bail without touching
-  // state or logging. This avoids the "N concurrent healthCheck timeouts all
-  // log 'zero server health check failed'" noise during a respawn storm.
-  if (serverProcess !== proc) return;
-  if (healthy) {
-    consecutiveFailures = 0;
-    serverStatus = {
-      running: true,
-      port,
-      pid: serverProcess?.pid ?? 0,
-    };
-    console.log(`[electron] ${kind} server healthy on port`, port);
-  } else {
-    console.warn(`[electron] ${kind} server health check failed`);
-  }
-}
-
-function stopServer(): void {
-  clearRespawnTimer();
-  if (serverProcess && !serverProcess.killed) {
-    intentionallyKilled.add(serverProcess);
-    killProcessTree(serverProcess);
-    serverProcess = null;
-  }
-  serverStatus = { running: false, port: 0, pid: 0 };
-}
-
-async function restartServer(): Promise<void> {
-  stopServer();
-  await startServer();
-}
-
 // ── IPC handlers ───────────────────────────────────────────────────────────
 
 function registerIpcHandlers() {
@@ -1172,39 +976,36 @@ function registerIpcHandlers() {
   });
 
   ipcMain.handle("getServerStatus", async () => {
-    return serverStatus;
+    return getServerStatus();
   });
 
-  ipcMain.handle("restartServer", async () => {
-    await restartServer();
-    return serverStatus;
+  ipcMain.handle("restartServer", async (_e, kind?: "opencode" | "zero") => {
+    await restartServer(kind ?? "opencode");
+    return getServerStatus();
   });
 
   ipcMain.handle("getAgentConfig", async () => {
-    return agentConfig;
+    return getAgentConfig();
   });
 
-  // Switch active agent: update in-memory config (NOT persisted — see
-  // DEFAULT_AGENT_CONFIG comment), restart the spawned CLI with the new
-  // kind/port, and return updated server status. The renderer is responsible
-  // for re-connecting its SSE/REST client afterwards.
+  // Switch active agent. Does NOT kill the previous kind's server — opencode
+  // and zero listen on different ports (13284 vs 13286), so both can coexist.
+  // This matters in multi-instance setups where another SpecForge window may
+  // still be using the previous agent. Each kind's server is cleaned up by
+  // its own owner on shutdown (see serverPool.stopAllServers).
   //
-  // IMPORTANT: when the renderer sends kind: "opencode" we must accept it as
-  // "opencode", not fall back to the current agentConfig.kind. The previous
-  // logic (`next.kind === "zero" ? "zero" : agentConfig.kind`) silently kept
-  // the old kind when the user clicked the opencode button, so rollback after
-  // a failed zero-switch and the Restart button both failed to bring opencode
-  // back up.
+  // The merge + switch is delegated to serverPool.switchAgent so the
+  // kind/port normalization stays close to the agentConfig state it mutates.
   ipcMain.handle("setAgentConfig", async (_e, next: Partial<AgentConfig>) => {
-    const merged: AgentConfig = {
-      kind: next.kind === "zero" ? "zero" : "opencode",
-      opencodePort:
-        typeof next.opencodePort === "number" ? next.opencodePort : agentConfig.opencodePort,
-      zeroPort: typeof next.zeroPort === "number" ? next.zeroPort : agentConfig.zeroPort,
-    };
-    agentConfig = merged;
-    await restartServer();
-    return { config: agentConfig, status: serverStatus };
+    return await switchAgent(next);
+  });
+
+  // Explicit "stop the agent server" button in Settings → Backend.
+  // Replaces the old close-window prompt: server lifecycle is now decoupled
+  // from window lifecycle, so the user controls when to release the port.
+  ipcMain.handle("stopAgentServer", async () => {
+    stopAllServers();
+    return getServerStatus();
   });
 
   // ── OpenSpec IPC ────────────────────────────────────────────────────────
@@ -1551,6 +1352,14 @@ app.whenReady().then(async () => {
 
   registerIpcHandlers();
   registerMenu();
+  // Initialize path layout (config + runtime dirs) and register this
+  // process in the instance coordinator. Must happen before startServer
+  // so zombie cleanup can record our PIDs into the right location.
+  initPaths();
+  registerInstance(app.getVersion());
+  // Decoupled model: every SpecForge window reuses the same detached agent
+  // server. startServer adopts an existing healthy daemon if present, or
+  // spawns one if not. No primary/secondary coordination needed.
   await startServer();
   createWindow();
   // Initialize auto-updater after the window exists so its webContents can
@@ -1558,11 +1367,44 @@ app.whenReady().then(async () => {
   initAutoUpdater();
 });
 
+// ── Shutdown coordination ─────────────────────────────────────────────────
+// Decoupled model: closing a window never stops the agent server. The
+// server is a shared detached daemon that survives any single window's
+// lifetime. We only stop it when the LAST SpecForge window disappears.
+//
+// "Last instance" is detected via PID files in the runtime dir (see
+// instanceCoordinator.ts): each SpecForge writes {pid}.json on launch
+// and deletes it on quit. The close flow scans the directory and probes
+// every other PID with process.kill(pid, 0) — if none are alive, we're
+// the last and own the cleanup.
+
+let isShuttingDown = false;
+
 app.on("window-all-closed", () => {
-  stopServer();
   app.quit();
 });
 
-app.on("before-quit", () => {
-  stopServer();
+app.on("before-quit", (event) => {
+  if (isShuttingDown) return; // shutdown already in progress, let quit proceed
+  event.preventDefault();
+  isShuttingDown = true;
+  try {
+    // Remove our own PID file FIRST so the scan doesn't see us. Then
+    // check whether any other instance is still alive. If not, we own
+    // the cleanup of the shared agent daemon.
+    unregisterInstance();
+    const othersAlive = hasOtherLiveInstances();
+    if (othersAlive) {
+      console.log("[electron] other instances remain — leaving server alive");
+    } else {
+      console.log("[electron] last instance — stopping agent server");
+      stopAllServers();
+    }
+  } catch (err) {
+    console.warn("[electron] shutdown coordination failed:", err);
+    // Safe fallback: don't stop. A leaked daemon is recoverable on next
+    // launch via detectAndCleanZombie; killing someone else's server is
+    // not recoverable.
+  }
+  app.quit();
 });

@@ -9,6 +9,7 @@ export default {
     error: "Connection Error",
     startFailed: "Failed to start {agent} agent: {reason}",
     serverDown: "server did not come up (CLI missing or port in use?)",
+    serverStopped: 'Background agent server stopped. Click "Restart Agent" to recover.',
   },
   sidebar: {
     sessions: "Sessions",
@@ -87,6 +88,10 @@ export default {
     enableWorkflow: "Enable 4-step workflow",
     restartAgent: "Restart Agent",
     restarting: "Restarting...",
+    stopAgent: "Stop Agent",
+    stopAgentHint:
+      "Force-stops the background agent process and releases its port. SpecForge will respawn it on next launch.",
+    stoppingAgent: "Stopping...",
     theme: "Theme",
     followSystem: "Follow system dark/light",
     followSystemHint: "Auto-switch based on OS preference; themes without a pair stay as-is.",

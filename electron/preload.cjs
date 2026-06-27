@@ -9,9 +9,10 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.invoke("readDirectory", rootPath, relPath || ""),
   readWorkspaceDiff: (rootPath) => ipcRenderer.invoke("readWorkspaceDiff", rootPath),
   getServerStatus: () => ipcRenderer.invoke("getServerStatus"),
-  restartServer: () => ipcRenderer.invoke("restartServer"),
+  restartServer: (kind) => ipcRenderer.invoke("restartServer", kind),
   getAgentConfig: () => ipcRenderer.invoke("getAgentConfig"),
   setAgentConfig: (config) => ipcRenderer.invoke("setAgentConfig", config),
+  stopAgentServer: () => ipcRenderer.invoke("stopAgentServer"),
   readOpenSpecState: (rootPath) => ipcRenderer.invoke("readOpenSpecState", rootPath),
   writeOpenSpecTasks: (rootPath, changeId, taskId, completed) =>
     ipcRenderer.invoke("writeOpenSpecTasks", rootPath, changeId, taskId, completed),

@@ -144,7 +144,17 @@ function openFolder() {
         class="px-2 py-1 text-xs text-surface-400 flex items-center gap-1 titlebar-nodrag"
         :title="t('topbar.agentLabel')"
       >
-        <span class="w-1.5 h-1.5 rounded-full bg-accent-emerald" />
+        <span
+          class="w-1.5 h-1.5 rounded-full transition-colors"
+          :class="{
+            'bg-accent-emerald': backend.connectionState.value === 'ready',
+            'bg-accent-amber animate-pulse':
+              backend.connectionState.value === 'connecting' ||
+              backend.connectionState.value === 'bootstrapping',
+            'bg-accent-rose': backend.connectionState.value === 'error',
+            'bg-surface-600': backend.connectionState.value === 'disconnected',
+          }"
+        />
         <span>{{ agentLabel }}</span>
       </span>
       <button

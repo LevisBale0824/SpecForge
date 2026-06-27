@@ -93,6 +93,23 @@ async function restartAgent() {
   }
 }
 
+// Stop the shared agent daemon. The server is decoupled from window
+// lifecycle (survives close), so this is the explicit "release the port"
+// switch. Useful when the user wants to fully reset state or free
+// resources between sessions.
+const stoppingAgent = ref(false);
+
+async function stopAgentServer() {
+  if (stoppingAgent.value) return;
+  stoppingAgent.value = true;
+  try {
+    const { stopAgentServer: stop } = await import("../utils/electronBridge");
+    await stop();
+  } finally {
+    stoppingAgent.value = false;
+  }
+}
+
 const statusColor: Record<string, string> = {
   disconnected: "status-neutral",
   connecting: "status-warn",
@@ -451,6 +468,22 @@ const linkGroups = computed(() => [
                   @click="restartAgent"
                 >
                   {{ restarting ? t("settings.restarting") : t("settings.restartAgent") }}
+                </button>
+              </div>
+
+              <div v-if="backend.isElectron" class="settings-row">
+                <span class="row-icon" aria-hidden="true"><Icon icon="lucide:power" /></span>
+                <span class="row-copy">
+                  <strong>{{ t("settings.stopAgent") }}</strong>
+                  <small>{{ t("settings.stopAgentHint") }}</small>
+                </span>
+                <button
+                  type="button"
+                  class="row-action danger"
+                  :disabled="!backend.isElectron || stoppingAgent"
+                  @click="stopAgentServer"
+                >
+                  {{ stoppingAgent ? t("settings.stoppingAgent") : t("settings.stopAgent") }}
                 </button>
               </div>
 

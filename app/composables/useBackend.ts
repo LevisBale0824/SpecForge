@@ -5,7 +5,7 @@
 // and useBackendMessageSend into a single reactive surface for the UI.
 // ---------------------------------------------------------------------------
 
-import { ref, readonly, watch, type Ref } from "vue";
+import { computed, ref, readonly, watch, type Ref } from "vue";
 import { useGlobalEvents } from "./useGlobalEvents";
 import { useBackendActivation } from "./useBackendActivation";
 import { useBackendSessionLifecycle } from "./useBackendSessionLifecycle";
@@ -22,6 +22,7 @@ import { useCommands } from "./useCommands";
 import { useFileIndex } from "./useFileIndex";
 import { useProject } from "./useProject";
 import { isElectron as detectElectron, readWorkspaceDiff } from "../utils/electronBridge";
+import { isCommandLike } from "../utils/commands";
 import {
   getActiveBackendKind,
   getActiveBackendAdapter,
@@ -30,7 +31,7 @@ import {
   configureZeroBackend,
   setActiveBackendKind,
 } from "../backends/registry";
-import { StorageKeys, storageGet, storageSet } from "../utils/storageKeys";
+import { StorageKeys, storageSet } from "../utils/storageKeys";
 import { i18n } from "../i18n";
 import type { BackendKind } from "../backends/types";
 import type {
@@ -196,6 +197,9 @@ function migrateDraftSelections(realSessionId: string): void {
 // reasonable time.
 const IDLE_FALLBACK_GRACE_MS = 30000;
 const idleFallbackTimers = new Map<string, ReturnType<typeof setTimeout>>();
+const CONNECTION_LOST_GRACE_MS = 3000;
+let connectionLostTimer: ReturnType<typeof setTimeout> | undefined;
+let markedConnectionLost = false;
 
 function scheduleIdleFallback(sessionId: string): void {
   if (!sessionId) return;
@@ -224,6 +228,22 @@ function clearIdleFallback(sessionId: string): void {
     clearTimeout(existing);
     idleFallbackTimers.delete(sessionId);
   }
+}
+
+function clearConnectionLostTimer(): void {
+  if (connectionLostTimer) {
+    clearTimeout(connectionLostTimer);
+    connectionLostTimer = undefined;
+  }
+}
+
+function failActiveToolsForLostConnection(message: string): void {
+  const sessionId = selectedSessionId.value;
+  if (!sessionId || !msgStore.hasActiveToolParts(sessionId)) return;
+  msgStore.markActiveToolPartsError(sessionId, message);
+  clearIdleFallback(sessionId);
+  sessionStatus.markIdle(sessionId);
+  scheduleDiffRefresh(sessionId, 250);
 }
 
 // Reload commands when the backend kind changes (different backend = different commands).
@@ -282,6 +302,12 @@ const sessionLifecycle = useBackendSessionLifecycle({
       });
     }
   },
+  onSessionAborted: (sessionId) => {
+    msgStore.markActiveToolPartsError(sessionId, "Aborted by user");
+    clearIdleFallback(sessionId);
+    sessionStatus.markIdle(sessionId);
+    scheduleDiffRefresh(sessionId, 250);
+  },
 });
 
 // Track sessions from the backend so the sidebar can list/switch them.
@@ -332,6 +358,50 @@ ge.on("session.status", (payload) => {
   scheduleDiffRefresh(packet.sessionID, 250);
 });
 
+ge.on("connection.error", (payload) => {
+  if (activation.connectionState.value !== "ready") return;
+  clearConnectionLostTimer();
+  const raw =
+    toRecord(payload)?.message && typeof toRecord(payload)?.message === "string"
+      ? (toRecord(payload)?.message as string)
+      : "Backend connection lost";
+  // Raw fetch failures (orphan secondary losing a server it didn't know was
+  // being killed, OS killing the process, etc.) come through as
+  // "TypeError: network error" / "TypeError: Failed to fetch". These are not
+  // actionable to users — translate to the same friendly message the
+  // serverStopping path uses.
+  const isNetworkError = /network error|failed to fetch|networkerror|err_network|load failed/i.test(
+    raw,
+  );
+  const message = isNetworkError ? i18n.global.t("status.serverStopped") : raw;
+  connectionLostTimer = setTimeout(() => {
+    connectionLostTimer = undefined;
+    if (activation.connectionState.value !== "ready") return;
+    markedConnectionLost = true;
+    activation.connectionState.value = isNetworkError ? "disconnected" : "error";
+    activation.errorMessage.value = message;
+    failActiveToolsForLostConnection(`Backend connection lost: ${raw}`);
+  }, CONNECTION_LOST_GRACE_MS);
+});
+
+ge.on("connection.open", () => {
+  clearConnectionLostTimer();
+  if (markedConnectionLost) {
+    markedConnectionLost = false;
+    activation.connectionState.value = "ready";
+    activation.errorMessage.value = "";
+  }
+});
+
+ge.on("connection.reconnected", () => {
+  clearConnectionLostTimer();
+  if (markedConnectionLost) {
+    markedConnectionLost = false;
+    activation.connectionState.value = "ready";
+    activation.errorMessage.value = "";
+  }
+});
+
 // Pull the persisted session list from the backend so previously-created
 // conversations appear in the sidebar (not just ones created this run).
 // Uses replace semantics (reset + upsert) so sessions removed from the
@@ -373,6 +443,8 @@ const messageSend = useBackendMessageSend({
 const msgStore = useMessages();
 const acc = useDeltaAccumulator();
 const sessionStatus = useSessionStatus(selectedSessionId);
+const hasActiveToolParts = computed(() => msgStore.hasActiveToolParts(selectedSessionId.value));
+const isSessionBusy = computed(() => sessionStatus.isBusy.value || hasActiveToolParts.value);
 // Bind once to the global SSE bus so we capture every session's status event
 // (including sub-agent sessions whose sessionID differs from the active one).
 sessionStatus.bindGlobal(ge);
@@ -557,6 +629,7 @@ export function useBackend() {
       msgStore.removeMessage(tempId);
       return success;
     }
+    sessionStatus.markBusy(selectedSessionId.value);
 
     // First-prompt auto-titling. Only fires once per session and only when the
     // backend hasn't already given the session a real title (i.e. the title is
@@ -573,7 +646,12 @@ export function useBackend() {
   // into command id + free-form arguments, then dispatched via adapter.sendCommand.
   async function sendCommandWithSession(text: string): Promise<boolean> {
     const trimmed = text.trim();
-    if (!trimmed.startsWith("/")) return false;
+    // Defensive: only dispatch as command if it actually looks like one.
+    // InputPanel already gates on this, but a non-command-shaped string
+    // here (e.g. a pasted session URL like "/session/xxx/id") would be
+    // rejected by the backend with "unknown command". Fail fast + let the
+    // caller fall through to sendPrompt.
+    if (!isCommandLike(trimmed)) return false;
     // Guard against rapid duplicate dispatch: flip isSending synchronously
     // before any awaits. Previously this flag was only set after
     // `await ensureSession()`, so the InputPanel guard
@@ -619,6 +697,7 @@ export function useBackend() {
         model: sel?.modelId,
         variant: variant.value || undefined,
       });
+      sessionStatus.markBusy(selectedSessionId.value);
       return true;
     } catch (error) {
       if (tempId) msgStore.removeMessage(tempId);
@@ -734,8 +813,8 @@ export function useBackend() {
   /**
    * Restart the current agent's server (Electron only). Used to recover from
    * an externally-killed daemon (e.g. user killed opencode.exe in Task Manager).
-   * Calls the main process's setAgentConfig IPC, which calls restartServer()
-   * internally and returns the new server status.
+   * Calls the main process's restartServer IPC, which stops and re-spawns the
+   * given kind's CLI.
    *
    * Unlike switchBackend, this does NOT change the active kind — it just
    * respawns the same CLI. On failure, writes to errorMessage so the UI can
@@ -746,11 +825,21 @@ export function useBackend() {
     const kind = activeBackendKind.value;
     if (kind !== "opencode" && kind !== "zero") return false;
 
+    // Cancel any pending connectionLost fallback: restart is going to
+    // re-spawn the server, the stale timer would otherwise fire mid-spawn
+    // and overwrite our "disconnected → connecting" status with a stale
+    // "the server was stopped" message.
+    clearConnectionLostTimer();
+    markedConnectionLost = false;
     activation.errorMessage.value = "";
+    // Reflect the upcoming disruption in the UI right away. restartServer
+    // blocks for ~15s during stop+spawn+healthCheck; without this the status
+    // pill stays "connected" the whole time, looking frozen.
+    activation.connectionState.value = "disconnected";
     try {
-      const { restartAgent } = await import("../utils/electronBridge");
-      const result = await restartAgent(kind);
-      if (!result || !result.status.running) {
+      const { restartServer } = await import("../utils/electronBridge");
+      const status = await restartServer(kind);
+      if (!status || !status.running) {
         activation.errorMessage.value = i18n.global.t("status.startFailed", {
           agent: kind,
           reason: i18n.global.t("status.serverDown"),
@@ -794,9 +883,11 @@ export function useBackend() {
     sessionsStore.reset();
     selectedSessionId.value = "";
 
-    // In Electron, ask main process to restart the CLI with the new kind.
-    // cli-bridge runs as a separate process (not spawned by main), so we only
-    // restart for opencode/zero.
+    // In Electron, ask main process to ensure the target kind's CLI is
+    // running. The main process does NOT kill the previous kind's server —
+    // opencode and zero listen on different ports and may be used by other
+    // SpecForge instances. cli-bridge runs as a separate process (not spawned
+    // by main), so we only switch for opencode/zero.
     if (kind === "opencode" || kind === "zero") {
       try {
         const { restartAgent } = await import("../utils/electronBridge");
@@ -814,9 +905,10 @@ export function useBackend() {
         activeBackendKind.value = previousKind;
         setActiveBackendKind(previousKind);
         applyBackendConfig(previousKind);
-        // Restore the previous backend's server process — it was stopped when
-        // we attempted to start the new one. Only opencode/zero have a main-
-        // process-managed lifecycle; cli-bridge runs externally.
+        // Switch back to the previous kind's server. Because switchAgent does
+        // not kill other kinds, the previous server is likely still running
+        // and this is a fast no-op. Only opencode/zero have a main-process
+        // -managed lifecycle; cli-bridge runs externally.
         let rollbackOk = true;
         if (previousKind === "opencode" || previousKind === "zero") {
           try {
@@ -884,7 +976,7 @@ export function useBackend() {
     errorMessage: activation.errorMessage,
     initMessage: activation.initMessage,
     isSending: readonly(isSending),
-    isBusy: sessionStatus.isBusy,
+    isBusy: isSessionBusy,
     isRetrying: sessionStatus.isRetrying,
     sessionStatus: sessionStatus.status,
     statusOf: sessionStatus.statusOf,

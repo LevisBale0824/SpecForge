@@ -448,6 +448,52 @@ function getParts(id: string): MessagePart[] {
   return result;
 }
 
+function hasActiveToolParts(sessionId: string): boolean {
+  if (!sessionId) return false;
+  for (const messageRef of messages.value.values()) {
+    const info = messageRef.value.info;
+    if (info?.sessionID && info.sessionID !== sessionId) continue;
+    for (const partRef of messageRef.value.parts) {
+      const part = partRef.value;
+      if (part.sessionID !== sessionId || part.type !== "tool") continue;
+      if (part.state.status === "pending" || part.state.status === "running") return true;
+    }
+  }
+  return false;
+}
+
+function markActiveToolPartsError(sessionId: string, message: string): void {
+  if (!sessionId) return;
+  for (const messageRef of messages.value.values()) {
+    let touchedMessage = false;
+    for (const partRef of messageRef.value.parts) {
+      const part = partRef.value;
+      if (part.sessionID !== sessionId || part.type !== "tool") continue;
+      const state = part.state;
+      if (state.status !== "pending" && state.status !== "running") continue;
+      // `state` is now narrowed to { pending } | { running }. Snapshot the
+      // running-only fields conditionally so the spread below can be written
+      // without re-narrowing `part.state`.
+      const isRunning = state.status === "running";
+      const metadata = isRunning ? state.metadata : undefined;
+      const start = isRunning ? state.time.start : Math.floor(Date.now() / 1000);
+      partRef.value = {
+        ...part,
+        state: {
+          status: "error",
+          input: state.input,
+          error: message,
+          metadata,
+          time: { start, end: Date.now() / 1000 },
+        },
+      };
+      triggerRef(partRef);
+      touchedMessage = true;
+    }
+    if (touchedMessage) triggerMessageRef(messageRef);
+  }
+}
+
 function getPartsByType<T extends MessagePart["type"]>(
   id: string,
   type: T,
@@ -821,6 +867,8 @@ export function useMessages() {
     get,
     list,
     getParts,
+    hasActiveToolParts,
+    markActiveToolPartsError,
     getPartsByType,
     hasTextContent,
     getTextContent,

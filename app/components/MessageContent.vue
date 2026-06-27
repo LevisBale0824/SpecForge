@@ -343,7 +343,12 @@ function toggleReasoning(id: string) {
 
 function isReasoningExpanded(id: string): boolean {
   if (expandedReasoning.value[id] !== undefined) return expandedReasoning.value[id];
-  return renderItems.value.length === 1 && renderItems.value[0]?.kind === "reasoning";
+  // Default to collapsed for all reasoning blocks. Previously, a message
+  // whose sole item was reasoning was auto-expanded to avoid looking empty,
+  // but user feedback was that thinking output should always start folded —
+  // the collapsed preview already shows the first line + line count, which
+  // is enough to signal "there's reasoning here, click to expand".
+  return false;
 }
 
 function reasoningPreview(text: string): string {

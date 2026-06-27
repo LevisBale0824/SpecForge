@@ -71,11 +71,14 @@ export interface ElectronAPI {
   readDirectory: (rootPath: string, relPath: string) => Promise<DirEntry[] | null>;
   readWorkspaceDiff: (rootPath: string) => Promise<WorkspaceFileDiff[]>;
   getServerStatus: () => Promise<ServerStatus>;
-  restartServer: () => Promise<ServerStatus>;
+  restartServer: (kind?: AgentKind) => Promise<ServerStatus>;
   getAgentConfig: () => Promise<AgentConfig>;
   setAgentConfig: (
     config: Partial<AgentConfig>,
   ) => Promise<{ config: AgentConfig; status: ServerStatus }>;
+  /** Stop the agent server (Electron only). Server is otherwise a detached
+   *  daemon that survives window close; this is the explicit kill switch. */
+  stopAgentServer: () => Promise<ServerStatus>;
   /** 读取整个 openspec/ 目录的状态;无 openspec/ 时返回 null */
   readOpenSpecState: (
     rootPath: string,

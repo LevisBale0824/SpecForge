@@ -6,6 +6,8 @@
 // Otherwise returns null/false (caller should fall back to browser APIs).
 // ---------------------------------------------------------------------------
 
+import type { ServerStatus } from "../types/electron";
+
 export function isElectron(): boolean {
   return !!window.electronAPI?.isElectron;
 }
@@ -51,6 +53,13 @@ export function onOpenFolder(callback: (path: string) => void): (() => void) | n
   return null;
 }
 
+export function onServerStopping(callback: () => void): (() => void) | null {
+  // Deprecated: agent server lifecycle is now decoupled from window close.
+  // Kept as a no-op stub for callers that haven't been migrated yet.
+  void callback;
+  return null;
+}
+
 export async function getServerStatus(): Promise<{
   running: boolean;
   port: number;
@@ -62,13 +71,13 @@ export async function getServerStatus(): Promise<{
   return null;
 }
 
-export async function restartServer(): Promise<{
+export async function restartServer(kind?: "opencode" | "zero"): Promise<{
   running: boolean;
   port: number;
   pid: number;
 } | null> {
   if (window.electronAPI) {
-    return window.electronAPI.restartServer();
+    return window.electronAPI.restartServer(kind);
   }
   return null;
 }
@@ -105,6 +114,18 @@ export async function setAgentConfig(
 } | null> {
   if (window.electronAPI) {
     return window.electronAPI.setAgentConfig(config);
+  }
+  return null;
+}
+
+/**
+ * Explicitly stop the agent server. Replaces the old close-window dialog:
+ * the server is a shared daemon that survives window close; users invoke
+ * this when they want to release the port immediately.
+ */
+export async function stopAgentServer(): Promise<ServerStatus | null> {
+  if (window.electronAPI) {
+    return window.electronAPI.stopAgentServer();
   }
   return null;
 }

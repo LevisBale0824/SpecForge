@@ -7,6 +7,7 @@ import FileMenu from "./FileMenu.vue";
 import ModelPicker from "./ModelPicker.vue";
 import AgentPicker from "./AgentPicker.vue";
 import type { CommandInfo } from "../types/command";
+import { isCommandLike } from "../utils/commands";
 
 const { t } = useI18n();
 const backend = useBackend();
@@ -121,8 +122,9 @@ function handleInput(e: Event) {
   const text = inputText.value;
   const pos = caretPos.value;
 
-  // Slash menu: only at the very start of the input.
-  const slashOpen = text.startsWith("/") && !text.includes(" ") && pos > 0 && pos <= text.length;
+  // Slash menu: only at the very start of the input, and only when the
+  // text actually looks like a command (not a path like "/session/xxx/id").
+  const slashOpen = isCommandLike(text) && !text.includes(" ") && pos > 0 && pos <= text.length;
 
   // @ mention: scan back from caret for an `@` preceded by whitespace or BOS,
   // with no whitespace between `@` and caret.
@@ -326,7 +328,7 @@ async function handleSend() {
   atIndex.value = -1;
   let ok = true;
   try {
-    if (text.startsWith("/")) {
+    if (isCommandLike(text)) {
       ok = await backend.sendCommand(text);
     } else {
       const attachments = parseFileAttachments(text);

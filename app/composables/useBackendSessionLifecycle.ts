@@ -20,6 +20,7 @@ export type SessionLifecycleOptions = {
   toErrorMessage: (error: unknown) => string;
   onSessionCreated?: (session: BackendSessionInfo) => void;
   onSessionError?: (message: string) => void;
+  onSessionAborted?: (sessionId: string) => void;
 };
 
 export function useBackendSessionLifecycle(options: SessionLifecycleOptions) {
@@ -91,6 +92,7 @@ export function useBackendSessionLifecycle(options: SessionLifecycleOptions) {
       if (adapter.abortSession) {
         await adapter.abortSession(id, options.activeDirectory.value || undefined);
       }
+      options.onSessionAborted?.(id);
     } catch (error) {
       console.error("[SessionLifecycle] Abort failed:", error);
     } finally {

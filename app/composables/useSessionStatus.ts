@@ -65,6 +65,15 @@ function markIdle(sessionId: string): void {
   statusBySession.value = next;
 }
 
+function markBusy(sessionId: string): void {
+  if (!sessionId) return;
+  const current = statusBySession.value.get(sessionId);
+  if (current?.type === "busy") return;
+  const next = new Map(statusBySession.value);
+  next.set(sessionId, { type: "busy" });
+  statusBySession.value = next;
+}
+
 function reset(): void {
   statusBySession.value = new Map();
 }
@@ -78,6 +87,7 @@ export function useSessionStatus(selectedSessionId?: Ref<string>) {
     isRetryingOf,
     remove,
     markIdle,
+    markBusy,
     reset,
     bindGlobal,
     // Active-session views (backwards-compatible with InputPanel / StatusBar).
