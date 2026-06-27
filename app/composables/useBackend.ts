@@ -207,6 +207,7 @@ function scheduleIdleFallback(sessionId: string): void {
   const armedAt = Date.now();
   const timer = setTimeout(() => {
     idleFallbackTimers.delete(sessionId);
+    msgStore.markActiveToolPartsCompleted(sessionId);
     if (sessionStatus.isBusyOf(sessionId)) {
       const elapsedMs = Date.now() - armedAt;
       sessionStatus.markIdle(sessionId);
@@ -354,6 +355,7 @@ ge.on("session.status", (payload) => {
   if (packet.status?.type !== "idle") return;
   // Backend sent idle — cancel any pending fallback for this session.
   clearIdleFallback(packet.sessionID);
+  msgStore.markActiveToolPartsCompleted(packet.sessionID);
   scheduleDiffRefresh(packet.sessionID, 250);
 });
 
@@ -514,7 +516,7 @@ let accUnlisten: (() => void) | null = null;
 
 watch(selectedSessionId, (newId) => {
   if (!newId) return;
-  const scope = ge.session(selectedSessionId);
+  const scope = ge.session(selectedSessionId, {}, { isKnownPart: msgStore.hasPart });
   msgStore.bindScope(scope);
   if (accUnlisten) accUnlisten();
   accUnlisten = acc.listen(scope);

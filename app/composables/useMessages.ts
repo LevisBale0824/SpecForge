@@ -26,6 +26,11 @@ import type {
   MessageUpdatedPacket,
   SessionDiffPacket,
   TextPart,
+  ToolPart,
+  ToolStateCompleted,
+  ToolStateError,
+  ToolStatePending,
+  ToolStateRunning,
   UserMessageInfo,
 } from "../types/sse";
 import type { SessionScope } from "./useGlobalEvents";
@@ -276,6 +281,11 @@ function partLookupKey(messageId: string, partId: string): string {
   return `${messageId}:${partId}`;
 }
 
+function hasPart(messageId: string, partId: string): boolean {
+  if (!messageId || !partId) return false;
+  return parts.has(partLookupKey(messageId, partId));
+}
+
 function updateMessage(info: MessageInfo, notifyCollection = true) {
   // Auto-clean optimistic pending messages when a real user message arrives
   if (info.role === "user" && !info.id.startsWith("pending:")) {
@@ -502,7 +512,10 @@ function hasActiveToolParts(sessionId: string): boolean {
   return false;
 }
 
-function markActiveToolPartsError(sessionId: string, message: string): void {
+function finalizeActiveToolParts(
+  sessionId: string,
+  buildState: (state: ToolStatePending | ToolStateRunning) => ToolStateCompleted | ToolStateError,
+): void {
   if (!sessionId) return;
   for (const messageRef of messages.value.values()) {
     let touchedMessage = false;
@@ -511,27 +524,42 @@ function markActiveToolPartsError(sessionId: string, message: string): void {
       if (part.sessionID !== sessionId || part.type !== "tool") continue;
       const state = part.state;
       if (state.status !== "pending" && state.status !== "running") continue;
-      // `state` is now narrowed to { pending } | { running }. Snapshot the
-      // running-only fields conditionally so the spread below can be written
-      // without re-narrowing `part.state`.
-      const isRunning = state.status === "running";
-      const metadata = isRunning ? state.metadata : undefined;
-      const start = isRunning ? state.time.start : Math.floor(Date.now() / 1000);
-      partRef.value = {
-        ...part,
-        state: {
-          status: "error",
-          input: state.input,
-          error: message,
-          metadata,
-          time: { start, end: Date.now() / 1000 },
-        },
-      };
+      const toolPart = part as ToolPart;
+      partRef.value = { ...toolPart, state: buildState(state) };
       triggerRef(partRef);
       touchedMessage = true;
     }
     if (touchedMessage) triggerMessageRef(messageRef);
   }
+}
+
+function markActiveToolPartsError(sessionId: string, message: string): void {
+  finalizeActiveToolParts(sessionId, (state) => {
+    const isRunning = state.status === "running";
+    const start = isRunning ? state.time.start : Math.floor(Date.now() / 1000);
+    return {
+      status: "error",
+      input: state.input,
+      error: message,
+      metadata: isRunning ? state.metadata : undefined,
+      time: { start, end: Date.now() / 1000 },
+    };
+  });
+}
+
+function markActiveToolPartsCompleted(sessionId: string): void {
+  const nowSec = Date.now() / 1000;
+  finalizeActiveToolParts(sessionId, (state) => {
+    const isRunning = state.status === "running";
+    return {
+      status: "completed",
+      input: state.input,
+      output: "",
+      title: isRunning ? (state.title ?? "") : "",
+      metadata: (isRunning ? state.metadata : {}) ?? {},
+      time: { start: isRunning ? state.time.start : Math.floor(nowSec), end: nowSec },
+    };
+  });
 }
 
 function getPartsByType<T extends MessagePart["type"]>(
@@ -912,7 +940,9 @@ export function useMessages() {
     list,
     getParts,
     hasActiveToolParts,
+    hasPart,
     markActiveToolPartsError,
+    markActiveToolPartsCompleted,
     getPartsByType,
     hasTextContent,
     getTextContent,

@@ -98,6 +98,68 @@ function extractSessionId(payload: unknown): string | undefined {
   return undefined;
 }
 
+export type ScopeOptions = {
+  isKnownPart?: (messageId: string, partId: string) => boolean;
+};
+
+const PART_EVENTS = new Set<string>(["message.part.updated", "message.part.delta"]);
+
+function extractPartCoords(payload: unknown): { messageId: string; partId: string } | undefined {
+  const rec =
+    payload && typeof payload === "object" ? (payload as Record<string, unknown>) : undefined;
+  if (!rec) return undefined;
+  if (typeof rec.messageID === "string" && typeof rec.partID === "string") {
+    return { messageId: rec.messageID, partId: rec.partID };
+  }
+  const part =
+    rec.part && typeof rec.part === "object" ? (rec.part as Record<string, unknown>) : undefined;
+  if (part && typeof part.messageID === "string" && typeof part.id === "string") {
+    return { messageId: part.messageID, partId: part.id };
+  }
+  return undefined;
+}
+
+function createSessionScope(
+  selectedSessionId: Ref<string>,
+  onUnscoped: (event: string, listener: (payload: unknown) => void) => () => void,
+  options: ScopeOptions = {},
+): SessionScope {
+  const disposers = new Set<() => void>();
+  const isKnownPart = options.isKnownPart;
+
+  function scopedOn<K extends EventKey>(
+    event: K,
+    listener: (payload: GlobalEventMap[K]) => void,
+  ): () => void;
+  function scopedOn(event: string, listener: (payload: unknown) => void): () => void;
+  function scopedOn(event: string, listener: (payload: unknown) => void): () => void {
+    if (!isKnownEventType(event)) return () => {};
+    const off = onUnscoped(event, (payload) => {
+      const sessionId = extractSessionId(payload);
+      if (!sessionId || sessionId === selectedSessionId.value) {
+        listener(payload);
+        return;
+      }
+      if (PART_EVENTS.has(event) && isKnownPart) {
+        const coords = extractPartCoords(payload);
+        if (coords && isKnownPart(coords.messageId, coords.partId)) listener(payload);
+      }
+    });
+    disposers.add(off);
+    return () => {
+      off();
+      disposers.delete(off);
+    };
+  }
+
+  function dispose() {
+    for (const off of disposers) off();
+    disposers.clear();
+  }
+
+  return { on: scopedOn, dispose };
+}
+
 // ── URL normalization ─────────────────────────────────────────────────────
 
 function normalizeBaseUrl(baseUrl: string) {
@@ -226,67 +288,16 @@ export function useGlobalEvents(credentials: CredentialsBinding) {
   function session(
     selectedSessionId: Ref<string>,
     _parents: Readonly<Record<string, string | undefined>> = {},
+    options: ScopeOptions = {},
   ): SessionScope {
-    const disposers = new Set<() => void>();
-
-    function scopedOn<K extends EventKey>(
-      event: K,
-      listener: (payload: GlobalEventMap[K]) => void,
-    ): () => void;
-    function scopedOn(event: string, listener: (payload: unknown) => void): () => void;
-    function scopedOn(event: string, listener: (payload: unknown) => void): () => void {
-      if (!isKnownEventType(event)) return () => {};
-      const off = on(event, (payload) => {
-        const sessionId = extractSessionId(payload);
-        // Allow events with no session ID (global) or matching session
-        if (!sessionId || sessionId === selectedSessionId.value) {
-          listener(payload);
-        }
-      });
-      disposers.add(off);
-      return () => {
-        off();
-        disposers.delete(off);
-      };
-    }
-
-    function dispose() {
-      for (const off of disposers) off();
-      disposers.clear();
-    }
-
-    return { on: scopedOn, dispose };
+    return createSessionScope(selectedSessionId, on, options);
   }
 
-  function mainSession(selectedSessionId: Ref<string>): MainSessionScope {
-    const disposers = new Set<() => void>();
-
-    function scopedOn<K extends EventKey>(
-      event: K,
-      listener: (payload: GlobalEventMap[K]) => void,
-    ): () => void;
-    function scopedOn(event: string, listener: (payload: unknown) => void): () => void;
-    function scopedOn(event: string, listener: (payload: unknown) => void): () => void {
-      if (!isKnownEventType(event)) return () => {};
-      const off = on(event, (payload) => {
-        const sessionId = extractSessionId(payload);
-        if (!sessionId || sessionId === selectedSessionId.value) {
-          listener(payload);
-        }
-      });
-      disposers.add(off);
-      return () => {
-        off();
-        disposers.delete(off);
-      };
-    }
-
-    function dispose() {
-      for (const off of disposers) off();
-      disposers.clear();
-    }
-
-    return { on: scopedOn, dispose };
+  function mainSession(
+    selectedSessionId: Ref<string>,
+    options: ScopeOptions = {},
+  ): MainSessionScope {
+    return createSessionScope(selectedSessionId, on, options);
   }
 
   function dispose() {
