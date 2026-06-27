@@ -893,6 +893,12 @@ export function useBackend() {
         }
         // Server is up — reconnect SSE/REST to the new backend.
         void activation.reconnect();
+        // Reconnect short-circuits when already "ready", so the
+        // connectionState watch (which would normally refresh these) does
+        // not fire. Refresh explicitly to repopulate the cleared lists.
+        void refreshSessions();
+        void modelsStore.refreshModels();
+        void agentsStore.refreshAgents();
       } catch (e) {
         console.warn(`[useBackend] switch to ${kind} failed, rolling back:`, e);
         activeBackendKind.value = previousKind;
@@ -917,6 +923,11 @@ export function useBackend() {
           // Previous server restored — reconnect to it so the UI reflects the
           // recovered state instead of staying "disconnected".
           void activation.reconnect();
+          // Same short-circuit gotcha as the success path: reconnect may not
+          // transition connectionState, so the refresh watch stays silent.
+          void refreshSessions();
+          void modelsStore.refreshModels();
+          void agentsStore.refreshAgents();
         } else {
           // Only surface the original failure if rollback ALSO failed to
           // restore a working server. If rollback succeeded the UI is already
