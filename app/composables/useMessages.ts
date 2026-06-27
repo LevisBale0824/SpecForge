@@ -208,6 +208,13 @@ const messages = shallowRef(new Map<string, ShallowRef<MessageEntry>>());
 const parts = new Map<string, ShallowRef<MessagePart>>();
 const sessionDiffs = shallowRef(new Map<string, FileDiff[]>());
 
+// Tracks how many chars each part has accumulated via `message.part.delta`
+// events. Used by applyPartDelta to detect duplicate deltas — a `part.updated`
+// snapshot from the server can pre-include text that subsequent late deltas
+// would otherwise append again, producing duplicated streaming output.
+// Keyed by the same `${messageID}:${partID}` used by `parts`.
+const deltaLens = new Map<string, number>();
+
 // ── Computed indices ──────────────────────────────────────────────────────
 
 const roots = computed(() => {
@@ -286,9 +293,13 @@ function updatePart(part: MessagePart, notifyCollection = true) {
   const existing = parts.get(key);
   if (existing) {
     const current = existing.value;
+    // Protect streaming text from being truncated by an out-of-order
+    // `part.updated` snapshot whose text is shorter than what deltas have
+    // already accumulated. Applies to both TextPart and ReasoningPart since
+    // both expose a `text` field that streams via deltas.
     if (
-      current.type === "text" &&
-      part.type === "text" &&
+      (current.type === "text" || current.type === "reasoning") &&
+      (part.type === "text" || part.type === "reasoning") &&
       current.text &&
       part.text.length < current.text.length
     ) {
@@ -321,14 +332,34 @@ function applyPartDelta(delta: MessagePartDeltaPacket) {
     };
     partRef = shallowRef(part);
     parts.set(key, partRef);
+    deltaLens.set(key, 0);
     const messageRef = ensureMessage(delta.messageID);
     messageRef.value.parts.add(partRef);
     triggerMessageRef(messageRef);
   }
 
   const current = partRef.value as MessagePart & Record<string, unknown>;
+  const deltaLen = deltaLens.get(key) ?? 0;
+  // Deduplicate: if the delta's content already appears at position deltaLen
+  // in the current text, it has already been incorporated (typically by a
+  // `part.updated` snapshot that included it). Skip the append but still
+  // advance the lens so subsequent deltas are checked against the right
+  // offset.
+  if (
+    delta.field === "text" &&
+    typeof current.text === "string" &&
+    current.text.length >= deltaLen + delta.delta.length &&
+    current.text.substring(deltaLen, deltaLen + delta.delta.length) === delta.delta
+  ) {
+    deltaLens.set(key, deltaLen + delta.delta.length);
+    return;
+  }
+
   const value = current[delta.field];
   current[delta.field] = typeof value === "string" ? value + delta.delta : delta.delta;
+  if (delta.field === "text") {
+    deltaLens.set(key, deltaLen + delta.delta.length);
+  }
   triggerRef(partRef);
 
   const messageRef = messages.value.get(delta.messageID);
@@ -394,6 +425,15 @@ function bindScope(scope: SessionScope) {
       if (!sessionID) return;
       sessionDiffs.value.set(sessionID, Array.isArray(diff) ? diff : []);
       triggerRef(sessionDiffs);
+    }),
+  );
+
+  // On reconnect the server replays part snapshots, which can race with
+  // in-flight deltas and produce duplicated text. Reset the delta lens so
+  // the dedup check re-baselines against the fresh snapshot stream.
+  unsubs.push(
+    scope.on("connection.reconnected", () => {
+      deltaLens.clear();
     }),
   );
 }
@@ -812,6 +852,7 @@ function tryLoadFromCache(sessionId: string): boolean {
 
   messages.value.clear();
   parts.clear();
+  deltaLens.clear();
 
   for (const [id, cachedEntry] of cached.messages) {
     const entry = createMessageEntry();
@@ -834,6 +875,7 @@ function tryLoadFromCache(sessionId: string): boolean {
 function reset() {
   messages.value.clear();
   parts.clear();
+  deltaLens.clear();
   sessionDiffs.value.clear();
   triggerRef(sessionDiffs);
   triggerCollection();
@@ -844,7 +886,9 @@ function removeMessage(id: string) {
   if (!messageRef) return;
   for (const partRef of messageRef.value.parts) {
     const part = partRef.value;
-    parts.delete(partLookupKey(part.messageID, part.id));
+    const key = partLookupKey(part.messageID, part.id);
+    parts.delete(key);
+    deltaLens.delete(key);
   }
   messages.value.delete(id);
   triggerCollection();
