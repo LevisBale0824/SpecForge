@@ -5,6 +5,26 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，
 项目遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.4.2] - 2026-06-27
+
+### 新增 (Added)
+
+- 🪟 **多实例 Agent Server 协调**：多实例生命周期统一管理 + 共享配置持久化到 `specforge.config.json`，避免端口/会话冲突
+- 📎 **输入框拖放附件**：支持文件 / 文件夹直接拖入 composer 自动附加到上下文
+- ❓ **帮助系统**：顶栏新增帮助按钮 + 功能指南轮播弹框，新用户上手更友好
+- 💬 **消息时间戳**：聊天气泡显示发送时间，并修复时间单位不一致问题
+
+### 修复 (Fixed)
+
+- 🐛 **Stream 文本重复**：修复 SSE 流中 `part.updated` 与 `delta` 乱序导致的文本重复渲染
+- 🖼️ **图标裁切**：补全 `lucide-subset` 的 `width/height`，修复图标被裁切显示
+- 🐧 **Linux 桌面图标**：修复设置面板图标和 Linux 桌面图标显示为问号
+- 🌐 **i18n 补全**：关于面板剩余硬编码文案接入国际化
+- 📝 **Release Notes**：用真实 release notes 替换硬编码 Highlights 占位文案
+- ⚙️ **代理设置**：修复代理输入框启动后显示为空
+
+---
+
 ## [0.4.1] - 2026-06-26
 
 ### 新增 (Added)
