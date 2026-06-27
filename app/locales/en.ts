@@ -128,6 +128,23 @@ export default {
     proxyHint:
       "Local proxy for reaching GitHub (e.g. Clash/V2Ray/sing-box). Format: host:port or socks5://host:port. Empty = direct.",
   },
+  about: {
+    aboutDescription: "AI coding collaboration workstation.",
+    backendDescription: "Choose and control the local code agent.",
+    appearanceDescription: "Adjust language and visual theme.",
+    heroDescription: "OpenSpec workflow and code-agent workspace for focused software changes.",
+    feedbackTitle: "Feedback & Community",
+    feedbackDescription: "Follow project updates, releases, and file issues or feedback.",
+    githubDescription: "Browse the source repository and project homepage.",
+    releaseDescription: "Open the current release page and changelog.",
+    issuesDescription: "Report bugs or suggest improvements.",
+    viewAction: "View",
+    openAction: "Open",
+    lastChecked: "Last checked {time}",
+    updatePrefsTitle: "Update settings",
+    updatePrefsHint:
+      "Automatically check for new versions and configure a proxy for reaching GitHub.",
+  },
   common: {
     close: "Close",
   },

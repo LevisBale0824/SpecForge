@@ -127,6 +127,22 @@ export default {
     proxyHint:
       "访问 GitHub 用的本地代理(Clash/V2Ray/sing-box 等)。格式:host:port 或 socks5://host:port。留空则直连。",
   },
+  about: {
+    aboutDescription: "AI 编程协作工作站。",
+    backendDescription: "选择并控制本地代码 Agent。",
+    appearanceDescription: "调整语言与视觉主题。",
+    heroDescription: "OpenSpec 工作流与代码 Agent 工作区，专注于精准的代码变更。",
+    feedbackTitle: "反馈与社区",
+    feedbackDescription: "查看项目动态、版本发布，并提交问题或建议。",
+    githubDescription: "查看源码仓库和项目主页。",
+    releaseDescription: "查看当前版本发布页和更新记录。",
+    issuesDescription: "反馈缺陷或提出改进建议。",
+    viewAction: "查看",
+    openAction: "打开",
+    lastChecked: "上次检查 {time}",
+    updatePrefsTitle: "更新设置",
+    updatePrefsHint: "自动检查新版本，并配置访问 GitHub 使用的代理。",
+  },
   common: {
     close: "关闭",
   },

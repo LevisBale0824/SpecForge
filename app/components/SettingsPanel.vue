@@ -230,28 +230,28 @@ async function openExternalLink(url: string) {
 
 const linkGroups = computed(() => [
   {
-    title: "反馈与社区",
-    description: "查看项目动态、版本发布，并提交问题或建议。",
+    title: t("about.feedbackTitle"),
+    description: t("about.feedbackDescription"),
     links: [
       {
         icon: "lucide:github",
         title: "GitHub",
-        description: "查看源码仓库和项目主页。",
-        action: "View",
+        description: t("about.githubDescription"),
+        action: t("about.viewAction"),
         href: "https://github.com/LevisBale0824/SpecForge",
       },
       {
         icon: "lucide:tag",
         title: "Release",
-        description: "查看当前版本发布页和更新记录。",
+        description: t("about.releaseDescription"),
         action: t("update.releaseLink"),
         href: releaseUrl.value,
       },
       {
         icon: "lucide:circle-alert",
         title: "Issues",
-        description: "反馈缺陷或提出改进建议。",
-        action: "Open",
+        description: t("about.issuesDescription"),
+        action: t("about.openAction"),
         href: "https://github.com/LevisBale0824/SpecForge/issues",
       },
     ],
@@ -296,9 +296,9 @@ const linkGroups = computed(() => [
         <div class="settings-main-header">
           <div>
             <h1>{{ currentTitle }}</h1>
-            <p v-if="activeTab === 'about'">AI coding collaboration workstation.</p>
-            <p v-else-if="activeTab === 'backend'">Choose and control the local code agent.</p>
-            <p v-else-if="activeTab === 'appearance'">Adjust language and visual theme.</p>
+            <p v-if="activeTab === 'about'">{{ t("about.aboutDescription") }}</p>
+            <p v-else-if="activeTab === 'backend'">{{ t("about.backendDescription") }}</p>
+            <p v-else-if="activeTab === 'appearance'">{{ t("about.appearanceDescription") }}</p>
           </div>
         </div>
 
@@ -323,7 +323,7 @@ const linkGroups = computed(() => [
               </div>
               <div class="about-copy">
                 <h2>SpecForge</h2>
-                <p>OpenSpec workflow and code-agent workspace for focused software changes.</p>
+                <p>{{ t("about.heroDescription") }}</p>
                 <div class="version-row">
                   <span class="version-chip muted">v{{ appVersion }}</span>
                   <template v-if="hasUpdateTarget">
@@ -373,7 +373,9 @@ const linkGroups = computed(() => [
                 <span class="current-check" aria-hidden="true">✓</span>
                 <span>
                   <strong>{{ t("update.upToDate") }}</strong>
-                  <small v-if="lastCheckedText">Last checked {{ lastCheckedText }}</small>
+                  <small v-if="lastCheckedText">{{
+                    t("about.lastChecked", { time: lastCheckedText })
+                  }}</small>
                 </span>
               </div>
               <div v-else-if="hasReleaseNotes" class="release-notes">
@@ -391,8 +393,8 @@ const linkGroups = computed(() => [
                   ><Icon icon="lucide:cloud-download"
                 /></span>
                 <span class="row-copy">
-                  <strong>更新设置</strong>
-                  <small>自动检查新版本，并配置访问 GitHub 使用的代理。</small>
+                  <strong>{{ t("about.updatePrefsTitle") }}</strong>
+                  <small>{{ t("about.updatePrefsHint") }}</small>
                 </span>
                 <button
                   type="button"
