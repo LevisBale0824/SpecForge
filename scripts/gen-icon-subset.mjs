@@ -66,6 +66,11 @@ function main() {
 
   const subset = {
     prefix: source.prefix,
+    // Lucide ships a 24×24 viewBox. Without these, @iconify/vue falls back
+    // to its default 16×16 viewport and paths designed for 24 get clipped
+    // (icons visibly render as "only 3/4 shown").
+    width: source.width ?? 24,
+    height: source.height ?? 24,
     icons,
   };
 
