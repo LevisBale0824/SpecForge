@@ -101,6 +101,7 @@ export default {
   },
   update: {
     section: "更新",
+    highlights: "更新亮点",
     checkNow: "检查更新",
     checking: "检查中...",
     currentVersion: "当前版本",

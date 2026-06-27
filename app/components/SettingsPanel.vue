@@ -7,6 +7,7 @@ import { useTheme } from "../composables/useTheme";
 import { StorageKeys, storageSet } from "../utils/storageKeys";
 import { isElectron, openExternalUrl } from "../utils/electronBridge";
 import { useUpdate } from "../composables/useUpdate";
+import { renderMarkdown } from "../composables/useMarkdown";
 import type { BackendKind } from "../backends/types";
 
 const { t, locale } = useI18n();
@@ -184,6 +185,20 @@ const releaseUrl = computed(
   () => `https://github.com/LevisBale0824/SpecForge/releases/tag/v${latestVersion.value}`,
 );
 const isUpToDate = computed(() => update.state.value.status === "up-to-date");
+
+// Render the latest version's release notes (markdown from GitHub release
+// body, forwarded by electron-updater) as HTML. Empty until an update is
+// actually available — the static "Highlights" placeholder was removed so
+// the About panel no longer shows misleading product copy while no update
+// check has happened yet.
+const releaseNotesHtml = computed(() => {
+  const raw = update.releaseNotes.value?.trim();
+  if (!raw) return "";
+  return renderMarkdown(raw);
+});
+const hasReleaseNotes = computed(
+  () => update.state.value.status === "available" && releaseNotesHtml.value.length > 0,
+);
 const hasUpdateTarget = computed(
   () =>
     ["available", "downloaded", "progress"].includes(update.state.value.status) &&
@@ -361,13 +376,12 @@ const linkGroups = computed(() => [
                   <small v-if="lastCheckedText">Last checked {{ lastCheckedText }}</small>
                 </span>
               </div>
-              <div v-else class="release-notes">
-                <h4>Highlights</h4>
-                <ul>
-                  <li>OpenSpec workflow, proposal, task, and archive panels in one workspace.</li>
-                  <li>Local agent switching with Electron-managed services.</li>
-                  <li>Theme, language, update, and proxy preferences.</li>
-                </ul>
+              <div v-else-if="hasReleaseNotes" class="release-notes">
+                <h4>{{ t("update.highlights") }}</h4>
+                <!-- eslint-disable-next-line vue/no-v-html -- releaseNotes comes from
+                     our own GitHub release body; renderMarkdown sanitizes via
+                     markdown-it's default escape + target=_blank link rewrite. -->
+                <div class="release-notes-body" v-html="releaseNotesHtml"></div>
               </div>
             </section>
 

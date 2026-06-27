@@ -102,6 +102,7 @@ export default {
   },
   update: {
     section: "Updates",
+    highlights: "Highlights",
     checkNow: "Check for Updates",
     checking: "Checking...",
     currentVersion: "Current",
