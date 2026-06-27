@@ -25,7 +25,7 @@
 import { computed, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { useUpdate } from "../composables/useUpdate";
-import { isElectron } from "../utils/electronBridge";
+import { isElectron, openExternalUrl } from "../utils/electronBridge";
 import { toReleaseNotesHtml } from "../utils/releaseNotes";
 
 const { t } = useI18n();
@@ -81,6 +81,24 @@ async function ignore() {
 const releaseUrl = computed(
   () => `https://github.com/LevisBale0824/SpecForge/releases/tag/v${state.value.version}`,
 );
+
+async function openLink(url: string) {
+  if (inElectron) {
+    await openExternalUrl(url);
+  } else {
+    window.open(url, "_blank", "noopener");
+  }
+}
+
+// Event delegation: intercept clicks on <a> inside v-html release notes so
+// they go to the system browser instead of navigating inside Electron.
+function handleNotesClick(e: MouseEvent) {
+  const target = e.target as HTMLElement | null;
+  const anchor = target?.closest("a");
+  if (!anchor) return;
+  e.preventDefault();
+  if (anchor.href) openLink(anchor.href);
+}
 </script>
 
 <template>
@@ -166,6 +184,7 @@ const releaseUrl = computed(
               rel="noopener"
               class="ud-release-link"
               :title="t('update.releaseLinkHint')"
+              @click.prevent="openLink(releaseUrl)"
             >
               {{ t("update.releaseLink") }}
               <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -185,7 +204,7 @@ const releaseUrl = computed(
               <div class="ud-progress-meta">{{ state.percent }}%</div>
             </div>
             <!-- Otherwise show markdown release notes -->
-            <div v-else class="ud-notes" v-html="releaseNotesHtml" />
+            <div v-else class="ud-notes" v-html="releaseNotesHtml" @click="handleNotesClick" />
           </div>
 
           <!-- Footer: actions -->

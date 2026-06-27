@@ -241,6 +241,21 @@ async function openExternalLink(url: string) {
   await openExternalUrl(url);
 }
 
+// Event delegation for <a> clicks inside v-html release notes:
+// route through system browser in Electron, fall back to new tab otherwise.
+function handleNotesClick(e: MouseEvent) {
+  const target = e.target as HTMLElement | null;
+  const anchor = target?.closest("a");
+  if (!anchor) return;
+  e.preventDefault();
+  if (!anchor.href) return;
+  if (inElectron) {
+    void openExternalUrl(anchor.href);
+  } else {
+    window.open(anchor.href, "_blank", "noopener");
+  }
+}
+
 const linkGroups = computed(() => [
   {
     title: t("about.feedbackTitle"),
@@ -413,8 +428,13 @@ const linkGroups = computed(() => [
                 <h4>{{ t("update.highlights") }}</h4>
                 <!-- eslint-disable-next-line vue/no-v-html -- releaseNotes comes from
                      our own GitHub release body; renderMarkdown sanitizes via
-                     markdown-it's default escape + target=_blank link rewrite. -->
-                <div class="release-notes-body" v-html="releaseNotesHtml"></div>
+                     markdown-it's default escape + target=_blank link rewrite.
+                     @click delegation routes links through system browser. -->
+                <div
+                  class="release-notes-body"
+                  v-html="releaseNotesHtml"
+                  @click="handleNotesClick"
+                ></div>
               </div>
             </section>
 
