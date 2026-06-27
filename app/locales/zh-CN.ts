@@ -50,6 +50,7 @@ export default {
       backToParent: "返回主会话",
       orphanHint: "无法找到父会话,请在侧边栏选择其他会话。",
     },
+    dropHint: "松开以附加文件 / 文件夹",
   },
   modelPicker: {
     label: "模型",

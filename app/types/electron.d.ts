@@ -67,6 +67,8 @@ export type UserUpdatePrefs = {
 
 export interface ElectronAPI {
   /** Read the full shared config map (keyed by "ui:theme" / "opencode:baseUrl" / etc). */
+  /** Resolve an absolute OS path for a dropped File via Electron webUtils. */
+  getPathForFile: (file: File) => string;
   prefsGetAll: () => Promise<Record<string, string>>;
   /** Mirror a single key/value into specforge.config.json (atomic write on main side). */
   prefsSet: (key: string, value: string) => Promise<boolean>;

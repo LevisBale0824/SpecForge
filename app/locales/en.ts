@@ -50,6 +50,7 @@ export default {
       backToParent: "Back to parent session",
       orphanHint: "Parent session not found. Pick another session from the sidebar.",
     },
+    dropHint: "Drop files / folders to attach",
   },
   modelPicker: {
     label: "Model",

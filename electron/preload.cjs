@@ -1,8 +1,13 @@
 // Electron preload — plain CommonJS (no build step).
 // Must be CJS because contextIsolation preload scripts cannot use ESM.
-const { contextBridge, ipcRenderer } = require("electron");
+const { contextBridge, ipcRenderer, webUtils } = require("electron");
 
 contextBridge.exposeInMainWorld("electronAPI", {
+  // Resolve an absolute OS path for a dropped File. Electron's webUtils is the
+  // supported replacement for the deprecated `File.path` getter. Must be called
+  // from the preload because webUtils is only available here, not in the
+  // renderer's isolated world.
+  getPathForFile: (file) => webUtils.getPathForFile(file),
   // ── Shared preferences (multi-instance consistency) ───────────────────
   // Hydrate localStorage on boot + mirror writes. See app/utils/storageKeys.ts.
   prefsGetAll: () => ipcRenderer.invoke("prefs:getAll"),

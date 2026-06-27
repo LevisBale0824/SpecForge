@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { useProject, type FileNode } from "../composables/useProject";
 
-defineProps<{
+const props = defineProps<{
   node: FileNode;
   depth?: number;
 }>();
@@ -11,6 +11,23 @@ const { toggleNode } = useProject();
 const emit = defineEmits<{
   "open-file": [path: string];
 }>();
+
+// Internal drag-and-drop MIME type. The renderer reads this in InputPanel's
+// drop handler to convert a dragged tree node into a `@<relpath>` attachment.
+// We also mirror the path to text/plain so the drop remains useful if it lands
+// in any plain-text surface (e.g. an external editor during debugging).
+const TREE_MIME = "application/x-specforge-tree";
+
+function onDragStart(e: DragEvent) {
+  if (!e.dataTransfer) return;
+  // Payload carries the relative path plus node kind so the composer can tell
+  // folders from files when synthesizing the `@path` token.
+  const payload = JSON.stringify({ path: props.node.path, kind: props.node.kind });
+  e.dataTransfer.setData(TREE_MIME, payload);
+  e.dataTransfer.setData("text/plain", props.node.path);
+  // `copy` matches the intent — dragging a reference, not moving the file.
+  e.dataTransfer.effectAllowed = "copy";
+}
 
 // ---------------------------------------------------------------------------
 // File/folder iconography — inline SVG (Lucide-derived paths).
@@ -118,9 +135,12 @@ function fileColor(name: string): string {
     <!-- Dir entry -->
     <button
       v-if="node.kind === 'directory' && depth !== undefined"
+      draggable="true"
       class="w-full text-left px-2.5 py-1.5 rounded text-sm transition-colors flex items-center gap-1.5 text-surface-400 hover:bg-surface-800 hover:text-surface-200"
       :style="{ paddingLeft: `${depth * 14 + 8}px` }"
+      :title="node.path"
       @click="toggleNode(node)"
+      @dragstart="onDragStart"
     >
       <span class="w-3 text-center text-surface-600 text-[10px]">
         {{ node.expanded ? "▾" : "›" }}
@@ -147,9 +167,12 @@ function fileColor(name: string): string {
     <!-- File entry -->
     <button
       v-if="node.kind === 'file'"
+      draggable="true"
       class="w-full text-left px-2.5 py-1.5 rounded text-sm transition-colors flex items-center gap-1.5 text-surface-400 hover:bg-surface-800 hover:text-surface-200"
       :style="{ paddingLeft: `${(depth ?? 0) * 14 + 20}px` }"
+      :title="node.path"
       @click="emit('open-file', node.path)"
+      @dragstart="onDragStart"
     >
       <svg
         class="h-4 w-4 shrink-0"

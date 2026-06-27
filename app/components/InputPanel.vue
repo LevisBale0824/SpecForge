@@ -1,7 +1,9 @@
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from "vue";
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { useBackend } from "../composables/useBackend";
+import { useProject } from "../composables/useProject";
+import { isElectron, getPathForFile } from "../utils/electronBridge";
 import CommandMenu from "./CommandMenu.vue";
 import FileMenu from "./FileMenu.vue";
 import ModelPicker from "./ModelPicker.vue";
@@ -11,6 +13,8 @@ import { isCommandLike } from "../utils/commands";
 
 const { t } = useI18n();
 const backend = useBackend();
+const project = useProject();
+const inElectron = isElectron();
 
 // Sessions are created lazily on the first message — before that,
 // `selectedSessionId` is empty and the picker chips have nothing to bind to.
@@ -298,6 +302,152 @@ function handleFileHover(index: number) {
   selectedFileIndex.value = index;
 }
 
+// ── Drag & drop files/folders into the composer ────────────────────────────
+// Two sources of drops are supported:
+//   1. Internal — dragging a node from the sidebar FileTree. Identified by
+//      the TREE_MIME payload (a {path, kind} JSON blob). Path is already
+//      relative to the project root, so we just splice `@<path>` in.
+//   2. External — dragging OS files into the window (Electron only). We
+//      resolve each File to an absolute OS path via webUtils and convert
+//      to a project-relative path so the agent can resolve it via cwd.
+// Internal drops take precedence: when both MIME types are present (which
+// happens because FileTree also writes text/plain), we prefer the tree node.
+const TREE_MIME = "application/x-specforge-tree";
+const dragCounter = ref(0);
+const isDragOver = ref(false);
+
+function hasFilePayload(e: DragEvent): boolean {
+  // `types` is a frozen array-like; cast works in Chromium. We MUST allow
+  // the dragover/drop default-prevent whenever Files are present, otherwise
+  // Electron will navigate the window to the dropped file:// URL.
+  const types = e.dataTransfer?.types as unknown as string[] | undefined;
+  if (!types) return false;
+  const arr = Array.from(types);
+  return arr.includes("Files") || arr.includes(TREE_MIME);
+}
+
+// Window-level safety net: Electron's default behavior for file drops is to
+// navigate the window to the file:// URL, which throws away the user's
+// workspace and chat. Even if the drop lands outside the composer (e.g. on
+// the message list or sidebar), we MUST preventDefault. The composer's own
+// handler still owns the actual attach logic; this just stops the navigate.
+function windowDragOver(e: DragEvent) {
+  if (!e.dataTransfer) return;
+  const types = Array.from(e.dataTransfer.types as unknown as string[]);
+  if (types.includes("Files")) e.preventDefault();
+}
+function windowDrop(e: DragEvent) {
+  if (!e.dataTransfer) return;
+  const types = Array.from(e.dataTransfer.types as unknown as string[]);
+  if (types.includes("Files")) e.preventDefault();
+}
+onMounted(() => {
+  if (!inElectron) return;
+  window.addEventListener("dragover", windowDragOver);
+  window.addEventListener("drop", windowDrop);
+});
+onUnmounted(() => {
+  if (!inElectron) return;
+  window.removeEventListener("dragover", windowDragOver);
+  window.removeEventListener("drop", windowDrop);
+});
+
+function onDragEnter(e: DragEvent) {
+  if (!hasFilePayload(e)) return;
+  e.preventDefault();
+  dragCounter.value += 1;
+  isDragOver.value = true;
+}
+function onDragOver(e: DragEvent) {
+  if (!hasFilePayload(e)) return;
+  // CRITICAL: must preventDefault on dragover, otherwise the drop event
+  // never fires (HTML5 DnD spec) and Electron falls back to file:// nav.
+  e.preventDefault();
+  if (e.dataTransfer) e.dataTransfer.dropEffect = "copy";
+}
+function onDragLeave(e: DragEvent) {
+  e.preventDefault();
+  dragCounter.value = Math.max(0, dragCounter.value - 1);
+  if (dragCounter.value === 0) isDragOver.value = false;
+}
+
+// Splice `@token` strings into inputText at the caret position. Each token is
+// separated by a single space; the run is followed by a trailing space so the
+// user can keep typing after the attachment.
+function insertTokensAtCaret(tokens: string[]) {
+  if (tokens.length === 0) return;
+  const sep = inputText.value && !/\s$/.test(inputText.value) ? " " : "";
+  const pos = caretPos.value >= 0 ? caretPos.value : inputText.value.length;
+  const before = inputText.value.slice(0, pos);
+  const after = inputText.value.slice(pos);
+  const insert = `${sep}${tokens.join(" ")} `;
+  inputText.value = `${before}${insert}${after}`;
+  void nextTick(() => {
+    const el = textareaEl.value;
+    if (!el) return;
+    el.focus();
+    const newCaret = (before + insert).length;
+    el.setSelectionRange(newCaret, newCaret);
+    caretPos.value = newCaret;
+  });
+}
+
+function onDrop(e: DragEvent) {
+  e.preventDefault();
+  dragCounter.value = 0;
+  isDragOver.value = false;
+  if (!e.dataTransfer) return;
+
+  // ── 1. Internal drag from the sidebar FileTree. Path is already relative
+  // to the project root, so just wrap it as an `@path` token. Directories get
+  // a trailing `/` so ATTACHMENT_RE matches even without an extension.
+  const treePayload = e.dataTransfer.getData(TREE_MIME);
+  if (treePayload) {
+    try {
+      const parsed = JSON.parse(treePayload) as { path?: string; kind?: string };
+      if (parsed.path) {
+        let p = parsed.path.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
+        if (parsed.kind === "directory" && !/\./.test(p)) p += "/";
+        insertTokensAtCaret([`@${p}`]);
+        return;
+      }
+    } catch {
+      // fall through to external File handling
+    }
+  }
+
+  // ── 2. External OS file drop. Electron only — needs webUtils to recover
+  // the absolute path. Skip silently in browser mode.
+  if (!inElectron) return;
+  const fileList = Array.from(e.dataTransfer.files ?? []);
+  if (fileList.length === 0) return;
+
+  const cwd = (project.state.directoryPath || "").replace(/\\/g, "/");
+  const tokens: string[] = [];
+  for (const f of fileList) {
+    const abs = getPathForFile(f).replace(/\\/g, "/");
+    if (!abs) continue;
+    // Convert to a path the agent understands. If the file is under the cwd,
+    // use the relative path; otherwise fall back to the absolute path. The
+    // regex below is permissive enough for either form (matches `[./]` in
+    // the body), but drive-letter prefixes (`D:/...`) include `:` which
+    // ATTACHMENT_RE rejects — strip the leading `X:` so the token parses.
+    let relPath = abs;
+    if (cwd && abs.toLowerCase().startsWith(cwd.toLowerCase() + "/")) {
+      relPath = abs.slice(cwd.length + 1);
+    } else {
+      // Strip Windows drive prefix so the attachment regex can match.
+      relPath = relPath.replace(/^([a-zA-Z]:)/, "");
+    }
+    // Folders dropped from the OS may have no extension; ensure a trailing
+    // `/` so the path contains a separator and matches ATTACHMENT_RE.
+    const isDir = f.type === "" || f.size === 0;
+    if (isDir && !/[/.]$/.test(relPath)) relPath += "/";
+    tokens.push(`@${relPath}`);
+  }
+  insertTokensAtCaret(tokens);
+}
+
 // ── Send ───────────────────────────────────────────────────────────────────
 // Extract @<rel/path> tokens from text. Only matches an @ at line start or
 // after whitespace, AND requires the token to contain "." or "/" — a file
@@ -398,17 +548,40 @@ async function handleSend() {
         <ModelPicker :session-id="pickerSessionId" />
         <AgentPicker :session-id="pickerSessionId" />
       </div>
-      <div class="flex items-stretch gap-2.5 max-w-5xl mx-auto">
+      <div
+        class="relative flex items-stretch gap-2.5 max-w-5xl mx-auto"
+        @dragenter="onDragEnter"
+        @dragover="onDragOver"
+        @dragleave="onDragLeave"
+        @drop="onDrop"
+      >
         <textarea
           ref="textareaEl"
           v-model="inputText"
           :placeholder="t('chat.placeholder')"
           :disabled="backend.isSending.value || backend.isBusy.value"
           rows="3"
-          class="flex-1 resize-none rounded-lg bg-surface-800 border border-surface-700 px-4 py-3 text-base text-surface-100 placeholder:text-surface-600 focus:outline-none focus:border-accent-cyan/50 transition-colors"
+          class="flex-1 resize-none rounded-lg bg-surface-800 border px-4 py-3 text-base text-surface-100 placeholder:text-surface-600 focus:outline-none focus:border-accent-cyan/50 transition-colors"
+          :class="isDragOver ? 'border-accent-cyan' : 'border-surface-700'"
           @keydown="handleKeydown"
           @input="handleInput"
         />
+        <div
+          v-if="isDragOver"
+          class="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-lg border-2 border-dashed border-accent-cyan/60 bg-surface-900/80 backdrop-blur-sm"
+        >
+          <div class="flex items-center gap-2 text-sm text-accent-cyan">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M7 16a4 4 0 01-.88-7.9 5 5 0 019.9-1A5.5 5.5 0 0118 17H7zM9 13l3-3 3 3M12 10v7"
+              />
+            </svg>
+            <span>{{ t("chat.dropHint") }}</span>
+          </div>
+        </div>
         <button
           v-if="!backend.isBusy.value && !backend.isSending.value"
           :disabled="!inputText.trim()"

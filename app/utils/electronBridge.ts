@@ -12,6 +12,22 @@ export function isElectron(): boolean {
   return !!window.electronAPI?.isElectron;
 }
 
+/**
+ * Resolve an absolute OS path for a File from a drag/drop or file input. Only
+ * works inside Electron — browsers sandbox this for security. Returns "" when
+ * unavailable so callers can fall back to ignoring the drop.
+ */
+export function getPathForFile(file: File): string {
+  if (window.electronAPI?.getPathForFile) {
+    try {
+      return window.electronAPI.getPathForFile(file);
+    } catch {
+      return "";
+    }
+  }
+  return "";
+}
+
 export async function selectDirectory(): Promise<string | null> {
   if (window.electronAPI) {
     return window.electronAPI.selectDirectory();
