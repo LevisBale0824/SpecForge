@@ -28,6 +28,7 @@
     "prepare": "husky || true",
     "electron:build": "vue-tsc --noEmit && cross-env ELECTRON=true vite build && cross-env ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/ ELECTRON_BUILDER_BINARIES_MIRROR=https://npmmirror.com/mirrors/electron-builder-binaries/ electron-builder",
     "gen:icons": "node scripts/gen-icons.mjs",
+    "gen:icon-subset": "node scripts/gen-icon-subset.mjs",
     "bridge:build": "tsc -p cli-bridge/tsconfig.json",
     "bridge:start": "node cli-bridge/dist/server.js"
   },
@@ -61,7 +62,8 @@
       "vendor": "SpecForge",
       "synopsis": "AI 编程协作工作站",
       "description": "SpecForge — 集成 OpenSpec 工作流、交互式 Code Agent 执行与代码审查的现代化 AI 辅助开发工作台。",
-      "artifactName": "${productName}.${ext}"
+      "artifactName": "${productName}.${ext}",
+      "icon": ".generated/icons/specforge.png"
     },
     "publish": {
       "provider": "github",
@@ -79,6 +81,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.18.0",
+    "@iconify-json/lucide": "^1.2.114",
     "@shikijs/markdown-it": "^4.2.0",
     "@shikijs/transformers": "^4.2.0",
     "@tailwindcss/vite": "^4.1.18",
