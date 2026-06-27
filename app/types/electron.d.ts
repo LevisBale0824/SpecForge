@@ -66,6 +66,10 @@ export type UserUpdatePrefs = {
 };
 
 export interface ElectronAPI {
+  /** Read the full shared config map (keyed by "ui:theme" / "opencode:baseUrl" / etc). */
+  prefsGetAll: () => Promise<Record<string, string>>;
+  /** Mirror a single key/value into specforge.config.json (atomic write on main side). */
+  prefsSet: (key: string, value: string) => Promise<boolean>;
   selectDirectory: () => Promise<string | null>;
   openExternalUrl: (url: string) => Promise<boolean>;
   readDirectory: (rootPath: string, relPath: string) => Promise<DirEntry[] | null>;
@@ -122,7 +126,7 @@ export interface ElectronAPI {
   getAppVersion: () => Promise<string>;
   /** Read persistent updater preferences (auto-check toggle). */
   getUpdatePrefs: () => Promise<UserUpdatePrefs>;
-  /** Toggle auto-check and persist to userData/user-prefs.json. */
+  /** Toggle auto-check and persist to specforge.config.json. */
   setUpdateAutoCheck: (enabled: boolean) => Promise<UserUpdatePrefs>;
   /** Persist proxy URL and apply to session immediately. Empty string clears. */
   setUpdateProxy: (proxy: string) => Promise<UserUpdatePrefs>;

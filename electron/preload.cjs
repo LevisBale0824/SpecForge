@@ -3,6 +3,10 @@
 const { contextBridge, ipcRenderer } = require("electron");
 
 contextBridge.exposeInMainWorld("electronAPI", {
+  // ── Shared preferences (multi-instance consistency) ───────────────────
+  // Hydrate localStorage on boot + mirror writes. See app/utils/storageKeys.ts.
+  prefsGetAll: () => ipcRenderer.invoke("prefs:getAll"),
+  prefsSet: (key, value) => ipcRenderer.invoke("prefs:set", key, value),
   selectDirectory: () => ipcRenderer.invoke("selectDirectory"),
   openExternalUrl: (url) => ipcRenderer.invoke("openExternalUrl", url),
   readDirectory: (rootPath, relPath) =>

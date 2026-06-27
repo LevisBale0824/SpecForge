@@ -29,7 +29,7 @@ const router = useRouter();
 // text selection so the gesture feels solid.
 const sidebarResize = useResizable({
   orientation: "horizontal",
-  storageKey: "specforge.sidebar.width",
+  storageKey: "sidebar.width",
   defaultSize: 300,
   min: 200,
   max: 600,

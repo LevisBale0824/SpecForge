@@ -9,7 +9,6 @@
 import { createOpenCodeAdapter } from "./openCodeAdapter";
 import { createZeroAdapter } from "./zeroAdapter";
 import type { BackendAdapter, BackendKind } from "./types";
-import { StorageKeys, storageGet, storageRemove } from "../utils/storageKeys";
 import { isElectron } from "../utils/electronBridge";
 
 // ── Default URLs ──────────────────────────────────────────────────────────
@@ -17,6 +16,46 @@ import { isElectron } from "../utils/electronBridge";
 const DEFAULT_OPENCODE_URL = "http://localhost:13284";
 const DEFAULT_ZERO_URL = "http://localhost:13286";
 const DEFAULT_CLI_BRIDGE_URL = "http://localhost:13285";
+
+// ── Browser-mode-only localStorage persistence ─────────────────────────────
+//
+// These keys persist the user's baseUrl/auth override for the BROWSER runtime
+// only (where SpecForge connects to a manually-started remote daemon). They
+// are deliberately NOT routed through storageSet, so they never end up in
+// specforge.config.json:
+//
+//   - In Electron mode (primary target) the SettingsPanel hides these inputs
+//     entirely (`v-if="!backend.isElectron"`) and the main process spawns
+//     the daemons on fixed ports (13284/13286). Persisting these values to a
+//     shared multi-instance file would just collect dead config.
+//   - In Browser mode localStorage alone is sufficient (single tab scope).
+//
+// The keys keep the `<domain>:<field>` shape for grep grouping but live
+// outside StorageKeys to make their "browser-only, never mirrored" status
+// explicit.
+
+const BROWSER_KEYS = {
+  opencodeUrl: "opencode:baseUrl",
+  zeroUrl: "zero:baseUrl",
+  opencodeAuth: "opencode:authorization",
+  zeroAuth: "zero:authorization",
+} as const;
+
+function readLocal(key: string): string | null {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function writeLocal(key: string, value: string): void {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    /* quota — browser-only, non-fatal */
+  }
+}
 
 // ── Adapter instances ────────────────────────────────────────────────────
 
@@ -81,13 +120,13 @@ export function resolveBackendConfig(kind: BackendKind): { url: string; auth: st
   }
   const authKey =
     kind === "opencode"
-      ? StorageKeys.auth.opencodeAuthorization
+      ? BROWSER_KEYS.opencodeAuth
       : kind === "zero"
-        ? StorageKeys.auth.zeroAuthorization
+        ? BROWSER_KEYS.zeroAuth
         : null;
   return {
     url: getPersistedUrlFor(kind),
-    auth: authKey ? (storageGet(authKey) ?? undefined) : undefined,
+    auth: authKey ? (readLocal(authKey) ?? undefined) : undefined,
   };
 }
 
@@ -115,25 +154,42 @@ export function getActiveBackendAdapter(): BackendAdapter {
 }
 
 // ── Configure helpers ────────────────────────────────────────────────────
+//
+// Each configure* call does two things:
+//   1. Forwards to the adapter (updates the shared REST client).
+//   2. In Browser mode, mirrors the value into localStorage so the override
+//      survives reloads. Electron mode skips the mirror — the main process
+//      owns daemon ports and the UI doesn't expose these inputs.
 
 export function configureOpenCodeBackend(options: { baseUrl?: string; authorization?: string }) {
   getBackendAdapter("opencode").configure?.(options);
+  if (!isElectron()) {
+    if (options.baseUrl !== undefined) writeLocal(BROWSER_KEYS.opencodeUrl, options.baseUrl);
+    if (options.authorization !== undefined)
+      writeLocal(BROWSER_KEYS.opencodeAuth, options.authorization);
+  }
 }
 
 export function configureZeroBackend(options: { baseUrl?: string; authorization?: string }) {
   getBackendAdapter("zero").configure?.(options);
+  if (!isElectron()) {
+    if (options.baseUrl !== undefined) writeLocal(BROWSER_KEYS.zeroUrl, options.baseUrl);
+    if (options.authorization !== undefined)
+      writeLocal(BROWSER_KEYS.zeroAuth, options.authorization);
+  }
 }
 
 export function getPersistedOpenCodeUrl(): string {
-  return storageGet(StorageKeys.auth.opencodeBaseUrl) ?? DEFAULT_OPENCODE_URL;
+  return readLocal(BROWSER_KEYS.opencodeUrl) ?? DEFAULT_OPENCODE_URL;
 }
 
 export function getPersistedZeroUrl(): string {
-  return storageGet(StorageKeys.auth.zeroBaseUrl) ?? DEFAULT_ZERO_URL;
+  return readLocal(BROWSER_KEYS.zeroUrl) ?? DEFAULT_ZERO_URL;
 }
 
 export function getPersistedCliBridgeUrl(): string {
-  return storageGet(StorageKeys.auth.cliBridgeUrl) ?? DEFAULT_CLI_BRIDGE_URL;
+  // cli-bridge has no UI to override its URL — always the default.
+  return DEFAULT_CLI_BRIDGE_URL;
 }
 
 /** Returns the persisted baseURL for the given backend kind. */
@@ -154,7 +210,7 @@ function ensureAdapters() {
   if (!adapters["opencode"]) {
     const oc = createOpenCodeAdapter();
     const persistedUrl = getPersistedOpenCodeUrl();
-    const persistedAuth = storageGet(StorageKeys.auth.opencodeAuthorization);
+    const persistedAuth = readLocal(BROWSER_KEYS.opencodeAuth);
     oc.configure?.({
       baseUrl: persistedUrl,
       authorization: persistedAuth ?? undefined,
@@ -164,7 +220,7 @@ function ensureAdapters() {
   if (!adapters["zero"]) {
     const z = createZeroAdapter();
     const persistedUrl = getPersistedZeroUrl();
-    const persistedAuth = storageGet(StorageKeys.auth.zeroAuthorization);
+    const persistedAuth = readLocal(BROWSER_KEYS.zeroAuth);
     z.configure?.({
       baseUrl: persistedUrl,
       authorization: persistedAuth ?? undefined,
@@ -179,9 +235,3 @@ ensureAdapters();
 // adapter was created last (zero), not for the actual active backend. Re-apply
 // the active kind's config so the initial boot talks to the right port.
 applyPersistedConfig(activeBackendKind);
-
-// One-shot migration: earlier versions persisted the active backend kind to
-// localStorage. We no longer read or write it (kind is in-session only — see
-// activeBackendKind above), but stale values from older installs may still be
-// present. Remove it so it doesn't confuse future debugging.
-storageRemove(StorageKeys.auth.activeBackend);

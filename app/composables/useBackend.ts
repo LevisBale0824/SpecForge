@@ -31,7 +31,6 @@ import {
   configureZeroBackend,
   setActiveBackendKind,
 } from "../backends/registry";
-import { StorageKeys, storageSet } from "../utils/storageKeys";
 import { i18n } from "../i18n";
 import type { BackendKind } from "../backends/types";
 import type {
@@ -765,10 +764,8 @@ export function useBackend() {
     baseUrl.value = url;
     const kind = activeBackendKind.value;
     if (kind === "opencode") {
-      storageSet(StorageKeys.auth.opencodeBaseUrl, url);
       configureOpenCodeBackend({ baseUrl: url });
     } else if (kind === "zero") {
-      storageSet(StorageKeys.auth.zeroBaseUrl, url);
       configureZeroBackend({ baseUrl: url });
     }
   }
@@ -777,12 +774,8 @@ export function useBackend() {
     authHeader.value = header;
     const kind = activeBackendKind.value;
     if (kind === "opencode") {
-      if (header) storageSet(StorageKeys.auth.opencodeAuthorization, header);
-      else storageSet(StorageKeys.auth.opencodeAuthorization, "");
       configureOpenCodeBackend({ authorization: header });
     } else if (kind === "zero") {
-      if (header) storageSet(StorageKeys.auth.zeroAuthorization, header);
-      else storageSet(StorageKeys.auth.zeroAuthorization, "");
       configureZeroBackend({ authorization: header });
     }
   }

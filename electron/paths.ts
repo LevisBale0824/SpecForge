@@ -114,7 +114,7 @@ export function getAgentDir(): string {
 
 /** UI preferences file (persistent). */
 export function getPrefsPath(): string {
-  return path.join(getConfigDir(), "prefs.json");
+  return path.join(getConfigDir(), "specforge.config.json");
 }
 
 /** Updater ID file (persistent). */

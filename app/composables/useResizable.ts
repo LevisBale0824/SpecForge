@@ -61,10 +61,13 @@ export function useResizable(options: UseResizableOptions): {
 
   function persist() {
     if (!storageKey) return;
+    // Window-local layout state — deliberately NOT routed through storageSet,
+    // so it stays out of specforge.config.json. Per-window layouts shouldn't
+    // sync across instances.
     try {
       localStorage.setItem(storageKey, String(size.value));
     } catch {
-      // localStorage can throw under sandboxed contexts; non-fatal.
+      /* quota — non-fatal */
     }
   }
 

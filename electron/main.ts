@@ -24,6 +24,7 @@ import {
   getAgentConfig,
   type AgentConfig,
 } from "./serverPool";
+import { loadPrefs, getAllPrefs, setPref } from "./prefsStore";
 
 // ── Directory reading ─────────────────────────────────────────────────────
 
@@ -924,6 +925,17 @@ function parseValidationOutput(
 // ── IPC handlers ───────────────────────────────────────────────────────────
 
 function registerIpcHandlers() {
+  // ── Shared preferences (multi-instance consistency) ────────────────────
+  // The renderer hydrates its localStorage from getAllPrefs() on startup
+  // and double-writes every storageSet through prefs:set. See prefsStore.ts
+  // and app/utils/storageKeys.ts for the full contract.
+  ipcMain.handle("prefs:getAll", () => getAllPrefs());
+  ipcMain.handle("prefs:set", (_e, key: string, value: string) => {
+    if (typeof key !== "string" || typeof value !== "string") return false;
+    setPref(key, value);
+    return true;
+  });
+
   ipcMain.handle("openExternalUrl", async (_e, url: string) => {
     try {
       const parsed = new URL(url);
@@ -1356,6 +1368,10 @@ app.whenReady().then(async () => {
   // process in the instance coordinator. Must happen before startServer
   // so zombie cleanup can record our PIDs into the right location.
   initPaths();
+  // Load shared prefs into the main-process cache before any renderer IPC
+  // can arrive. Must run after initPaths() (specforge.config.json lives under the
+  // config dir that initPaths ensures exists).
+  loadPrefs();
   registerInstance(app.getVersion());
   // Decoupled model: every SpecForge window reuses the same detached agent
   // server. startServer adopts an existing healthy daemon if present, or

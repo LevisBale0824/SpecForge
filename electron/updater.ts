@@ -3,7 +3,9 @@
 // ---------------------------------------------------------------------------
 // Wraps `electron-updater` with:
 // - dev-mode guard (skips entirely when running under VITE_DEV_SERVER_URL)
-// - persistent `autoUpdate` preference in userData/user-prefs.json
+// - persistent autoUpdate / proxy / skippedVersion preferences, mirrored into
+//   the shared specforge.config.json (see prefsStore.ts) so they stay
+//   consistent across multi-instance launches
 // - event broadcast to the renderer via `update:event` IPC channel
 // - manual IPC handlers: `update:check`, `update:install`, `update:setAutoCheck`
 // ---------------------------------------------------------------------------
@@ -11,6 +13,7 @@ import { app, BrowserWindow, ipcMain, session } from "electron";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { autoUpdater } from "electron-updater";
+import { getAllPrefs, setPref } from "./prefsStore";
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -40,37 +43,86 @@ const DEFAULT_USER_PREFS: UserPrefs = {
   skippedVersion: null,
 };
 
-// ── Persistent user prefs ─────────────────────────────────────────────────
+// ── Persistent user prefs (stored in specforge.config.json) ────────────────
+//
+// Keys & serialization (prefsStore is Record<string, string>):
+//   "update:autoCheck" → "true" | "false"
+//   "update:proxy"     → raw proxy string ("" = none)
+//
+// `skippedVersion` is deliberately NOT persisted. "Skip this version" is a
+// session-scoped UX choice ("don't bother me about 0.5.0 right now"), not a
+// permanent ban. Restarting the app resets it to null so the user gets
+// re-prompted on the next launch — otherwise a one-click "skip" would
+// silently prevent them from ever seeing that update again. The value lives
+// in `sessionSkippedVersion` below.
+//
+// Boolean/null are serialized as strings because prefsStore's contract is
+// string-only (it also backs the renderer's localStorage hydration, which
+// can only hold strings). Conversion lives in this module.
 
-function prefsPath(): string {
-  return path.join(app.getPath("userData"), "user-prefs.json");
+const KEY_AUTO_CHECK = "update:autoCheck";
+const KEY_PROXY = "update:proxy";
+
+/** Persisted prefs (autoUpdate + proxy only). */
+let cachedPrefs: { autoUpdate: boolean; proxy: string } | null = null;
+
+/** Session-only skip choice. Reset to null on every app launch. */
+let sessionSkippedVersion: string | null = null;
+
+let migrated = false;
+
+/**
+ * One-shot migration from the legacy standalone file
+ * (`userData/user-prefs.json`) into the shared specforge.config.json.
+ *
+ * Runs when the new keys are absent AND the legacy file still exists.
+ * After a successful copy the legacy file is deleted so this is a no-op
+ * on subsequent launches.
+ *
+ * `skippedVersion` is intentionally NOT migrated — the new semantics reset
+ * it every launch, so a stale "skip 0.5.0" from the old install shouldn't
+ * survive the upgrade.
+ */
+function migrateFromLegacyPrefs(): void {
+  if (migrated) return;
+  migrated = true;
+  const all = getAllPrefs();
+  if (all[KEY_AUTO_CHECK] !== undefined) return; // already in new location
+  const legacyPath = path.join(app.getPath("userData"), "user-prefs.json");
+  let parsed: Partial<UserPrefs> = {};
+  try {
+    parsed = JSON.parse(fs.readFileSync(legacyPath, "utf-8")) as Partial<UserPrefs>;
+  } catch {
+    return; // legacy file missing or corrupt — nothing to migrate
+  }
+  setPref(KEY_AUTO_CHECK, String(parsed.autoUpdate ?? DEFAULT_USER_PREFS.autoUpdate));
+  setPref(KEY_PROXY, typeof parsed.proxy === "string" ? parsed.proxy : "");
+  try {
+    fs.unlinkSync(legacyPath);
+    console.log("[updater] migrated user-prefs.json → specforge.config.json");
+  } catch (err) {
+    console.warn("[updater] migrated values but failed to remove legacy user-prefs.json:", err);
+  }
 }
 
-let cachedPrefs: UserPrefs | null = null;
-
 function loadPrefs(): UserPrefs {
-  if (cachedPrefs) return cachedPrefs;
-  try {
-    const raw = fs.readFileSync(prefsPath(), "utf-8");
-    const parsed = JSON.parse(raw) as Partial<UserPrefs>;
+  if (!cachedPrefs) {
+    migrateFromLegacyPrefs();
+    const all = getAllPrefs();
     cachedPrefs = {
-      autoUpdate: typeof parsed.autoUpdate === "boolean" ? parsed.autoUpdate : true,
-      proxy: typeof parsed.proxy === "string" ? parsed.proxy.trim() : "",
-      skippedVersion: typeof parsed.skippedVersion === "string" ? parsed.skippedVersion : null,
+      autoUpdate: all[KEY_AUTO_CHECK] !== "false", // default true
+      proxy: typeof all[KEY_PROXY] === "string" ? all[KEY_PROXY].trim() : "",
     };
-  } catch {
-    cachedPrefs = { ...DEFAULT_USER_PREFS };
   }
-  return cachedPrefs;
+  return { ...cachedPrefs, skippedVersion: sessionSkippedVersion };
 }
 
 function savePrefs(next: UserPrefs): void {
-  cachedPrefs = next;
-  try {
-    fs.writeFileSync(prefsPath(), JSON.stringify(next, null, 2), "utf-8");
-  } catch (err) {
-    console.error("[updater] failed to persist user prefs:", err);
-  }
+  // Only autoUpdate/proxy persist; skippedVersion stays session-only.
+  cachedPrefs = { autoUpdate: next.autoUpdate, proxy: next.proxy };
+  sessionSkippedVersion = next.skippedVersion;
+  setPref(KEY_AUTO_CHECK, String(next.autoUpdate));
+  setPref(KEY_PROXY, next.proxy);
 }
 
 export function getUserPrefs(): UserPrefs {
@@ -150,7 +202,7 @@ function normalizeProxyRules(input: string): string {
  * electron-updater's HTTP requests go through this session, so this is the
  * authoritative place to configure proxying. Safe to call multiple times.
  *
- * Priority: ELECTRON_UPDATER_PROXY env var > user-prefs.proxy > system default.
+ * Priority: ELECTRON_UPDATER_PROXY env var > specforge.config.json proxy > system default.
  * Empty string clears any previously configured proxy.
  */
 async function applyProxy(): Promise<void> {
