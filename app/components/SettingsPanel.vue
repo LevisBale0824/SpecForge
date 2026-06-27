@@ -168,6 +168,23 @@ async function applyProxy() {
   await update.setProxy(proxyInput.value);
 }
 
+// Local flags guard against double-clicks while the IPC round-trip is in
+// flight. They mirror UpdateDialog.vue's pattern so the Settings panel and
+// the startup modal can each trigger the same shared update state safely.
+const downloading = ref(false);
+async function startUpdate() {
+  if (downloading.value) return;
+  downloading.value = true;
+  await update.downloadUpdate();
+}
+
+const installing = ref(false);
+async function restart() {
+  if (installing.value) return;
+  installing.value = true;
+  await update.installUpdate();
+}
+
 const updateStatus = computed(() => {
   const s = update.state.value.status;
   if (s === "checking") return t("update.checking");
@@ -356,6 +373,24 @@ const linkGroups = computed(() => [
                   <span v-if="isUpToDate" class="status-badge status-ok">
                     {{ t("update.upToDate") }}
                   </span>
+                  <button
+                    v-if="update.state.value.status === 'available'"
+                    type="button"
+                    class="primary-button"
+                    :disabled="downloading"
+                    @click="startUpdate"
+                  >
+                    {{ downloading ? t("update.preparing") : t("update.downloadNow") }}
+                  </button>
+                  <button
+                    v-if="update.state.value.status === 'downloaded'"
+                    type="button"
+                    class="primary-button"
+                    :disabled="installing"
+                    @click="restart"
+                  >
+                    {{ t("update.install") }}
+                  </button>
                   <button
                     v-if="hasUpdateTarget"
                     type="button"
