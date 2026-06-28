@@ -206,7 +206,7 @@ async function copyMessage(msgId: string) {
               class="mt-0.5 h-9 w-9 flex-shrink-0 rounded-full object-cover ring-1 ring-surface-700/50"
             />
 
-            <div class="group flex min-w-0 flex-1 flex-col items-start">
+            <div class="group flex min-w-0 flex-col items-start">
               <!-- Bubble -->
               <div
                 class="min-w-[180px] max-w-[min(760px,calc(100%-3.5rem))] rounded-lg bg-surface-800/80 px-4 py-3 text-sm leading-relaxed text-surface-200"
@@ -266,7 +266,7 @@ async function copyMessage(msgId: string) {
           </template>
 
           <template v-else>
-            <div class="group flex min-w-0 flex-1 flex-col items-end">
+            <div class="group flex min-w-0 flex-col items-end">
               <!-- Bubble -->
               <div
                 class="min-w-[180px] max-w-[min(820px,calc(100%-3.5rem))] rounded-lg bg-accent-cyan/10 px-4 py-3 text-sm leading-relaxed text-surface-100"
