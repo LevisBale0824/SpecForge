@@ -6,6 +6,7 @@ import { renderMarkdown } from "../composables/useMarkdown";
 import { useSessions } from "../composables/useSessions";
 import {
   extractCommand,
+  extractEditDiffs,
   extractSubSessionId,
   formatGlobToolTitle,
   formatListToolTitle,
@@ -18,6 +19,8 @@ import {
   toolColor,
 } from "./ToolWindow/utils";
 import type { MessagePart, ToolState } from "../types/sse";
+import type { MessageDiffEntry } from "../types/message";
+import DiffViewer from "./DiffViewer.vue";
 
 const emit = defineEmits<{
   "navigate-session": [sessionId: string];
@@ -38,6 +41,7 @@ type DisplayBlock =
       command?: string;
       output?: string;
       error?: string;
+      diffs?: MessageDiffEntry[];
       subSessionId?: string;
       subSessionInferred?: boolean;
     };
@@ -52,7 +56,7 @@ type RenderItem =
   | { kind: "text"; id: string; text: string; html?: string }
   | { kind: "reasoning"; id: string; text: string }
   | { kind: "tool"; block: ToolBlock }
-  | { kind: "tool-group"; id: string; blocks: ToolBlock[] };
+  | { kind: "tool-group"; id: string; blocks: ToolBlock[]; errorCount: number; hasDiffs: boolean };
 
 const props = defineProps<{ messageId: string }>();
 
@@ -204,6 +208,7 @@ const inlineBlocks = computed<DisplayBlock[]>(() => {
         command: extractCommand(toolInput),
         output: part.state.status === "completed" ? part.state.output : undefined,
         error: part.state.status === "error" ? part.state.error : undefined,
+        diffs: extractEditDiffs(part.tool, toolInput),
       });
     }
   }
@@ -227,7 +232,9 @@ const renderItems = computed<RenderItem[]>(() => {
   const flush = () => {
     if (pending.length === 0) return;
     const id = `group:${pending.map((b) => b.id).join("|")}`;
-    out.push({ kind: "tool-group", id, blocks: pending });
+    const errorCount = pending.filter((b) => b.state.status === "error").length;
+    const hasDiffs = pending.some((b) => b.diffs?.length);
+    out.push({ kind: "tool-group", id, blocks: pending, errorCount, hasDiffs });
     pending = [];
   };
 
@@ -304,6 +311,8 @@ watchEffect(() => {
               kind: item.kind,
               id: item.id,
               count: item.blocks.length,
+              errorCount: item.errorCount,
+              hasDiffs: item.hasDiffs,
               tools: item.blocks.map((block) => ({
                 id: block.id,
                 tool: block.tool,
@@ -330,10 +339,6 @@ function summarizeGroup(blocks: ToolBlock[]): { tool: string; count: number }[] 
     counts.set(b.tool, (counts.get(b.tool) ?? 0) + 1);
   }
   return Array.from(counts, ([tool, count]) => ({ tool, count })).sort((a, b) => b.count - a.count);
-}
-
-function groupHasError(blocks: ToolBlock[]): boolean {
-  return blocks.some((b) => b.state.status === "error");
 }
 
 const expandedReasoning = ref<Record<string, boolean>>({});
@@ -364,14 +369,45 @@ function reasoningLineCount(text: string): number {
   return text.split(/\r?\n/).filter((line) => line.trim()).length;
 }
 
-const expandedTools = ref<Record<string, boolean>>({});
-function toggleTool(id: string) {
-  expandedTools.value[id] = !expandedTools.value[id];
+// A reasoning block is "live" (actively streaming new tokens) when the
+// message is streaming and this block is the last item in the render list.
+// Collapsed by default, a live reasoning block shows a pulsing indicator so
+// the user can tell thinking output is being produced without expanding it.
+function isReasoningLive(index: number): boolean {
+  if (!isStreaming.value) return false;
+  return index === renderItems.value.length - 1;
 }
 
-const expandedGroups = ref<Record<string, boolean>>({});
-function toggleGroup(id: string) {
-  expandedGroups.value[id] = !expandedGroups.value[id];
+// undefined = never toggled, fall back to isToolExpanded's default.
+// true/false = explicit user override that persists across re-renders.
+const expandedTools = ref<Record<string, boolean | undefined>>({});
+
+function isToolExpanded(block: ToolBlock, inGroup = false): boolean {
+  const stored = expandedTools.value[block.id];
+  if (stored !== undefined) return stored;
+  // Standalone tool chips default to expanded. Inside a tool group, expand
+  // only what carries signal: failures (to see the error) and edits/writes
+  // (code diffs matter even when successful). Successful read-only tools
+  // collapse — their output is rarely the focus of a finished batch.
+  if (inGroup) return block.state.status === "error" || Boolean(block.diffs?.length);
+  return true;
+}
+
+function toggleTool(block: ToolBlock, inGroup = false) {
+  expandedTools.value[block.id] = !isToolExpanded(block, inGroup);
+}
+
+const expandedGroups = ref<Record<string, boolean | undefined>>({});
+function isGroupExpanded(item: { id: string; errorCount: number; hasDiffs: boolean }): boolean {
+  const stored = expandedGroups.value[item.id];
+  if (stored !== undefined) return stored;
+  // Default: expand groups containing errors (to see failures) or code diffs
+  // (edits/writes — code changes matter). Pure read-only successful groups
+  // stay collapsed as bulk-history summaries.
+  return item.errorCount > 0 || item.hasDiffs;
+}
+function toggleGroup(item: { id: string; errorCount: number; hasDiffs: boolean }) {
+  expandedGroups.value[item.id] = !isGroupExpanded(item);
 }
 
 function toolStatusText(block: { state: ToolState }): string {
@@ -406,7 +442,10 @@ function onJump(sessionId: string): void {
 
 <template>
   <div>
-    <template v-for="item in renderItems" :key="item.kind === 'tool' ? item.block.id : item.id">
+    <template
+      v-for="(item, itemIdx) in renderItems"
+      :key="item.kind === 'tool' ? item.block.id : item.id"
+    >
       <!-- Text -->
       <div v-if="item.kind === 'text' && item.html" class="md-content" v-html="item.html" />
       <div v-else-if="item.kind === 'text'" class="whitespace-pre-wrap break-words">
@@ -419,15 +458,31 @@ function onJump(sessionId: string): void {
           class="flex w-full min-w-0 items-center gap-1.5 text-left text-[11px] text-surface-500 transition-colors hover:text-surface-300"
           @click="toggleReasoning(item.id)"
         >
-          <span class="flex-shrink-0 text-[10px]">
+          <span v-if="isReasoningLive(itemIdx)" class="flex flex-shrink-0 items-center">
+            <span class="thinking-dot" />
+          </span>
+          <span v-else class="flex-shrink-0 text-[10px]">
             {{ isReasoningExpanded(item.id) ? "-" : "+" }}
           </span>
           <span class="hidden flex-shrink-0 text-[9px]">
             {{ expandedReasoning[item.id] ? "▾" : "▸" }}
           </span>
-          <span>思考过程</span>
-          <span class="flex-shrink-0 text-surface-600">
+          <span
+            class="flex-shrink-0 whitespace-nowrap"
+            :class="isReasoningLive(itemIdx) ? 'text-surface-300' : ''"
+            >思考过程</span
+          >
+          <span
+            class="flex-shrink-0 whitespace-nowrap tabular-nums"
+            :class="isReasoningLive(itemIdx) ? 'text-accent-emerald' : 'text-surface-600'"
+          >
             {{ reasoningLineCount(item.text) }} lines
+          </span>
+          <span
+            v-if="isReasoningLive(itemIdx)"
+            class="flex-shrink-0 whitespace-nowrap text-[10px] text-accent-emerald/80"
+          >
+            输出中…
           </span>
           <span
             v-if="!isReasoningExpanded(item.id)"
@@ -441,6 +496,14 @@ function onJump(sessionId: string): void {
           class="mt-1 whitespace-pre-wrap rounded-md border border-surface-800 bg-surface-900/35 px-2.5 py-2 text-[12px] italic text-surface-400"
         >
           {{ item.text }}
+          <div class="mt-2 flex justify-end not-italic">
+            <button
+              @click="toggleReasoning(item.id)"
+              class="text-[11px] text-surface-500 transition-colors hover:text-surface-300"
+            >
+              收起 ↑
+            </button>
+          </div>
         </div>
       </div>
 
@@ -448,7 +511,7 @@ function onJump(sessionId: string): void {
       <div v-else-if="item.kind === 'tool'" class="my-1.5">
         <button
           class="group flex w-full items-center gap-1.5 rounded-md border border-surface-800 bg-surface-900/60 px-2 py-1 text-left transition-colors hover:border-surface-700 hover:bg-surface-800/60"
-          @click="toggleTool(item.block.id)"
+          @click="toggleTool(item.block)"
         >
           <span
             class="inline-flex h-1.5 w-1.5 flex-shrink-0 rounded-full"
@@ -486,14 +549,17 @@ function onJump(sessionId: string): void {
           >
             {{ item.block.title }}
           </span>
-          <span class="flex-shrink-0 text-[10px] uppercase" :class="toolStatusColor(item.block)">
+          <span
+            class="flex-shrink-0 whitespace-nowrap text-[10px] uppercase"
+            :class="toolStatusColor(item.block)"
+          >
             {{ toolStatusText(item.block) }}
           </span>
           <span
             v-if="item.block.state.status === 'completed' || item.block.state.status === 'error'"
             class="text-[9px] text-surface-500 transition-colors group-hover:text-surface-300"
           >
-            {{ expandedTools[item.block.id] ? "▾" : "▸" }}
+            {{ isToolExpanded(item.block) ? "▾" : "▸" }}
           </span>
           <span
             v-else
@@ -502,7 +568,7 @@ function onJump(sessionId: string): void {
         </button>
         <div
           v-if="
-            expandedTools[item.block.id] &&
+            isToolExpanded(item.block) &&
             (item.block.command || item.block.output || item.block.error)
           "
           class="mt-1 max-h-64 overflow-auto rounded-md border border-surface-800 bg-black/30 px-2 py-1.5 font-mono text-[11px]"
@@ -521,22 +587,32 @@ function onJump(sessionId: string): void {
             {{ item.block.error || item.block.output }}
           </div>
         </div>
+        <div v-if="isToolExpanded(item.block) && item.block.diffs?.length" class="mt-1 space-y-2">
+          <div v-for="(d, idx) in item.block.diffs" :key="idx" class="tool-inline-diff">
+            <div class="tool-inline-diff-header">{{ d.file }}</div>
+            <DiffViewer :diff="d" />
+          </div>
+        </div>
       </div>
 
       <!-- Tool group (summary of consecutive completed tools) -->
       <div v-else-if="item.kind === 'tool-group'" class="my-1.5">
         <button
           class="group flex w-full items-center gap-1.5 rounded-md border border-surface-800 bg-surface-900/40 px-2 py-1 text-left transition-colors hover:border-surface-700 hover:bg-surface-800/60"
-          @click="toggleGroup(item.id)"
+          @click="toggleGroup(item)"
         >
           <span
             class="flex h-3 w-3 flex-shrink-0 items-center justify-center rounded-full text-[8px] font-bold text-white"
-            :class="groupHasError(item.blocks) ? 'bg-accent-rose' : 'bg-accent-emerald/80'"
+            :class="item.errorCount > 0 ? 'bg-accent-rose' : 'bg-accent-emerald/80'"
           >
-            {{ groupHasError(item.blocks) ? "!" : "✓" }}
+            {{ item.errorCount > 0 ? "!" : "✓" }}
           </span>
-          <span class="font-mono text-[11px] text-surface-300">
-            {{ item.blocks.length }} tools
+          <span
+            class="flex-shrink-0 whitespace-nowrap font-mono text-[11px] text-surface-300 tabular-nums"
+          >
+            {{ item.blocks.length }} tools<span v-if="item.errorCount > 0" class="text-accent-rose"
+              >&nbsp;· {{ item.errorCount }} err</span
+            >
           </span>
           <span class="min-w-0 flex-1 truncate text-[11px] text-surface-500">
             <span
@@ -550,17 +626,17 @@ function onJump(sessionId: string): void {
             </span>
           </span>
           <span
-            class="flex-shrink-0 text-[9px] text-surface-500 transition-colors group-hover:text-surface-300"
+            class="flex-shrink-0 whitespace-nowrap text-[9px] text-surface-500 transition-colors group-hover:text-surface-300"
           >
-            {{ expandedGroups[item.id] ? "▾" : "▸" }}
+            {{ isGroupExpanded(item) ? "▾" : "▸" }}
           </span>
         </button>
         <!-- Expanded: render each tool as a sub-chip -->
-        <div v-if="expandedGroups[item.id]" class="mt-1 space-y-1 border-l border-surface-800 pl-2">
+        <div v-if="isGroupExpanded(item)" class="mt-1 space-y-1 border-l border-surface-800 pl-2">
           <div v-for="block in item.blocks" :key="block.id">
             <button
               class="group flex w-full items-center gap-1.5 rounded-md border border-surface-800 bg-surface-900/60 px-2 py-1 text-left transition-colors hover:border-surface-700 hover:bg-surface-800/60"
-              @click="toggleTool(block.id)"
+              @click="toggleTool(block, true)"
             >
               <span
                 class="inline-flex h-1.5 w-1.5 flex-shrink-0 rounded-full"
@@ -604,11 +680,11 @@ function onJump(sessionId: string): void {
               <span
                 class="text-[9px] text-surface-500 transition-colors group-hover:text-surface-300"
               >
-                {{ expandedTools[block.id] ? "▾" : "▸" }}
+                {{ isToolExpanded(block, true) ? "▾" : "▸" }}
               </span>
             </button>
             <div
-              v-if="expandedTools[block.id] && (block.command || block.output || block.error)"
+              v-if="isToolExpanded(block, true) && (block.command || block.output || block.error)"
               class="mt-1 max-h-64 overflow-auto rounded-md border border-surface-800 bg-black/30 px-2 py-1.5 font-mono text-[11px]"
             >
               <div v-if="block.command" class="whitespace-pre-wrap break-all text-surface-200">
@@ -623,6 +699,12 @@ function onJump(sessionId: string): void {
                 ]"
               >
                 {{ block.error || block.output }}
+              </div>
+            </div>
+            <div v-if="isToolExpanded(block, true) && block.diffs?.length" class="mt-1 space-y-2">
+              <div v-for="(d, idx) in block.diffs" :key="idx" class="tool-inline-diff">
+                <div class="tool-inline-diff-header">{{ d.file }}</div>
+                <DiffViewer :diff="d" />
               </div>
             </div>
           </div>
@@ -672,5 +754,38 @@ function onJump(sessionId: string): void {
     transform: translateY(-4px);
     opacity: 0.95;
   }
+}
+
+.tool-inline-diff {
+  border: 1px solid color-mix(in srgb, var(--color-surface-800, #1e293b) 70%, transparent);
+  border-radius: 6px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--color-surface-950, #020617) 60%, transparent);
+  max-height: 320px;
+  display: flex;
+  flex-direction: column;
+}
+
+.tool-inline-diff-header {
+  padding: 0.3rem 0.55rem;
+  font-family: var(--font-mono, monospace);
+  font-size: 10px;
+  color: var(--color-surface-400, #94a3b8);
+  background: color-mix(in srgb, var(--color-surface-900, #0f172a) 90%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--color-surface-800, #1e293b) 70%, transparent);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* DiffViewer defaults to height:100% for its full-window use case; inside a
+   fixed-height inline container we want it to fill that container instead. */
+.tool-inline-diff :deep(.diff-viewer) {
+  height: auto;
+  max-height: 288px;
+}
+
+.tool-inline-diff :deep(.diff-grid) {
+  max-height: 288px;
 }
 </style>

@@ -10,6 +10,8 @@ export default {
     startFailed: "无法启动 {agent} agent:{reason}",
     serverDown: "服务器未启动(CLI 未安装或端口被占用?)",
     serverStopped: "后台 agent server 已停止,请点击「重启 Agent」按钮恢复连接",
+    noContentTimeout:
+      "Agent 在 120 秒内未产生任何输出,可能由于模型未配置、Provider 鉴权失败或后端挂起。请检查后端日志或重启 agent。",
   },
   sidebar: {
     sessions: "会话",
@@ -99,6 +101,10 @@ export default {
     tabAppearance: "外观",
     tabAbout: "关于",
     connect: "连接",
+    displayName: "显示名称",
+    displayNameHint: "对话消息头部显示的自定义称呼，留空恢复默认。",
+    agentName: "Agent 名称",
+    userName: "你的名称",
   },
   update: {
     section: "更新",

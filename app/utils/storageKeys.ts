@@ -33,6 +33,8 @@ export const StorageKeys = {
     locale: "ui:locale",
     theme: "ui:theme",
     followSystemTheme: "ui:followSystemTheme",
+    agentName: "ui:agentName",
+    userName: "ui:userName",
   },
 } as const;
 

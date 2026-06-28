@@ -1,8 +1,73 @@
 import type { SessionInfo, ToolState } from "../../types/sse";
+import type { MessageDiffEntry } from "../../types/message";
 
 export function extractCommand(input: Record<string, unknown> | undefined): string | undefined {
   const command = typeof input?.command === "string" ? input.command.trim() : "";
   return command || undefined;
+}
+
+// Extract renderable before/after (or unified-diff patch) from edit-family
+// tool inputs so the inline chip can show what the agent actually changed.
+// Returns undefined for tools that aren't edit-shaped OR lack any content.
+//
+// Field name variants covered:
+//   - filePath / path           : file identifier (opencode uses `filePath`)
+//   - oldString / newString     : `edit` tool
+//   - content                   : `write` tool (whole new file)
+//   - edits[]                   : `multiedit` tool (one entry per region)
+//   - input / patch / diff      : `apply_patch` tool (unified diff string)
+export function extractEditDiffs(
+  tool: string,
+  input: Record<string, unknown> | undefined,
+): MessageDiffEntry[] | undefined {
+  if (!input) return undefined;
+
+  const filePath =
+    (typeof input.filePath === "string" ? input.filePath.trim() : "") ||
+    (typeof input.path === "string" ? input.path.trim() : "") ||
+    "";
+
+  switch (tool) {
+    case "edit": {
+      const oldString = typeof input.oldString === "string" ? input.oldString : "";
+      const newString = typeof input.newString === "string" ? input.newString : "";
+      if (!oldString && !newString) return undefined;
+      return [{ file: filePath || "<edit>", diff: "", before: oldString, after: newString }];
+    }
+    case "write": {
+      const content = typeof input.content === "string" ? input.content : "";
+      if (!content) return undefined;
+      return [{ file: filePath || "<write>", diff: "", before: "", after: content }];
+    }
+    case "multiedit": {
+      const edits = Array.isArray(input.edits) ? input.edits : [];
+      const result: MessageDiffEntry[] = [];
+      edits.forEach((edit, i) => {
+        if (!edit || typeof edit !== "object") return;
+        const rec = edit as Record<string, unknown>;
+        const oldString = typeof rec.oldString === "string" ? rec.oldString : "";
+        const newString = typeof rec.newString === "string" ? rec.newString : "";
+        if (!oldString && !newString) return;
+        result.push({
+          file: `${filePath || "<multiedit>"}#${i + 1}`,
+          diff: "",
+          before: oldString,
+          after: newString,
+        });
+      });
+      return result.length > 0 ? result : undefined;
+    }
+    case "apply_patch": {
+      const patch =
+        (typeof input.input === "string" ? input.input : "") ||
+        (typeof input.patch === "string" ? input.patch : "") ||
+        (typeof input.diff === "string" ? input.diff : "");
+      if (!patch.trim()) return undefined;
+      return [{ file: filePath || "<apply_patch>", diff: patch }];
+    }
+    default:
+      return undefined;
+  }
 }
 
 export function formatGlobToolTitle(

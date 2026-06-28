@@ -230,6 +230,46 @@ function clearIdleFallback(sessionId: string): void {
   }
 }
 
+// No-content fallback: armed when a prompt is dispatched, cleared when the
+// first content (delta/part) for the session arrives. If the backend neither
+// produces any token nor signals completion within NO_CONTENT_TIMEOUT_MS,
+// every still-streaming assistant message is failed with a descriptive
+// error. Covers cold-start hangs (provider auth missing, MCP deadlock),
+// silently dropped SSE connections that don't trigger onError, and similar
+// cases that leave "正在思考" stuck indefinitely. The 120s window tolerates
+// legitimate first-call cold starts (model download, MCP init) while still
+// catching genuinely hung agents.
+const NO_CONTENT_TIMEOUT_MS = 120_000;
+const noContentFallbackTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
+function scheduleNoContentFallback(sessionId: string): void {
+  if (!sessionId) return;
+  clearNoContentFallback(sessionId);
+  const armedAt = Date.now();
+  const timer = setTimeout(() => {
+    noContentFallbackTimers.delete(sessionId);
+    if (!msgStore.hasStreamingAssistantMessages(sessionId)) return;
+    const elapsedMs = Date.now() - armedAt;
+    const reason = i18n.global.t("status.noContentTimeout");
+    msgStore.failStreamingAssistantMessages(sessionId, reason);
+    sessionStatus.markIdle(sessionId);
+    console.warn(
+      `[useBackend] No-content fallback fired for ${sessionId} after ${elapsedMs}ms — ` +
+        `backend produced no tokens and no completion signal. Likely a hung agent, missing provider auth, or silent connection drop.`,
+      { sessionId, timeoutMs: NO_CONTENT_TIMEOUT_MS, elapsedMs },
+    );
+  }, NO_CONTENT_TIMEOUT_MS);
+  noContentFallbackTimers.set(sessionId, timer);
+}
+
+function clearNoContentFallback(sessionId: string): void {
+  const existing = noContentFallbackTimers.get(sessionId);
+  if (existing) {
+    clearTimeout(existing);
+    noContentFallbackTimers.delete(sessionId);
+  }
+}
+
 function clearConnectionLostTimer(): void {
   if (connectionLostTimer) {
     clearTimeout(connectionLostTimer);
@@ -239,9 +279,15 @@ function clearConnectionLostTimer(): void {
 
 function failActiveToolsForLostConnection(message: string): void {
   const sessionId = selectedSessionId.value;
-  if (!sessionId || !msgStore.hasActiveToolParts(sessionId)) return;
-  msgStore.markActiveToolPartsError(sessionId, message);
+  if (!sessionId) return;
+  const hasTools = msgStore.hasActiveToolParts(sessionId);
+  const hasStreaming = msgStore.hasStreamingAssistantMessages(sessionId);
+  if (!hasTools && !hasStreaming) return;
+  if (hasTools) msgStore.markActiveToolPartsError(sessionId, message);
+  // markActiveToolPartsError is a no-op for empty streaming messages — failStreamingAssistantMessages covers those.
+  if (hasStreaming) msgStore.failStreamingAssistantMessages(sessionId, message);
   clearIdleFallback(sessionId);
+  clearNoContentFallback(sessionId);
   sessionStatus.markIdle(sessionId);
   scheduleDiffRefresh(sessionId, 250);
 }
@@ -304,7 +350,9 @@ const sessionLifecycle = useBackendSessionLifecycle({
   },
   onSessionAborted: (sessionId) => {
     msgStore.markActiveToolPartsError(sessionId, "Aborted by user");
+    msgStore.failStreamingAssistantMessages(sessionId, "Aborted by user");
     clearIdleFallback(sessionId);
+    clearNoContentFallback(sessionId);
     sessionStatus.markIdle(sessionId);
     scheduleDiffRefresh(sessionId, 250);
   },
@@ -332,7 +380,17 @@ ge.on("message.updated", (payload) => {
   // Backend signaled completion — arm the idle fallback in case the
   // `session.status=idle` event never arrives (timeout / abort paths).
   scheduleIdleFallback(info.sessionID);
+  clearNoContentFallback(info.sessionID);
 });
+
+// Any delta/part for this session means the agent is producing output — disarm the no-content watchdog.
+for (const partEvent of ["message.part.delta", "message.part.updated"] as const) {
+  ge.on(partEvent, (payload) => {
+    const sessionId = toRecord(payload)?.sessionID;
+    if (typeof sessionId !== "string" || !sessionId) return;
+    clearNoContentFallback(sessionId);
+  });
+}
 
 ge.on("file.edited", () => {
   if (selectedSessionId.value) scheduleDiffRefresh(selectedSessionId.value, 800);
@@ -355,6 +413,7 @@ ge.on("session.status", (payload) => {
   if (packet.status?.type !== "idle") return;
   // Backend sent idle — cancel any pending fallback for this session.
   clearIdleFallback(packet.sessionID);
+  clearNoContentFallback(packet.sessionID);
   msgStore.markActiveToolPartsCompleted(packet.sessionID);
   scheduleDiffRefresh(packet.sessionID, 250);
 });
@@ -631,6 +690,7 @@ export function useBackend() {
       return success;
     }
     sessionStatus.markBusy(selectedSessionId.value);
+    scheduleNoContentFallback(selectedSessionId.value);
 
     // First-prompt auto-titling. Only fires once per session and only when the
     // backend hasn't already given the session a real title (i.e. the title is
@@ -699,6 +759,7 @@ export function useBackend() {
         variant: variant.value || undefined,
       });
       sessionStatus.markBusy(selectedSessionId.value);
+      scheduleNoContentFallback(selectedSessionId.value);
       return true;
     } catch (error) {
       if (tempId) msgStore.removeMessage(tempId);

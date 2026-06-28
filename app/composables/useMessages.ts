@@ -562,6 +562,48 @@ function markActiveToolPartsCompleted(sessionId: string): void {
   });
 }
 
+/**
+ * Whether any assistant message for the given session is still streaming.
+ * Used by connection-loss / abort fallbacks to decide whether there's
+ * anything to clean up — without this they would early-return when there
+ * are no active tool parts, leaving an empty "正在思考" stuck forever.
+ */
+function hasStreamingAssistantMessages(sessionId: string): boolean {
+  if (!sessionId) return false;
+  for (const messageRef of messages.value.values()) {
+    const info = messageRef.value.info;
+    if (!info || info.role !== "assistant") continue;
+    if (info.sessionID !== sessionId) continue;
+    if (resolveStatus(info) === "streaming") return true;
+  }
+  return false;
+}
+
+/**
+ * Force every still-streaming assistant message for `sessionId` into the
+ * "error" state by injecting a synthetic error envelope matching the SSE
+ * MessageError shape ({ name, data: { message } }). Used when the backend
+ * silently drops a connection or hangs before emitting any completion
+ * signal — without this fabrication the UI would show "正在思考" forever.
+ */
+function failStreamingAssistantMessages(sessionId: string, errorMessage: string): void {
+  if (!sessionId) return;
+  let touched = false;
+  for (const messageRef of messages.value.values()) {
+    const info = messageRef.value.info;
+    if (!info || info.role !== "assistant") continue;
+    if (info.sessionID !== sessionId) continue;
+    if (resolveStatus(info) !== "streaming") continue;
+    messageRef.value.info = {
+      ...info,
+      error: { name: "StreamingTimeout", data: { message: errorMessage } },
+    };
+    triggerMessageRef(messageRef);
+    touched = true;
+  }
+  if (touched) triggerCollection();
+}
+
 function getPartsByType<T extends MessagePart["type"]>(
   id: string,
   type: T,
@@ -940,6 +982,8 @@ export function useMessages() {
     list,
     getParts,
     hasActiveToolParts,
+    hasStreamingAssistantMessages,
+    failStreamingAssistantMessages,
     hasPart,
     markActiveToolPartsError,
     markActiveToolPartsCompleted,

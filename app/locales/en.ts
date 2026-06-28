@@ -10,6 +10,8 @@ export default {
     startFailed: "Failed to start {agent} agent: {reason}",
     serverDown: "server did not come up (CLI missing or port in use?)",
     serverStopped: 'Background agent server stopped. Click "Restart Agent" to recover.',
+    noContentTimeout:
+      "Agent produced no output within 120s — likely a missing model configuration, provider auth failure, or backend hang. Check the backend logs or restart the agent.",
   },
   sidebar: {
     sessions: "Sessions",
@@ -100,6 +102,10 @@ export default {
     tabAppearance: "Appearance",
     tabAbout: "About",
     connect: "Connect",
+    displayName: "Display name",
+    displayNameHint: "Custom labels shown in chat message headers. Leave blank to reset.",
+    agentName: "Agent name",
+    userName: "Your name",
   },
   update: {
     section: "Updates",

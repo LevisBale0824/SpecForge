@@ -3,12 +3,14 @@ import { computed, ref, watch } from "vue";
 import MessageContent from "./MessageContent.vue";
 import { stripSystemReminder, useMessages } from "../composables/useMessages";
 import { useAutoScroller, type ScrollMode } from "../composables/useAutoScroller";
+import { useDisplayNames } from "../composables/useDisplayNames";
 
 defineEmits<{
   "navigate-session": [sessionId: string];
 }>();
 
 const msgStore = useMessages();
+const { agentName, userName } = useDisplayNames();
 
 // Public-dir asset URLs must be prefixed with BASE_URL so they resolve under
 // any Vite `base` setting. With `base: "./"` (used for Electron file:// loads)
@@ -118,12 +120,10 @@ watch(
 watch(
   () => allMessages.value[0]?.id,
   () => {
-    if (allMessages.value.length > 1) {
-      historyScrollLocked.value = true;
-      pauseFollow();
-    } else {
-      historyScrollLocked.value = false;
-    }
+    // Session switched or first message arrived — land on the latest
+    // message (bottom) instead of the top of history.
+    historyScrollLocked.value = false;
+    resumeFollow(false);
   },
   { flush: "post" },
 );
@@ -135,6 +135,47 @@ watch(isFollowing, (following) => {
 function jumpToLatest() {
   historyScrollLocked.value = false;
   resumeFollow(false);
+}
+
+function jumpToTop() {
+  historyScrollLocked.value = true;
+  pauseFollow();
+  const el = containerEl.value;
+  // Instant (not smooth): a smooth scroll passes through the bottom
+  // threshold zone where onScroll would re-set isFollowing=true and flip
+  // the button back. scrollToBottom in jumpToLatest is instant too.
+  if (el) el.scrollTop = 0;
+}
+
+// Copyable plaintext of a message: concatenation of non-synthetic text
+// parts with system reminders stripped. Reasoning/tool output excluded —
+// "copy" means the message body, not the process trace.
+function messagePlainText(msgId: string): string {
+  const parts = msgStore.getParts(msgId);
+  let text = "";
+  for (const p of parts) {
+    if (p.type === "text" && !p.synthetic) {
+      text += stripSystemReminder(p.text) + "\n\n";
+    }
+  }
+  return text.trim();
+}
+
+const copiedId = ref<string | null>(null);
+let copyTimer: ReturnType<typeof setTimeout> | null = null;
+async function copyMessage(msgId: string) {
+  const text = messagePlainText(msgId);
+  if (!text) return;
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch {
+    return;
+  }
+  copiedId.value = msgId;
+  if (copyTimer) clearTimeout(copyTimer);
+  copyTimer = setTimeout(() => {
+    copiedId.value = null;
+  }, 1500);
 }
 </script>
 
@@ -165,42 +206,122 @@ function jumpToLatest() {
               class="mt-0.5 h-9 w-9 flex-shrink-0 rounded-full object-cover ring-1 ring-surface-700/50"
             />
 
-            <!-- Bubble -->
-            <div
-              class="max-w-[min(760px,calc(100%-3.5rem))] rounded-lg bg-surface-800/80 px-4 py-3 text-sm leading-relaxed text-surface-200"
-            >
-              <div class="mb-1 flex items-center gap-2">
-                <span class="text-[10px] font-semibold tracking-wider text-accent-emerald">
-                  Hephaestus
-                </span>
-                <span v-if="formatMessageTime(msg.created)" class="text-[10px] text-surface-500">{{
-                  formatMessageTime(msg.created)
-                }}</span>
+            <div class="group flex min-w-0 flex-1 flex-col items-start">
+              <!-- Bubble -->
+              <div
+                class="min-w-[180px] max-w-[min(760px,calc(100%-3.5rem))] rounded-lg bg-surface-800/80 px-4 py-3 text-sm leading-relaxed text-surface-200"
+              >
+                <div class="mb-1 flex items-center gap-2">
+                  <span class="text-[10px] font-semibold tracking-wider text-accent-emerald">
+                    {{ agentName }}
+                  </span>
+                  <span
+                    v-if="formatMessageTime(msg.created)"
+                    class="text-[10px] text-surface-500"
+                    >{{ formatMessageTime(msg.created) }}</span
+                  >
+                </div>
+                <MessageContent
+                  :message-id="msg.id"
+                  @navigate-session="$emit('navigate-session', $event)"
+                />
               </div>
-              <MessageContent
-                :message-id="msg.id"
-                @navigate-session="$emit('navigate-session', $event)"
-              />
+              <button
+                v-if="messagePlainText(msg.id)"
+                type="button"
+                class="mt-1 inline-flex items-center gap-1 self-end text-[10px] text-surface-500 opacity-0 transition-opacity hover:text-surface-300 group-hover:opacity-100"
+                :title="copiedId === msg.id ? '已复制' : '复制'"
+                @click="copyMessage(msg.id)"
+              >
+                <svg
+                  v-if="copiedId === msg.id"
+                  width="12"
+                  height="12"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+                <svg
+                  v-else
+                  width="12"
+                  height="12"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                </svg>
+                <span>{{ copiedId === msg.id ? "已复制" : "复制" }}</span>
+              </button>
             </div>
           </template>
 
           <template v-else>
-            <!-- Bubble -->
-            <div
-              class="max-w-[min(820px,calc(100%-3.5rem))] rounded-lg bg-accent-cyan/10 px-4 py-3 text-sm leading-relaxed text-surface-100"
-            >
-              <div class="mb-1 flex items-center gap-2">
-                <span class="text-[10px] font-semibold tracking-wider text-accent-cyan">
-                  Patron
-                </span>
-                <span v-if="formatMessageTime(msg.created)" class="text-[10px] text-surface-500">{{
-                  formatMessageTime(msg.created)
-                }}</span>
+            <div class="group flex min-w-0 flex-1 flex-col items-end">
+              <!-- Bubble -->
+              <div
+                class="min-w-[180px] max-w-[min(820px,calc(100%-3.5rem))] rounded-lg bg-accent-cyan/10 px-4 py-3 text-sm leading-relaxed text-surface-100"
+              >
+                <div class="mb-1 flex items-center gap-2">
+                  <span class="text-[10px] font-semibold tracking-wider text-accent-cyan">
+                    {{ userName }}
+                  </span>
+                  <span
+                    v-if="formatMessageTime(msg.created)"
+                    class="text-[10px] text-surface-500"
+                    >{{ formatMessageTime(msg.created) }}</span
+                  >
+                </div>
+                <MessageContent
+                  :message-id="msg.id"
+                  @navigate-session="$emit('navigate-session', $event)"
+                />
               </div>
-              <MessageContent
-                :message-id="msg.id"
-                @navigate-session="$emit('navigate-session', $event)"
-              />
+              <button
+                v-if="messagePlainText(msg.id)"
+                type="button"
+                class="mt-1 inline-flex items-center gap-1 self-end text-[10px] text-surface-500 opacity-0 transition-opacity hover:text-surface-300 group-hover:opacity-100"
+                :title="copiedId === msg.id ? '已复制' : '复制'"
+                @click="copyMessage(msg.id)"
+              >
+                <svg
+                  v-if="copiedId === msg.id"
+                  width="12"
+                  height="12"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+                <svg
+                  v-else
+                  width="12"
+                  height="12"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                </svg>
+                <span>{{ copiedId === msg.id ? "已复制" : "复制" }}</span>
+              </button>
             </div>
 
             <!-- Avatar -->
@@ -214,27 +335,49 @@ function jumpToLatest() {
       </div>
     </div>
 
-    <button
-      v-if="showResumeButton"
-      type="button"
-      class="absolute bottom-4 left-1/2 z-10 inline-flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-accent-cyan/50 bg-surface-900/90 px-3 py-1.5 text-xs text-accent-cyan shadow-lg backdrop-blur transition-colors hover:bg-accent-cyan/15"
-      title="Jump to latest"
-      @click="jumpToLatest"
-    >
-      <svg
-        width="14"
-        height="14"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="2"
-        stroke-linecap="round"
-        stroke-linejoin="round"
+    <div class="absolute bottom-4 right-4 z-10 flex flex-col gap-1.5">
+      <button
+        v-if="!showResumeButton"
+        type="button"
+        class="inline-flex h-8 w-8 items-center justify-center rounded-full border border-surface-700 bg-surface-900/90 text-surface-300 shadow-lg backdrop-blur transition-colors hover:bg-surface-800"
+        title="Jump to top"
+        @click="jumpToTop"
       >
-        <line x1="12" y1="5" x2="12" y2="19" />
-        <polyline points="19 12 12 19 5 12" />
-      </svg>
-      <span>Latest</span>
-    </button>
+        <svg
+          width="14"
+          height="14"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <line x1="12" y1="19" x2="12" y2="5" />
+          <polyline points="5 12 12 5 19 12" />
+        </svg>
+      </button>
+      <button
+        v-if="showResumeButton"
+        type="button"
+        class="inline-flex h-8 w-8 items-center justify-center rounded-full border border-accent-cyan/50 bg-surface-900/90 text-accent-cyan shadow-lg backdrop-blur transition-colors hover:bg-accent-cyan/15"
+        title="Jump to latest"
+        @click="jumpToLatest"
+      >
+        <svg
+          width="14"
+          height="14"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <line x1="12" y1="5" x2="12" y2="19" />
+          <polyline points="19 12 12 19 5 12" />
+        </svg>
+      </button>
+    </div>
   </div>
 </template>

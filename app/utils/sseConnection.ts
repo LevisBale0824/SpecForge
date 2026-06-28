@@ -36,6 +36,16 @@ export type SseConnection = {
   isConnected: () => boolean;
 };
 
+// Read-idle timeout. If the server sends no bytes (no events AND no SSE
+// comment-line keepalives) for this duration, abort the fetch so the
+// existing onError → scheduleReconnect path re-establishes the stream.
+// Required because fetch() will otherwise wait forever on a half-open TCP
+// connection (e.g. daemon killed via taskkill without FIN, OS-level socket
+// cleanup after sleep). 90s tolerates quiet periods during legitimate
+// processing while still recovering from genuinely dead connections well
+// before the no-content fallback in useBackend would fire.
+const STALLED_TIMEOUT_MS = 90_000;
+
 function normalizeBaseUrl(baseUrl: string) {
   return baseUrl.replace(/\/+$/, "");
 }
@@ -92,12 +102,35 @@ export function createSseConnection(callbacks: SseConnectionCallbacks): SseConne
   function handleStream(reader: ReadableStreamDefaultReader<Uint8Array>) {
     const decoder = new TextDecoder();
     let buffer = "";
+    let stalled = false;
+    let stalledTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const clearStalledTimer = () => {
+      if (stalledTimer) {
+        clearTimeout(stalledTimer);
+        stalledTimer = null;
+      }
+    };
+    const armStalledTimer = () => {
+      clearStalledTimer();
+      stalledTimer = setTimeout(() => {
+        stalledTimer = null;
+        stalled = true;
+        console.warn(
+          `[SSE] No data received for ${STALLED_TIMEOUT_MS}ms, aborting to force reconnect`,
+        );
+        if (abortController) abortController.abort();
+      }, STALLED_TIMEOUT_MS);
+    };
+
+    armStalledTimer();
 
     const loop = async () => {
       try {
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
+          armStalledTimer();
           buffer += decoder.decode(value, { stream: true });
           const blocks = buffer.split("\n\n");
           buffer = blocks.pop() || "";
@@ -114,14 +147,24 @@ export function createSseConnection(callbacks: SseConnectionCallbacks): SseConne
           }
         }
       } catch (error) {
-        if (abortController?.signal.aborted) return;
-        callbacks.onError(String(error));
+        clearStalledTimer();
+        // If the abort came from our stall timer (stalled === true) we still
+        // want to reconnect — only user/supersede aborts should silently
+        // bail. Without this carve-out, the catch would `return` on every
+        // signal.aborted check and the stalled connection would never heal.
+        if (abortController?.signal.aborted && !stalled) return;
+        if (stalled) {
+          callbacks.onError(`SSE stream stalled (no data for ${STALLED_TIMEOUT_MS}ms)`);
+        } else {
+          callbacks.onError(String(error));
+        }
         abortController = undefined;
         connected = false;
         scheduleReconnect();
         return;
       }
 
+      clearStalledTimer();
       callbacks.onError(target?.errorMessages?.streamClosed ?? "SSE stream closed.");
       abortController = undefined;
       connected = false;

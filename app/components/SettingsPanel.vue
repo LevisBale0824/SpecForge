@@ -7,6 +7,7 @@ import { useTheme } from "../composables/useTheme";
 import { StorageKeys, storageSet } from "../utils/storageKeys";
 import { isElectron, openExternalUrl } from "../utils/electronBridge";
 import { useUpdate } from "../composables/useUpdate";
+import { useDisplayNames } from "../composables/useDisplayNames";
 import { toReleaseNotesHtml } from "../utils/releaseNotes";
 import type { BackendKind } from "../backends/types";
 
@@ -226,6 +227,19 @@ const lastCheckedText = computed(() => {
     minute: "2-digit",
   }).format(new Date(update.state.value.lastCheckedAt));
 });
+
+const { agentName, userName, defaultAgentName, defaultUserName, setAgentName, setUserName } =
+  useDisplayNames();
+const agentNameInput = ref(agentName.value);
+const userNameInput = ref(userName.value);
+function applyAgentName() {
+  setAgentName(agentNameInput.value);
+  agentNameInput.value = agentName.value;
+}
+function applyUserName() {
+  setUserName(userNameInput.value);
+  userNameInput.value = userName.value;
+}
 
 const navItems = computed(() => [
   { id: "about" as const, label: t("settings.tabAbout"), icon: "lucide:info" },
@@ -683,6 +697,37 @@ const linkGroups = computed(() => [
                     <small>{{ th.mode }}</small>
                   </div>
                 </button>
+              </div>
+            </section>
+
+            <section class="settings-card">
+              <div class="section-heading">
+                <h2>{{ t("settings.displayName") }}</h2>
+              </div>
+              <p class="muted-line">{{ t("settings.displayNameHint") }}</p>
+              <div class="display-name-grid">
+                <div class="display-name-control">
+                  <label>{{ t("settings.agentName") }}</label>
+                  <input
+                    v-model="agentNameInput"
+                    type="text"
+                    :placeholder="defaultAgentName"
+                    class="setting-input"
+                    @keydown.enter="applyAgentName"
+                    @blur="applyAgentName"
+                  />
+                </div>
+                <div class="display-name-control">
+                  <label>{{ t("settings.userName") }}</label>
+                  <input
+                    v-model="userNameInput"
+                    type="text"
+                    :placeholder="defaultUserName"
+                    class="setting-input"
+                    @keydown.enter="applyUserName"
+                    @blur="applyUserName"
+                  />
+                </div>
               </div>
             </section>
           </template>
@@ -1574,6 +1619,25 @@ const linkGroups = computed(() => [
 .input-row .setting-input {
   flex: 1 1 auto;
   min-width: 0;
+}
+
+.display-name-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: 0.85rem;
+  margin-top: 0.85rem;
+}
+
+.display-name-control {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.display-name-control label {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--color-surface-300, #d4d4d8);
 }
 
 .toggle-switch {
