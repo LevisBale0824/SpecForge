@@ -229,7 +229,7 @@ async function copyMessage(msgId: string) {
               <button
                 v-if="messagePlainText(msg.id)"
                 type="button"
-                class="mt-1 inline-flex items-center gap-1 self-end text-[10px] text-surface-500 opacity-0 transition-opacity hover:text-surface-300 group-hover:opacity-100"
+                class="mt-1 inline-flex items-center gap-1 self-start text-[10px] text-surface-500 opacity-0 transition-opacity hover:text-surface-300 group-hover:opacity-100"
                 :title="copiedId === msg.id ? '已复制' : '复制'"
                 @click="copyMessage(msg.id)"
               >
@@ -289,7 +289,7 @@ async function copyMessage(msgId: string) {
               <button
                 v-if="messagePlainText(msg.id)"
                 type="button"
-                class="mt-1 inline-flex items-center gap-1 self-end text-[10px] text-surface-500 opacity-0 transition-opacity hover:text-surface-300 group-hover:opacity-100"
+                class="mt-1 inline-flex items-center gap-1 self-start text-[10px] text-surface-500 opacity-0 transition-opacity hover:text-surface-300 group-hover:opacity-100"
                 :title="copiedId === msg.id ? '已复制' : '复制'"
                 @click="copyMessage(msg.id)"
               >

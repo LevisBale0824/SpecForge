@@ -69,6 +69,11 @@ const pairs = computed<SidePair[]>(() => {
   return [];
 });
 
+// Only render rows that carry a change. Unchanged context lines (kind
+// "equal") add noise — the line numbers on the added/removed rows already
+// pinpoint where each edit happened.
+const visiblePairs = computed(() => pairs.value.filter((p) => p.kind !== "equal"));
+
 function leftCellClass(p: SidePair): string {
   if (p.kind === "removed") return "cell-removed";
   if (p.kind === "added") return "cell-empty";
@@ -91,7 +96,7 @@ function rightCellClass(p: SidePair): string {
       <div class="col-header">修改后</div>
 
       <!-- Scrollable paired rows -->
-      <template v-for="(pair, idx) in pairs" :key="idx">
+      <template v-for="(pair, idx) in visiblePairs" :key="idx">
         <div class="cell" :class="leftCellClass(pair)">
           <span class="line-no">{{ pair.left?.no ?? "" }}</span>
           <span class="line-text">{{ pair.left?.text ?? "" }}</span>

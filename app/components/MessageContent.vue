@@ -382,19 +382,18 @@ function isReasoningLive(index: number): boolean {
 // true/false = explicit user override that persists across re-renders.
 const expandedTools = ref<Record<string, boolean | undefined>>({});
 
-function isToolExpanded(block: ToolBlock, inGroup = false): boolean {
+function isToolExpanded(block: ToolBlock): boolean {
   const stored = expandedTools.value[block.id];
   if (stored !== undefined) return stored;
-  // Standalone tool chips default to expanded. Inside a tool group, expand
-  // only what carries signal: failures (to see the error) and edits/writes
-  // (code diffs matter even when successful). Successful read-only tools
-  // collapse — their output is rarely the focus of a finished batch.
-  if (inGroup) return block.state.status === "error" || Boolean(block.diffs?.length);
-  return true;
+  // Default: expand only what carries signal — failures (to see the error)
+  // and edits/writes (code diffs matter even when successful). Successful
+  // read-only tools (read/grep/bash/list/…) collapse to reduce noise. Same
+  // rule for standalone chips and chips nested in a tool group.
+  return block.state.status === "error" || Boolean(block.diffs?.length);
 }
 
-function toggleTool(block: ToolBlock, inGroup = false) {
-  expandedTools.value[block.id] = !isToolExpanded(block, inGroup);
+function toggleTool(block: ToolBlock) {
+  expandedTools.value[block.id] = !isToolExpanded(block);
 }
 
 const expandedGroups = ref<Record<string, boolean | undefined>>({});
@@ -636,7 +635,7 @@ function onJump(sessionId: string): void {
           <div v-for="block in item.blocks" :key="block.id">
             <button
               class="group flex w-full items-center gap-1.5 rounded-md border border-surface-800 bg-surface-900/60 px-2 py-1 text-left transition-colors hover:border-surface-700 hover:bg-surface-800/60"
-              @click="toggleTool(block, true)"
+              @click="toggleTool(block)"
             >
               <span
                 class="inline-flex h-1.5 w-1.5 flex-shrink-0 rounded-full"
@@ -680,11 +679,11 @@ function onJump(sessionId: string): void {
               <span
                 class="text-[9px] text-surface-500 transition-colors group-hover:text-surface-300"
               >
-                {{ isToolExpanded(block, true) ? "▾" : "▸" }}
+                {{ isToolExpanded(block) ? "▾" : "▸" }}
               </span>
             </button>
             <div
-              v-if="isToolExpanded(block, true) && (block.command || block.output || block.error)"
+              v-if="isToolExpanded(block) && (block.command || block.output || block.error)"
               class="mt-1 max-h-64 overflow-auto rounded-md border border-surface-800 bg-black/30 px-2 py-1.5 font-mono text-[11px]"
             >
               <div v-if="block.command" class="whitespace-pre-wrap break-all text-surface-200">
@@ -701,7 +700,7 @@ function onJump(sessionId: string): void {
                 {{ block.error || block.output }}
               </div>
             </div>
-            <div v-if="isToolExpanded(block, true) && block.diffs?.length" class="mt-1 space-y-2">
+            <div v-if="isToolExpanded(block) && block.diffs?.length" class="mt-1 space-y-2">
               <div v-for="(d, idx) in block.diffs" :key="idx" class="tool-inline-diff">
                 <div class="tool-inline-diff-header">{{ d.file }}</div>
                 <DiffViewer :diff="d" />
