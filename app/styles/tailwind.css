@@ -166,6 +166,47 @@ body.resize-active[data-resize="vertical"] {
   white-space: pre;
 }
 
+/* Copyable code blocks: the wrapper/button markup is emitted by the markdown
+   renderer (see useMarkdown.ts). The button overlays the <pre>'s top-right
+   and is revealed on hover; `.copied` flips it green while the "已复制"
+   feedback label is shown after a click. The wrapper takes over the <pre>'s
+   outer margin so the button aligns to the box edge, not the page. */
+.md-content .code-block-wrapper {
+  position: relative;
+  margin: 0.6em 0;
+}
+.md-content .code-block-wrapper > pre {
+  margin: 0;
+}
+.md-content .code-copy-btn {
+  position: absolute;
+  top: 0.4rem;
+  right: 0.4rem;
+  padding: 0.1rem 0.45rem;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1.6;
+  color: var(--color-surface-400);
+  background: var(--color-surface-800);
+  border: 1px solid var(--color-surface-700);
+  border-radius: 4px;
+  opacity: 0;
+  transition:
+    opacity 0.15s ease,
+    color 0.15s ease;
+  cursor: pointer;
+}
+.md-content .code-block-wrapper:hover .code-copy-btn {
+  opacity: 1;
+}
+.md-content .code-copy-btn:hover {
+  color: var(--color-surface-100);
+}
+.md-content .code-copy-btn.copied {
+  color: var(--color-accent-emerald);
+  opacity: 1;
+}
+
 .md-content hr {
   margin: 1em 0;
   border: 0;

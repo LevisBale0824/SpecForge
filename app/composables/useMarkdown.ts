@@ -11,6 +11,7 @@
 import MarkdownIt from "markdown-it";
 
 let instance: MarkdownIt | null = null;
+let copyDelegationInstalled = false;
 
 function getInstance(): MarkdownIt {
   if (instance) return instance;
@@ -32,8 +33,59 @@ function getInstance(): MarkdownIt {
     return defaultLinkOpen(tokens, idx, options, env, self);
   };
 
+  // Wrap fenced and indented code blocks in a container carrying a copy
+  // button. The rendered button is inert by itself — a single document-level
+  // click delegate (installed below) reads the sibling <pre><code> text and
+  // writes it to the clipboard. Vue listeners can't bind inside v-html, so
+  // document delegation is the lightweight way to make every rendered code
+  // block copyable, no matter which component hosts the HTML.
+  md.renderer.rules.fence = (tokens, idx, options) => {
+    const token = tokens[idx];
+    const lang = token.info ? token.info.trim().split(/\s+/)[0] : "";
+    const langClass = lang ? `${options.langPrefix}${md.utils.escapeHtml(lang)}` : "";
+    return wrapCodeBlock(langClass, md.utils.escapeHtml(token.content));
+  };
+  md.renderer.rules.code_block = (tokens, idx) =>
+    wrapCodeBlock("", md.utils.escapeHtml(tokens[idx].content));
+
   instance = md;
+  installCopyDelegation();
   return md;
+}
+
+function wrapCodeBlock(langClass: string, code: string): string {
+  return (
+    '<div class="code-block-wrapper">' +
+    '<button type="button" class="code-copy-btn" aria-label="复制代码">复制</button>' +
+    `<pre><code class="${langClass}">${code}</code></pre>` +
+    "</div>\n"
+  );
+}
+
+function installCopyDelegation(): void {
+  if (copyDelegationInstalled || typeof document === "undefined") return;
+  copyDelegationInstalled = true;
+  document.addEventListener("click", (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) return;
+    const btn = target.closest<HTMLElement>(".code-copy-btn");
+    if (!btn) return;
+    const wrapper = btn.closest(".code-block-wrapper");
+    const codeEl = wrapper?.querySelector("code");
+    if (!codeEl) return;
+    const text = codeEl.textContent ?? "";
+    navigator.clipboard?.writeText(text).then(
+      () => {
+        btn.textContent = "已复制";
+        btn.classList.add("copied");
+        window.setTimeout(() => {
+          btn.textContent = "复制";
+          btn.classList.remove("copied");
+        }, 1200);
+      },
+      () => {},
+    );
+  });
 }
 
 export function renderMarkdown(text: string): string {
