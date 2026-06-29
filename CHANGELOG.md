@@ -5,6 +5,25 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，
 项目遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.4.5] - 2026-06-29
+
+### 新增 (Added)
+
+- 📋 **代码块一键复制**：消息正文中的代码块（bash 命令等）hover 出现复制按钮，点击复制原始代码；渲染层 + 全局事件委托，消息正文 / release notes / openspec 等所有 markdown 处通用
+
+### 改进 (Changed)
+
+- 🎯 **工具智能折叠**：非编辑类工具（read/grep/bash/list 等）默认折叠，仅失败或含文件修改（edit/write）的工具默认展开，进一步减少噪音
+- 📍 **复制按钮左下角**：消息复制按钮从气泡右下角移至左下角
+- 🔍 **diff 仅显示修改行**：代码变更 diff 去掉未修改的上下文行，只渲染 added/removed
+
+### 修复 (Fixed)
+
+- 🔧 **流式去重增强**：处理 `message.part.removed` 事件清理状态（避免已删内容残留与误丢 delta）；浮窗补充去重防止重连重放重复显示；补充 fast path / tail-match 分支单元测试并完成变异验证
+- 🖥️ **dev 启动修复**：dev server 端口避开 Windows Hyper-V/WSL 保留端口范围（5173 → 4173），修复 `EACCES` 启动失败
+
+---
+
 ## [0.4.4] - 2026-06-29
 
 ### 新增 (Added)
