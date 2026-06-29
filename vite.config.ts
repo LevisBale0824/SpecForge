@@ -71,8 +71,12 @@ export default defineConfig({
     format: "es",
   },
   server: {
-    port: 5173,
-    strictPort: true,
+    // 5173 falls inside a Windows Hyper-V/WSL excluded port range on some
+    // machines (listen fails with EACCES, not EADDRINUSE). 4173 sits below
+    // the lowest excluded band (~4940+); strictPort:false lets Vite bump to
+    // the next free port if 4173 is ever taken, so `pnpm dev` always starts.
+    port: 4173,
+    strictPort: false,
   },
   test: {
     globals: true,

@@ -57,7 +57,7 @@ pnpm install
 pnpm dev
 ```
 
-访问 http://localhost:5173
+访问 http://localhost:4173
 
 #### Electron 桌面开发
 
@@ -220,7 +220,7 @@ export default {
 
 Web 模式下使用浏览器 DevTools：
 
-- 打开 `http://localhost:5173`
+- 打开 `http://localhost:4173`
 - 按 `F12` 或 `Ctrl+Shift+I`
 
 Electron 模式下：
