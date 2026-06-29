@@ -22,6 +22,7 @@ import type {
   MessageInfo,
   MessagePart,
   MessagePartDeltaPacket,
+  MessagePartRemovedPacket,
   MessagePartUpdatedPacket,
   MessageUpdatedPacket,
   SessionDiffPacket,
@@ -220,6 +221,14 @@ const sessionDiffs = shallowRef(new Map<string, FileDiff[]>());
 // Keyed by the same `${messageID}:${partID}` used by `parts`.
 const deltaLens = new Map<string, number>();
 
+// Remembers the last delta payload seen per `${messageID}:${partID}:${field}`.
+// Drops a delta that is byte-identical to the immediately preceding one for
+// the same field — replay paths occasionally re-emit the same chunk, and the
+// lens check can't catch it when no snapshot has landed in between. Assumes
+// the stream never legitimately sends the same payload twice in a row (true
+// for LLM token streams). Keyed by `${key}:${field}`.
+const lastDeltaContent = new Map<string, string>();
+
 // ── Computed indices ──────────────────────────────────────────────────────
 
 const roots = computed(() => {
@@ -315,6 +324,26 @@ function updatePart(part: MessagePart, notifyCollection = true) {
     ) {
       existing.value = { ...part, text: current.text };
     } else {
+      // Diagnostic: detect a "forking" snapshot — the new text neither
+      // extends the accumulated text nor truncates it. The lens stays at the
+      // old offset in that case, which can misalign subsequent deltas and
+      // surface as duplicated/garbled text. Log to learn how often the server
+      // actually diverges mid-stream before deciding how to handle it.
+      if (
+        (current.type === "text" || current.type === "reasoning") &&
+        (part.type === "text" || part.type === "reasoning") &&
+        typeof current.text === "string" &&
+        current.text.length > 0 &&
+        part.text.length >= current.text.length &&
+        !part.text.startsWith(current.text)
+      ) {
+        console.warn("[dedup] forking part.updated snapshot detected", {
+          messageID: part.messageID,
+          partID: part.id,
+          oldLen: current.text.length,
+          newLen: part.text.length,
+        });
+      }
       existing.value = part;
     }
     triggerRef(existing);
@@ -350,11 +379,17 @@ function applyPartDelta(delta: MessagePartDeltaPacket) {
 
   const current = partRef.value as MessagePart & Record<string, unknown>;
   const deltaLen = deltaLens.get(key) ?? 0;
-  // Deduplicate: if the delta's content already appears at position deltaLen
-  // in the current text, it has already been incorporated (typically by a
-  // `part.updated` snapshot that included it). Skip the append but still
-  // advance the lens so subsequent deltas are checked against the right
-  // offset.
+  const deltaKey = `${key}:${delta.field}`;
+
+  // Fast path: drop byte-identical repeated deltas. Some replay paths
+  // re-emit the same chunk; without this guard we'd append it twice.
+  if (lastDeltaContent.get(deltaKey) === delta.delta) {
+    return;
+  }
+  lastDeltaContent.set(deltaKey, delta.delta);
+  // Snapshot-already-included delta: the substring at [deltaLen, deltaLen+len)
+  // matches exactly, so the part.updated snapshot has already folded this text
+  // in. Advance the lens but don't append.
   if (
     delta.field === "text" &&
     typeof current.text === "string" &&
@@ -362,6 +397,22 @@ function applyPartDelta(delta: MessagePartDeltaPacket) {
     current.text.substring(deltaLen, deltaLen + delta.delta.length) === delta.delta
   ) {
     deltaLens.set(key, deltaLen + delta.delta.length);
+    return;
+  }
+
+  // Tail-match fallback: when the snapshot already ends with this delta (lens
+  // is at/past the snapshot length) the content is present even though the
+  // offset check above can't prove it. Drop it to avoid duplicating the
+  // trailing chunk. The lens is intentionally left untouched — it already
+  // sits at/past the snapshot length, so no advance is needed for subsequent
+  // deltas.
+  if (
+    delta.field === "text" &&
+    typeof current.text === "string" &&
+    deltaLen >= current.text.length &&
+    current.text.length >= delta.delta.length &&
+    current.text.endsWith(delta.delta)
+  ) {
     return;
   }
 
@@ -412,7 +463,17 @@ function bindScope(scope: SessionScope) {
 
   unsubs.push(
     scope.on("message.part.updated", (packet: unknown) => {
-      updatePart((packet as MessagePartUpdatedPacket).part);
+      const p = packet as MessagePartUpdatedPacket;
+      // Diagnostic: mirror the useDeltaAccumulator probe — log when the
+      // protocol attaches a `delta` to a snapshot so we can evaluate its use.
+      if (p.delta) {
+        console.warn("[dedup] part.updated carries unused `delta` field", {
+          messageID: p.part?.messageID,
+          partID: p.part?.id,
+          len: p.delta.length,
+        });
+      }
+      updatePart(p.part);
     }),
   );
 
@@ -420,6 +481,30 @@ function bindScope(scope: SessionScope) {
     scope.on("message.part.delta", (packet: unknown) => {
       const delta = packet as MessagePartDeltaPacket;
       applyPartDelta(delta);
+    }),
+  );
+
+  unsubs.push(
+    scope.on("message.part.removed", (packet: unknown) => {
+      const { messageID, partID } = packet as MessagePartRemovedPacket;
+      const key = partLookupKey(messageID, partID);
+      const partRef = parts.get(key);
+      if (!partRef) return;
+      parts.delete(key);
+      deltaLens.delete(key);
+      // lastDeltaContent keys carry an extra `:${field}` suffix, so there's
+      // no single key to delete — drop every entry prefixed by this part key
+      // so a re-created part reusing the id isn't falsely deduplicated.
+      const prefix = `${key}:`;
+      for (const lk of lastDeltaContent.keys()) {
+        if (lk.startsWith(prefix)) lastDeltaContent.delete(lk);
+      }
+      const messageRef = messages.value.get(messageID);
+      if (messageRef) {
+        messageRef.value.parts.delete(partRef);
+        triggerMessageRef(messageRef);
+      }
+      triggerCollection();
     }),
   );
 
@@ -444,6 +529,7 @@ function bindScope(scope: SessionScope) {
   unsubs.push(
     scope.on("connection.reconnected", () => {
       deltaLens.clear();
+      lastDeltaContent.clear();
     }),
   );
 }
@@ -923,6 +1009,7 @@ function tryLoadFromCache(sessionId: string): boolean {
   messages.value.clear();
   parts.clear();
   deltaLens.clear();
+  lastDeltaContent.clear();
 
   for (const [id, cachedEntry] of cached.messages) {
     const entry = createMessageEntry();
@@ -946,6 +1033,7 @@ function reset() {
   messages.value.clear();
   parts.clear();
   deltaLens.clear();
+  lastDeltaContent.clear();
   sessionDiffs.value.clear();
   triggerRef(sessionDiffs);
   triggerCollection();
@@ -959,6 +1047,11 @@ function removeMessage(id: string) {
     const key = partLookupKey(part.messageID, part.id);
     parts.delete(key);
     deltaLens.delete(key);
+  }
+  // lastDeltaContent keys carry an extra `:${field}` suffix, so there's no
+  // single key to delete — drop every entry prefixed by this message id.
+  for (const lk of lastDeltaContent.keys()) {
+    if (lk.startsWith(`${id}:`)) lastDeltaContent.delete(lk);
   }
   messages.value.delete(id);
   triggerCollection();

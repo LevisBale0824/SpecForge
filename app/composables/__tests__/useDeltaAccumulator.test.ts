@@ -306,4 +306,77 @@ describe("useDeltaAccumulator", () => {
     const part = getMessage("msg-reason")?.parts.get("pr1") as { text: string } | undefined;
     expect(part?.text).toBe("thinking deeply about the answer");
   });
+
+  it("drops a delta identical to the immediately preceding one for the same field", () => {
+    const { listen, getMessage } = useDeltaAccumulator();
+    const ge = makeEmitter();
+    listen(ge);
+
+    ge.emit("message.updated", { info: assistantInfo("msg-fast") });
+    // Seed the part with a non-empty prefix so the repeated "Hi" is NOT a
+    // suffix of the whole text — this keeps the tail-match fallback from
+    // masking a fast-path regression (the lens stays shorter than the text).
+    ge.emit("message.part.updated", {
+      part: textPart("msg-fast", "p1", "X"),
+    });
+
+    const delta = (d: string) =>
+      ge.emit("message.part.delta", {
+        sessionID: "s",
+        messageID: "msg-fast",
+        partID: "p1",
+        field: "text",
+        delta: d,
+      } satisfies MessagePartDeltaPacket);
+
+    // "Hi" appends -> "XHi".
+    delta("Hi");
+    // A byte-identical replay of "Hi" must be dropped by the fast path; the
+    // lens (2) is shorter than the text (3), so no other branch can catch
+    // it — without the fast path the text would become "XHiHi".
+    delta("Hi");
+    // A fresh delta afterwards still appends, proving the fast path didn't
+    // corrupt the lens state.
+    delta("!");
+
+    const part = getMessage("msg-fast")?.parts.get("p1") as TextPart | undefined;
+    expect(part?.text).toBe("XHi!");
+  });
+
+  it("drops a tail-matching delta once the lens has reached the snapshot length", () => {
+    const { listen, getMessage } = useDeltaAccumulator();
+    const ge = makeEmitter();
+    listen(ge);
+
+    ge.emit("message.updated", { info: assistantInfo("msg-tail") });
+    // Snapshot lands with the full text "abc" before any delta arrives.
+    ge.emit("message.part.updated", {
+      part: textPart("msg-tail", "p1", "abc"),
+    });
+
+    const delta = (d: string) =>
+      ge.emit("message.part.delta", {
+        sessionID: "s",
+        messageID: "msg-tail",
+        partID: "p1",
+        field: "text",
+        delta: d,
+      } satisfies MessagePartDeltaPacket);
+
+    const text = () => (getMessage("msg-tail")?.parts.get("p1") as TextPart | undefined)?.text;
+
+    // "abc" is folded in by the snapshot branch, advancing the lens to 3.
+    delta("abc");
+    // "bc" differs from the previous delta (so the fast path won't fire) but
+    // matches the tail of "abc" with the lens already at the snapshot length —
+    // the tail-match fallback must drop it. Without that guard the text would
+    // become "abcbc".
+    delta("bc");
+    expect(text()).toBe("abc");
+
+    // A genuinely new delta after the tail-match skip still appends, proving
+    // the fallback didn't corrupt the lens state.
+    delta("!");
+    expect(text()).toBe("abc!");
+  });
 });

@@ -10,6 +10,7 @@ import type {
   MessageInfo,
   MessagePart,
   MessagePartDeltaPacket,
+  MessagePartRemovedPacket,
   MessagePartUpdatedPacket,
   MessageUpdatedPacket,
 } from "../types/sse";
@@ -33,6 +34,13 @@ const messages = new Map<string, AccumulatedMessage>();
 // Keyed by `${messageID}:${partID}`.
 const deltaLens = new Map<string, number>();
 
+// Remembers the last delta payload seen per `${messageID}:${partID}:${field}`.
+// Drops a delta that is byte-identical to the immediately preceding one for
+// the same field — replay paths occasionally re-emit the same chunk, and the
+// lens check can't catch it when no snapshot has landed in between. Assumes
+// the stream never legitimately sends the same payload twice in a row (true
+// for LLM token streams). Keyed by `${lensKey}:${field}`.
+const lastDeltaContent = new Map<string, string>();
 function lensKey(messageID: string, partID: string): string {
   return `${messageID}:${partID}`;
 }
@@ -60,6 +68,11 @@ export function useDeltaAccumulator() {
           for (const k of deltaLens.keys()) {
             if (k.startsWith(prefix)) deltaLens.delete(k);
           }
+          // Mirror the cleanup for lastDeltaContent to avoid stale entries
+          // surviving a message-id reuse and suppressing a legitimate delta.
+          for (const k of lastDeltaContent.keys()) {
+            if (k.startsWith(prefix)) lastDeltaContent.delete(k);
+          }
           return;
         }
         const entry = messages.get(info.id);
@@ -73,7 +86,17 @@ export function useDeltaAccumulator() {
 
     offs.push(
       ge.on("message.part.updated", (packet: unknown) => {
-        const { part } = packet as MessagePartUpdatedPacket;
+        const { part, delta: snapshotDelta } = packet as MessagePartUpdatedPacket;
+        // Diagnostic: the protocol may attach a `delta` to part.updated
+        // snapshots; we don't currently use it. Log non-empty values so we
+        // can decide whether to fold it into the dedup baseline later.
+        if (snapshotDelta) {
+          console.warn("[dedup] part.updated carries unused `delta` field", {
+            messageID: part.messageID,
+            partID: part.id,
+            len: snapshotDelta.length,
+          });
+        }
         const entry = messages.get(part.messageID);
         if (!entry) return;
         const existing = entry.parts.get(part.id);
@@ -100,14 +123,31 @@ export function useDeltaAccumulator() {
         const entry = messages.get(delta.messageID);
         if (!entry) return;
         const part = entry.parts.get(delta.partID);
-        if (!part) return;
+        if (!part) {
+          // Diagnostic: delta arrived before the part.updated that creates it.
+          // This accumulator drops it (unlike useMessages, which auto-creates a
+          // part) — log so we can tell how often the ordering races in practice.
+          console.warn("[dedup] delta arrived before part.updated (dropped)", {
+            messageID: delta.messageID,
+            partID: delta.partID,
+          });
+          return;
+        }
         const partRec = part as MessagePart & Record<string, unknown>;
         const key = lensKey(delta.messageID, delta.partID);
         const deltaLen = deltaLens.get(key) ?? 0;
-        // Deduplicate: skip deltas whose content is already present at the
-        // accumulated offset — they were incorporated by a `part.updated`
-        // snapshot and would otherwise duplicate.
+        const deltaKey = `${key}:${delta.field}`;
+
+        // Fast path: drop byte-identical repeated deltas. Some replay paths
+        // re-emit the same chunk; without this guard we'd append it twice.
+        if (lastDeltaContent.get(deltaKey) === delta.delta) {
+          return;
+        }
+        lastDeltaContent.set(deltaKey, delta.delta);
         const currentText = partRec.text;
+        // Snapshot-already-included delta: the substring at [deltaLen,
+        // deltaLen+len) matches exactly, so the part.updated snapshot has
+        // already folded this text in. Advance the lens but don't append.
         if (
           delta.field === "text" &&
           typeof currentText === "string" &&
@@ -115,6 +155,22 @@ export function useDeltaAccumulator() {
           currentText.substring(deltaLen, deltaLen + delta.delta.length) === delta.delta
         ) {
           deltaLens.set(key, deltaLen + delta.delta.length);
+          return;
+        }
+
+        // Tail-match fallback: when the snapshot already ends with this delta
+        // (lens is at/past the snapshot length) the content is present even
+        // though the offset check above can't prove it. Drop it to avoid
+        // duplicating the trailing chunk. The lens is intentionally left
+        // untouched — it already sits at/past the snapshot length, so no
+        // advance is needed for subsequent deltas.
+        if (
+          delta.field === "text" &&
+          typeof currentText === "string" &&
+          deltaLen >= currentText.length &&
+          currentText.length >= delta.delta.length &&
+          currentText.endsWith(delta.delta)
+        ) {
           return;
         }
         const field = delta.field as keyof typeof part;
@@ -125,6 +181,22 @@ export function useDeltaAccumulator() {
         }
         if (delta.field === "text") {
           deltaLens.set(key, deltaLen + delta.delta.length);
+        }
+      }),
+    );
+
+    offs.push(
+      ge.on("message.part.removed", (packet: unknown) => {
+        const { messageID, partID } = packet as MessagePartRemovedPacket;
+        const entry = messages.get(messageID);
+        if (entry) entry.parts.delete(partID);
+        // Drop lens + last-seen-delta state for this part so a re-created
+        // part reusing the same id isn't falsely deduplicated later.
+        const key = lensKey(messageID, partID);
+        deltaLens.delete(key);
+        const prefix = `${key}:`;
+        for (const k of lastDeltaContent.keys()) {
+          if (k.startsWith(prefix)) lastDeltaContent.delete(k);
         }
       }),
     );
@@ -143,6 +215,7 @@ export function useDeltaAccumulator() {
   function clear(): void {
     messages.clear();
     deltaLens.clear();
+    lastDeltaContent.clear();
   }
 
   return { listen, getMessage, clear };

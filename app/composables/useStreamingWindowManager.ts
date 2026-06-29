@@ -85,6 +85,12 @@ export function useStreamingWindowManager() {
   // Track active streaming windows by session
   const activeEntries = new Map<string, StreamingWindowEntry[]>();
 
+  // Remembers the last delta payload seen per window, so a replayed chunk
+  // doesn't get appended twice. Floating windows consume deltas verbatim
+  // (no snapshot reconciliation channel), so without this a reconnect/replay
+  // visibly duplicates text.
+  const lastDeltaContent = new Map<string, string>();
+
   function getSessionEntries(sessionId: string): StreamingWindowEntry[] {
     let entries = activeEntries.get(sessionId);
     if (!entries) {
@@ -200,8 +206,13 @@ export function useStreamingWindowManager() {
         const entry = entries.find((e) => e.partId === partID);
         if (!entry) return;
 
-        const text = typeof delta === "string" ? delta : "";
-        fw.appendContent(entry.key, text);
+        // Fast path: drop byte-identical repeated deltas. Floating windows
+        // have no snapshot channel to self-correct, so without this guard a
+        // replayed chunk would be appended twice.
+        if (lastDeltaContent.get(entry.key) === delta) return;
+        lastDeltaContent.set(entry.key, delta);
+
+        fw.appendContent(entry.key, delta);
       }),
     );
 
@@ -244,6 +255,7 @@ export function useStreamingWindowManager() {
 
     for (const entry of entries) {
       fw.close(entry.key);
+      lastDeltaContent.delete(entry.key);
     }
     activeEntries.delete(sessionId);
   }
