@@ -2,7 +2,7 @@
 import { computed, ref, watchEffect } from "vue";
 import { useI18n } from "vue-i18n";
 import { stripSystemReminder, useMessages } from "../composables/useMessages";
-import { renderMarkdown } from "../composables/useMarkdown";
+import { renderMarkdown, renderStreaming } from "../composables/useMarkdown";
 import { useSessions } from "../composables/useSessions";
 import {
   extractCommand,
@@ -188,7 +188,11 @@ const inlineBlocks = computed<DisplayBlock[]>(() => {
       if (part.synthetic) continue;
       const text = stripSystemReminder(part.text);
       if (!text.trim()) continue;
-      const html = isUser.value ? undefined : renderMarkdown(text);
+      const html = isUser.value
+        ? undefined
+        : isStreaming.value
+          ? renderStreaming(text)
+          : renderMarkdown(text);
       blocks.push({ kind: "text", id: part.id, text, html });
     } else if (part.type === "reasoning") {
       const text = part.text?.trim();

@@ -379,4 +379,77 @@ describe("useDeltaAccumulator", () => {
     delta("!");
     expect(text()).toBe("abc!");
   });
+
+  it("re-baselines the lens when a forking snapshot diverges mid-stream", () => {
+    const { listen, getMessage } = useDeltaAccumulator();
+    const ge = makeEmitter();
+    listen(ge);
+
+    ge.emit("message.updated", { info: assistantInfo("msg-fork") });
+    ge.emit("message.part.updated", {
+      part: textPart("msg-fork", "p1", ""),
+    });
+
+    // Delta stream accumulates "ABCDE" — lens advances to 5.
+    const delta = (d: string) =>
+      ge.emit("message.part.delta", {
+        sessionID: "s",
+        messageID: "msg-fork",
+        partID: "p1",
+        field: "text",
+        delta: d,
+      } satisfies MessagePartDeltaPacket);
+    delta("ABCDE");
+
+    // Forking snapshot arrives — the first 3 chars agree ("ABC") but the
+    // suffix diverges ("XYZ" instead of "DE"). The lens must collapse to the
+    // LCP (3) so the next delta re-baselines against "ABCXYZ".
+    ge.emit("message.part.updated", {
+      part: textPart("msg-fork", "p1", "ABCXYZ"),
+    });
+
+    // A delta matching the new snapshot at the LCP offset ("XYZ") must be
+    // recognized as already-included and dropped. Without lens re-baselining
+    // the lens would still be 5, the substring check would compare
+    // "ABCXYZ".substring(5, 8) === "Z" (length 1) !== "XYZ", fail, and the
+    // tail-match would also fail — appending "XYZ" again as "ABCXYZXYZ".
+    delta("XYZ");
+
+    const part = getMessage("msg-fork")?.parts.get("p1") as TextPart | undefined;
+    expect(part?.text).toBe("ABCXYZ");
+  });
+
+  it("preserves the lens when an extending snapshot confirms the accumulated text", () => {
+    const { listen, getMessage } = useDeltaAccumulator();
+    const ge = makeEmitter();
+    listen(ge);
+
+    ge.emit("message.updated", { info: assistantInfo("msg-ext") });
+    ge.emit("message.part.updated", {
+      part: textPart("msg-ext", "p1", ""),
+    });
+
+    const delta = (d: string) =>
+      ge.emit("message.part.delta", {
+        sessionID: "s",
+        messageID: "msg-ext",
+        partID: "p1",
+        field: "text",
+        delta: d,
+      } satisfies MessagePartDeltaPacket);
+
+    // Delta stream reaches "Hello" — lens = 5.
+    delta("Hello");
+    // Extending snapshot confirms "Hello" and adds " World" beyond.
+    ge.emit("message.part.updated", {
+      part: textPart("msg-ext", "p1", "Hello World"),
+    });
+    // Late delta " World" — substring(5, 11) === " World" matches, dropped.
+    delta(" World");
+    // Fresh delta still appends.
+    delta("!");
+
+    const part = getMessage("msg-ext")?.parts.get("p1") as TextPart | undefined;
+    expect(part?.text).toBe("Hello World!");
+  });
 });

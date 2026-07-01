@@ -45,6 +45,18 @@ function lensKey(messageID: string, partID: string): string {
   return `${messageID}:${partID}`;
 }
 
+// Longest common prefix length of two strings. Used to re-baseline the delta
+// lens when a `part.updated` snapshot forks from the accumulated text — i.e.
+// the snapshot neither extends nor truncates the existing text but diverges
+// mid-stream. The lens is valid only as far as the new snapshot agrees with
+// the old text, so we collapse it to the LCP.
+function longestCommonPrefixLength(a: string, b: string): number {
+  const n = Math.min(a.length, b.length);
+  let i = 0;
+  while (i < n && a.charCodeAt(i) === b.charCodeAt(i)) i++;
+  return i;
+}
+
 function isComplete(info: MessageInfo): boolean {
   if (info.role !== "assistant") return true;
   if (info.error) return true;
@@ -100,17 +112,41 @@ export function useDeltaAccumulator() {
         const entry = messages.get(part.messageID);
         if (!entry) return;
         const existing = entry.parts.get(part.id);
-        // Protect streaming text/reasoning from being truncated by an
-        // out-of-order `part.updated` snapshot whose text is shorter than
-        // what deltas have already accumulated.
+        const key = lensKey(part.messageID, part.id);
+        // Re-baseline the delta lens against the incoming snapshot for
+        // streaming text/reasoning parts. Without this guard a forking
+        // snapshot (one that diverges from the accumulated text mid-stream)
+        // leaves the lens pointing past the agreement point, causing every
+        // subsequent delta's offset check to fail and the same content to be
+        // appended twice — surfacing as the classic "Hello WorldLo World"
+        // garbled stream.
         if (
           existing &&
           (existing.type === "text" || existing.type === "reasoning") &&
           (part.type === "text" || part.type === "reasoning") &&
-          existing.text &&
-          part.text.length < existing.text.length
+          typeof existing.text === "string" &&
+          existing.text.length > 0
         ) {
-          entry.parts.set(part.id, { ...part, text: existing.text });
+          const currentLens = deltaLens.get(key) ?? 0;
+          if (part.text.length < existing.text.length) {
+            // Truncating snapshot — protect the longer accumulated text and
+            // leave the lens untouched (it still points into a valid prefix).
+            entry.parts.set(part.id, { ...part, text: existing.text });
+          } else if (part.text.startsWith(existing.text)) {
+            // Extending snapshot — the existing prefix is confirmed, so the
+            // currentLens stays valid. Only clamp if it somehow exceeds the
+            // new snapshot length (defensive — shouldn't normally happen).
+            if (currentLens > part.text.length) deltaLens.set(key, part.text.length);
+            entry.parts.set(part.id, { ...part });
+          } else {
+            // Forking snapshot — the new text diverges from the accumulated
+            // text. Collapse the lens to the common prefix so subsequent
+            // deltas re-baseline against the canonical snapshot text.
+            const lcp = longestCommonPrefixLength(existing.text, part.text);
+            const nextLens = Math.min(currentLens, lcp);
+            if (nextLens !== currentLens) deltaLens.set(key, nextLens);
+            entry.parts.set(part.id, { ...part });
+          }
         } else {
           entry.parts.set(part.id, { ...part });
         }

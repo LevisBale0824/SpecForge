@@ -384,11 +384,26 @@ ge.on("message.updated", (payload) => {
 });
 
 // Any delta/part for this session means the agent is producing output — disarm the no-content watchdog.
+// When the producing session is a sub-agent (child) of some parent session, the
+// parent is also "doing work" — its prompt dispatched the task — so its
+// no-content watchdog must be disarmed too. Without this, a long-running sub-
+// agent that never emits parent-session tokens would falsely trip the parent's
+// 120s no-content fallback and fail the parent's still-streaming message.
 for (const partEvent of ["message.part.delta", "message.part.updated"] as const) {
   ge.on(partEvent, (payload) => {
     const sessionId = toRecord(payload)?.sessionID;
     if (typeof sessionId !== "string" || !sessionId) return;
     clearNoContentFallback(sessionId);
+    // Walk up the session parent chain — sub-agents can nest, so a deeply
+    // delegated task should disarm every ancestor's watchdog, not just the
+    // immediate parent's.
+    let cursor = sessionsStore.sessions.value.get(sessionId)?.parentID;
+    const guard = new Set<string>([sessionId]);
+    while (cursor && !guard.has(cursor)) {
+      guard.add(cursor);
+      clearNoContentFallback(cursor);
+      cursor = sessionsStore.sessions.value.get(cursor)?.parentID;
+    }
   });
 }
 

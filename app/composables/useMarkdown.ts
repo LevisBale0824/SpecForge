@@ -93,6 +93,50 @@ export function renderMarkdown(text: string): string {
   return getInstance().render(text);
 }
 
+// Patch up unterminated inline/block syntax that markdown-it would otherwise
+// mis-parse mid-stream. We only ever append minimal closing tokens to a
+// temporary copy — the original `text` is never mutated, so once the trailing
+// delta completes the syntax the final render is unaffected.
+function preprocessStreamingMarkdown(text: string): string {
+  let out = text;
+
+  // Fenced code blocks: count ``` runs. An odd count means the last fence is
+  // still open — append a closing fence so the in-progress code block renders
+  // as a code block instead of leaking literal backticks into the prose.
+  const fenceMatches = out.match(/^[ \t]*(`{3,})(?!.*```)/gm);
+  if (fenceMatches && fenceMatches.length % 2 === 1) {
+    out += "\n```";
+  }
+
+  // Inline code: count standalone single backticks (not part of a fence run).
+  // An odd count means an inline span is open — close it.
+  const inlineTicks = (out.match(/(?<!`)`(?!`)/g) ?? []).length;
+  if (inlineTicks % 2 === 1) out += "`";
+
+  // Markdown links: balance `[...](...)`. We only handle the common streaming
+  // case where a `[label](url` has been emitted without the closing paren —
+  // append `)` if there's an unmatched `](` run.
+  const openBracket = (out.match(/\[/g) ?? []).length;
+  const closeBracket = (out.match(/\](?!\()/g) ?? []).length;
+  if (openBracket > closeBracket) {
+    // Unclosed `[` — append `]` so the bracket至少 doesn't eat following text.
+    out += "]";
+  }
+  const parenAfterBracket = (out.match(/\]\(/g) ?? []).length;
+  const closeParen = (out.match(/\)\b/g) ?? []).length;
+  if (parenAfterBracket > closeParen) {
+    // `](` opened a link URL that hasn't been closed — append `)`.
+    out += ")";
+  }
+
+  return out;
+}
+
+export function renderStreaming(text: string): string {
+  if (!text) return "";
+  return getInstance().render(preprocessStreamingMarkdown(text));
+}
+
 export function useMarkdown() {
-  return { render: renderMarkdown };
+  return { render: renderMarkdown, renderStreaming };
 }

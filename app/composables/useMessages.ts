@@ -87,11 +87,39 @@ function triggerCollection() {
 
 const SYSTEM_REMINDER_RE = /<system-reminder>[\s\S]*?<\/system-reminder>/g;
 const OMO_INIT_COMMENT_RE = /<!--\s*OMO_INTERNAL_INITIATOR\s*-->/g;
+// Inline reasoning block emitted by some models directly in the text stream.
+// The non-greedy `[\s\S]*?` matches across newlines; the alternation with `$`
+// tolerates an unclosed `<think>` tag mid-stream (we still strip it).
+const THINK_BLOCK_RE = /<think>[\s\S]*?(<\/think>|$)/g;
+// Chat-template role markers that some backends leak as standalone lines
+// (e.g. a literal `assistant` or `user` line wrapping the actual content).
+const ROLE_MARKER_LINE_RE = /(^|\n)[ \t]*(assistant|user)[ \t]*(\n|$)/g;
+// Three-or-more consecutive newlines left behind after stripping the above
+// noise blocks — collapse to a single blank line so markdown doesn't render
+// a stack of empty paragraphs.
+const EXCESS_BLANK_LINES_RE = /\n{3,}/g;
 
-/** Remove agent-injected `<system-reminder>` blocks and OMO initiator markers. */
+// Longest common prefix length of two strings. Used to re-baseline the delta
+// lens when a `part.updated` snapshot forks from the accumulated text.
+function longestCommonPrefixLength(a: string, b: string): number {
+  const n = Math.min(a.length, b.length);
+  let i = 0;
+  while (i < n && a.charCodeAt(i) === b.charCodeAt(i)) i++;
+  return i;
+}
+
+/** Remove agent-injected `<system-reminder>` blocks, OMO initiator markers,
+ *  inline `<think>` reasoning blocks, leaked chat-template role marker lines,
+ *  and the excess blank lines their removal leaves behind. */
 export function stripSystemReminder(text: string): string {
   if (!text) return text;
-  return text.replace(SYSTEM_REMINDER_RE, "").replace(OMO_INIT_COMMENT_RE, "").trim();
+  return text
+    .replace(SYSTEM_REMINDER_RE, "")
+    .replace(OMO_INIT_COMMENT_RE, "")
+    .replace(THINK_BLOCK_RE, "")
+    .replace(ROLE_MARKER_LINE_RE, "\n")
+    .replace(EXCESS_BLANK_LINES_RE, "\n\n")
+    .trim();
 }
 
 /** True when a text chunk still carries user-visible content after stripping. */
@@ -312,38 +340,36 @@ function updatePart(part: MessagePart, notifyCollection = true) {
   const existing = parts.get(key);
   if (existing) {
     const current = existing.value;
-    // Protect streaming text from being truncated by an out-of-order
-    // `part.updated` snapshot whose text is shorter than what deltas have
-    // already accumulated. Applies to both TextPart and ReasoningPart since
-    // both expose a `text` field that streams via deltas.
+    // Re-baseline the delta lens against the incoming snapshot for streaming
+    // text/reasoning parts. A forking snapshot (one that diverges from the
+    // accumulated text mid-stream) would otherwise leave the lens pointing
+    // past the agreement point, causing every subsequent delta's offset check
+    // to fail and the same content to be appended twice — surfacing as the
+    // classic garbled stream of overlapping text.
     if (
       (current.type === "text" || current.type === "reasoning") &&
       (part.type === "text" || part.type === "reasoning") &&
-      current.text &&
-      part.text.length < current.text.length
+      typeof current.text === "string" &&
+      current.text.length > 0
     ) {
-      existing.value = { ...part, text: current.text };
-    } else {
-      // Diagnostic: detect a "forking" snapshot — the new text neither
-      // extends the accumulated text nor truncates it. The lens stays at the
-      // old offset in that case, which can misalign subsequent deltas and
-      // surface as duplicated/garbled text. Log to learn how often the server
-      // actually diverges mid-stream before deciding how to handle it.
-      if (
-        (current.type === "text" || current.type === "reasoning") &&
-        (part.type === "text" || part.type === "reasoning") &&
-        typeof current.text === "string" &&
-        current.text.length > 0 &&
-        part.text.length >= current.text.length &&
-        !part.text.startsWith(current.text)
-      ) {
-        console.warn("[dedup] forking part.updated snapshot detected", {
-          messageID: part.messageID,
-          partID: part.id,
-          oldLen: current.text.length,
-          newLen: part.text.length,
-        });
+      const currentLens = deltaLens.get(key) ?? 0;
+      if (part.text.length < current.text.length) {
+        // Truncating snapshot — protect the longer accumulated text; the lens
+        // still points into a valid prefix so it stays as-is.
+        existing.value = { ...part, text: current.text };
+      } else if (part.text.startsWith(current.text)) {
+        // Extending snapshot — existing prefix is confirmed, lens stays valid.
+        if (currentLens > part.text.length) deltaLens.set(key, part.text.length);
+        existing.value = part;
+      } else {
+        // Forking snapshot — collapse the lens to the common prefix so later
+        // deltas re-baseline against the canonical snapshot text.
+        const lcp = longestCommonPrefixLength(current.text, part.text);
+        const nextLens = Math.min(currentLens, lcp);
+        if (nextLens !== currentLens) deltaLens.set(key, nextLens);
+        existing.value = part;
       }
+    } else {
       existing.value = part;
     }
     triggerRef(existing);

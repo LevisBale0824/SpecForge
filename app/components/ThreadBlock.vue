@@ -48,7 +48,7 @@ function formatMessageTime(timestamp?: number): string {
     :class="isUser ? 'justify-end' : 'justify-start'"
   >
     <div
-      class="max-w-[min(820px,calc(100%-3.5rem))] rounded-lg px-4 py-3 text-sm leading-relaxed"
+      class="max-w-[min(900px,calc(100%-3.5rem))] rounded-lg px-4 py-3 text-sm leading-relaxed"
       :class="isUser ? 'bg-accent-cyan/10 text-surface-100' : 'bg-surface-800/80 text-surface-200'"
     >
       <!-- Role label -->

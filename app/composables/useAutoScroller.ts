@@ -238,6 +238,13 @@ export function useAutoScroller(
         return;
       }
     }
+    // Don't fight the user — if they're actively interacting (pointer down,
+    // recent wheel/touch), pause auto-scroll until they release. Without this
+    // a streaming message keeps yanking the viewport back to the bottom while
+    // the user is trying to read or select something earlier.
+    if (hasRecentUserScrollIntent()) {
+      return;
+    }
     if (contentChangeScheduled) {
       return;
     }

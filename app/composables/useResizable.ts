@@ -89,6 +89,7 @@ export function useResizable(options: UseResizableOptions): {
     isDragging.value = false;
     window.removeEventListener("pointermove", onMove);
     window.removeEventListener("pointerup", onUp);
+    window.removeEventListener("pointercancel", onUp);
     document.body.classList.remove("resize-active");
     delete document.body.dataset.resize;
     persist();
@@ -102,6 +103,7 @@ export function useResizable(options: UseResizableOptions): {
     startSize = size.value;
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
     // Disable text selection + iframes' pointer capture while dragging so the
     // whole gesture goes to our move handler. The data-resize attribute lets
     // the global stylesheet set the right cursor (col/row-resize) for the
@@ -113,6 +115,7 @@ export function useResizable(options: UseResizableOptions): {
   onUnmounted(() => {
     window.removeEventListener("pointermove", onMove);
     window.removeEventListener("pointerup", onUp);
+    window.removeEventListener("pointercancel", onUp);
     document.body.classList.remove("resize-active");
     delete document.body.dataset.resize;
   });

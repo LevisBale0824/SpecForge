@@ -459,6 +459,8 @@ onUnmounted(() => {
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
+  overscroll-behavior: contain;
+  overflow-anchor: none;
   padding: 6px 10px;
   line-height: 1.5;
 }

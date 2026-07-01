@@ -290,6 +290,7 @@ function onDragStart(e: PointerEvent) {
 
   dragTarget.addEventListener("pointermove", onDragMove);
   dragTarget.addEventListener("pointerup", onDragEnd);
+  dragTarget.addEventListener("pointercancel", onDragEnd);
 }
 
 function onDragMove(e: PointerEvent) {
@@ -310,6 +311,7 @@ function cleanupDrag() {
   if (dragTarget) {
     dragTarget.removeEventListener("pointermove", onDragMove);
     dragTarget.removeEventListener("pointerup", onDragEnd);
+    dragTarget.removeEventListener("pointercancel", onDragEnd);
     if (dragPointerId >= 0) {
       dragTarget.releasePointerCapture(dragPointerId);
     }
@@ -420,6 +422,7 @@ function onResizeStart(e: PointerEvent) {
   target.setPointerCapture(e.pointerId);
   target.addEventListener("pointermove", onResizeMove);
   target.addEventListener("pointerup", onResizeEnd);
+  target.addEventListener("pointercancel", onResizeEnd);
 }
 
 function onResizeMove(e: PointerEvent) {
@@ -435,6 +438,7 @@ function onResizeEnd(e: PointerEvent) {
   const target = e.target as HTMLElement;
   target.removeEventListener("pointermove", onResizeMove);
   target.removeEventListener("pointerup", onResizeEnd);
+  target.removeEventListener("pointercancel", onResizeEnd);
   target.releasePointerCapture(e.pointerId);
 
   if (props.entry.onResize) {

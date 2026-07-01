@@ -66,13 +66,28 @@ body.resize-active[data-resize="vertical"] {
   background: var(--color-surface-600);
 }
 
+/* Streaming scroll containers: stop scroll chaining to ancestors when the
+   container hits its bounds, and disable the browser's native scroll anchoring
+   — it competes with our rAF-driven auto-follow and can yank the viewport off
+   the bottom when content is appended in bursts. */
+.floating-window-body {
+  overscroll-behavior: contain;
+  overflow-anchor: none;
+}
+
 /* ── Markdown content (chat assistant messages) ─────────────────────────── */
 
 .md-content {
   font-size: 14px;
   line-height: 1.65;
   color: var(--color-surface-200);
-  word-break: break-word;
+  /* `word-break: break-word` forces the flex item's min-content to a single
+     character, which makes `items-start` chat bubbles collapse to far below
+     their max-width and pre-emptively wraps long CJK lines. `overflow-wrap:
+     anywhere` instead breaks only when content would otherwise overflow the
+     bubble's resolved width, preserving normal wrapping behaviour. */
+  overflow-wrap: anywhere;
+  word-break: normal;
 }
 .md-content > *:first-child {
   margin-top: 0;
