@@ -42,6 +42,16 @@ watch(
 function handleClick(file: string) {
   emit("select", file);
 }
+
+// Entries pushed by useFileIndex use a trailing slash to mark directories.
+// We render a folder icon for those and strip the slash when displaying.
+function isDirectory(file: string): boolean {
+  return file.endsWith("/");
+}
+function displayBase(file: string): string {
+  const base = splitPath(file).base;
+  return base.endsWith("/") ? base.slice(0, -1) : base;
+}
 </script>
 
 <template>
@@ -71,12 +81,28 @@ function handleClick(file: string) {
       @mouseenter="emit('hover', index)"
     >
       <span class="font-mono text-sm text-accent-cyan flex-shrink-0">@</span>
+      <!-- Folder glyph for directory entries (trailing-slash convention from
+           useFileIndex); file entries show the @ glyph as before. -->
+      <svg
+        v-if="isDirectory(file)"
+        class="h-3.5 w-3.5 shrink-0 self-center text-accent-amber"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.75"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      >
+        <path
+          d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"
+        />
+      </svg>
       <!-- min-w-0 + flex-1 lets the path truncate inside flex; without it the
            long path pushes the menu wider than the viewport. dir is dimmed so
            when truncation kicks in the basename stays the most visible part. -->
       <span class="font-mono text-sm truncate min-w-0 flex-1">
         <span class="text-surface-500">{{ splitPath(file).dir }}</span>
-        <span class="text-surface-100">{{ splitPath(file).base }}</span>
+        <span class="text-surface-100">{{ displayBase(file) }}</span>
       </span>
     </button>
   </div>

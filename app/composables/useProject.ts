@@ -14,7 +14,49 @@ export type FileNode = {
   children?: FileNode[];
   expanded?: boolean;
   loaded?: boolean;
+  // Display-only label; set when consecutive single-child directory chains
+  // are compacted (e.g. `packages/foo/src`). `path`/`name` keep their original
+  // single-level values so IPC, drag payload, and toggleNode loading remain
+  // keyed on the real on-disk hierarchy.
+  displayName?: string;
 };
+
+// IDEA-style "compact folders": if a directory's only child is itself a
+// directory, merge the child's name into the parent's displayName and morph
+// the parent to represent the deeper directory (path/handle/loaded become the
+// tail's). Recurses so chains like packages/foo/src collapse into a single
+// node. Only call this on freshly-loaded entries before they're rendered, so
+// there's no prior expanded/loaded state to preserve on the intermediate nodes.
+function compactChildren(entries: FileNode[]): FileNode[] {
+  for (const node of entries) {
+    if (node.kind !== "directory") continue;
+    // Walk down the chain as long as the cursor has exactly one directory
+    // child and no file siblings. We stop when the chain widens (multiple
+    // children) or hits an unloaded directory — those will compact later
+    // when the user expands them.
+    const segs: string[] = [node.displayName ?? node.name];
+    while (node.children && node.children.length === 1 && node.children[0].kind === "directory") {
+      const child = node.children[0];
+      segs.push(child.displayName ?? child.name);
+      // Morph `node` to represent the deeper directory. Its `path` and
+      // `handle` now point at the tail, so a subsequent toggleNode loads the
+      // tail's children correctly.
+      node.path = child.path;
+      node.handle = child.handle ?? node.handle;
+      node.loaded = child.loaded;
+      node.expanded = child.expanded;
+      node.children = child.children;
+    }
+    if (segs.length > 1) {
+      node.displayName = segs.join("/");
+    }
+    // Recurse into the (possibly promoted) children.
+    if (node.children && node.children.length > 0) {
+      compactChildren(node.children);
+    }
+  }
+  return entries;
+}
 
 type ProjectState = {
   rootHandle: FileSystemDirectoryHandle | null;
@@ -68,7 +110,7 @@ export function useProject() {
     state.error = "";
 
     try {
-      const children = await readDirectoryFromHandle(handle, "");
+      const children = compactChildren(await readDirectoryFromHandle(handle, ""));
       state.root = {
         name: handle.name,
         kind: "directory",
@@ -101,18 +143,20 @@ export function useProject() {
     }
 
     const oldMap = new Map((node.children ?? []).map((c) => [c.path, c]));
-    node.children = newEntries.map((c) => {
-      const old = oldMap.get(c.path);
-      if (old) {
-        return {
-          ...c,
-          expanded: old.expanded,
-          loaded: old.loaded,
-          children: old.children,
-        };
-      }
-      return c;
-    });
+    node.children = compactChildren(
+      newEntries.map((c) => {
+        const old = oldMap.get(c.path);
+        if (old) {
+          return {
+            ...c,
+            expanded: old.expanded,
+            loaded: old.loaded,
+            children: old.children,
+          };
+        }
+        return c;
+      }),
+    );
 
     for (const child of node.children) {
       if (child.loaded) await refreshNode(child);
@@ -143,7 +187,7 @@ export function useProject() {
     if (node.handle) {
       if (!node.loaded) {
         const children = await readDirectoryFromHandle(node.handle, node.path);
-        node.children = children;
+        node.children = compactChildren(children);
         node.loaded = true;
       }
       node.expanded = !node.expanded;
@@ -154,7 +198,7 @@ export function useProject() {
     if (isElectron() && state.directoryPath) {
       if (!node.loaded) {
         const entries = await readDirectory(state.directoryPath, node.path);
-        node.children = (entries ?? []).map(entryToFileNode);
+        node.children = compactChildren((entries ?? []).map(entryToFileNode));
         node.loaded = true;
       }
       node.expanded = !node.expanded;
@@ -197,7 +241,7 @@ export function useProject() {
     state.error = "";
     try {
       const entries = await readDirectory(absPath, "");
-      const children = (entries ?? []).map(entryToFileNode);
+      const children = compactChildren((entries ?? []).map(entryToFileNode));
       state.root = {
         name: state.directoryName,
         kind: "directory",

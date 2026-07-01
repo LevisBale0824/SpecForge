@@ -66,6 +66,11 @@ async function walkElectron(rootAbs: string): Promise<string[]> {
       if (out.length >= MAX_FILES) return out;
       const childRel = rel ? `${rel}/${e.name}` : e.name;
       if (e.kind === "directory") {
+        // Trailing-slash entries mark directories so the @ menu can offer
+        // whole folders as context (the backend treats paths ending in `/`
+        // as directory references). The recursion still walks in so its
+        // file children also surface individually.
+        out.push(`${childRel}/`);
         queue.push({ rel: childRel, depth: depth + 1 });
       } else {
         out.push(childRel);
@@ -87,6 +92,8 @@ async function walkHandle(
     const childPath = parentPath ? `${parentPath}/${name}` : name;
     if (child.kind === "directory") {
       if (WEB_IGNORED_DIRS.has(name)) continue;
+      // Trailing-slash entries mark directories for the @ menu (see walkElectron).
+      out.push(`${childPath}/`);
       await walkHandle(child as FileSystemDirectoryHandle, childPath, depth + 1, out);
     } else {
       out.push(childPath);

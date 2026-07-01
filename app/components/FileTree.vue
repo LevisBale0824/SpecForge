@@ -161,7 +161,7 @@ function fileColor(name: string): string {
           :d="d"
         />
       </svg>
-      <span class="truncate flex-1">{{ node.name }}</span>
+      <span class="truncate flex-1">{{ node.displayName ?? node.name }}</span>
     </button>
 
     <!-- File entry -->
@@ -186,7 +186,7 @@ function fileColor(name: string): string {
       >
         <path v-for="(d, i) in ICON_PATHS[fileIconKind(node.name)]" :key="i" :d="d" />
       </svg>
-      <span class="truncate flex-1">{{ node.name }}</span>
+      <span class="truncate flex-1">{{ node.displayName ?? node.name }}</span>
     </button>
 
     <!-- Children (if directory and expanded) -->

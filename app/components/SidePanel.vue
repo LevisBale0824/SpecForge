@@ -3,16 +3,32 @@ import { computed, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import SessionTree from "./SessionTree.vue";
 import FileTree from "./FileTree.vue";
+import FileSearchResults from "./FileSearchResults.vue";
 import MessageFileChanges from "./MessageFileChanges.vue";
 import SidePanelSection from "./SidePanelSection.vue";
 import { useProject } from "../composables/useProject";
+import { useFileIndex } from "../composables/useFileIndex";
 import { useMessages } from "../composables/useMessages";
 import type { MessageDiffEntry } from "../types/message";
 import type { FileDiff, SessionInfo, SessionStatusInfo } from "../types/sse";
 
 const { t } = useI18n();
 const { state: projectState } = useProject();
+const fileIndex = useFileIndex();
 const msgStore = useMessages();
+
+// File-tree search. Empty query keeps the regular hierarchical tree; typing
+// swaps to a flat filtered list sourced from the same @ mention index. Lazy
+// load on focus in case the user opens this panel before opening composer.
+const fileSearch = ref("");
+function onSearchFocus() {
+  if (projectState.directoryPath) {
+    fileIndex.ensureLoaded(projectState.directoryPath);
+  }
+}
+function clearSearch() {
+  fileSearch.value = "";
+}
 
 const props = withDefaults(
   defineProps<{
@@ -150,12 +166,40 @@ const sections = computed(() => [
         <div v-else-if="projectState.error" class="section-error">
           {{ projectState.error }}
         </div>
-        <FileTree
-          v-else-if="projectState.root"
-          :node="projectState.root"
-          :depth="0"
-          @open-file="emit('open-file', $event)"
-        />
+        <template v-else-if="projectState.root">
+          <!-- Search box: shown when the user has a project open. Focus lazy
+               loads the flat index so the first keystroke already has data. -->
+          <div class="file-search-row">
+            <input
+              v-model="fileSearch"
+              type="text"
+              class="file-search-input"
+              :placeholder="t('sidebar.searchFiles', 'Search files...')"
+              @focus="onSearchFocus"
+            />
+            <button
+              v-if="fileSearch"
+              type="button"
+              class="file-search-clear"
+              :title="t('sidebar.clearSearch', 'Clear')"
+              @click="clearSearch"
+            >
+              ×
+            </button>
+          </div>
+          <FileSearchResults
+            v-if="fileSearch.trim()"
+            :query="fileSearch"
+            :files="fileIndex.files.value"
+            @open-file="emit('open-file', $event)"
+          />
+          <FileTree
+            v-else
+            :node="projectState.root"
+            :depth="0"
+            @open-file="emit('open-file', $event)"
+          />
+        </template>
         <div v-else class="section-empty">{{ t("welcome.openProject") }}</div>
       </template>
 
@@ -193,5 +237,45 @@ const sections = computed(() => [
   padding: 0.4rem 0.5rem;
   font-size: 13px;
   color: var(--color-accent-rose, #f43f5e);
+}
+
+.file-search-row {
+  position: relative;
+  padding: 0.25rem 0.5rem 0.5rem;
+}
+
+.file-search-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.3rem 1.5rem 0.3rem 0.5rem;
+  font-size: 12px;
+  color: var(--color-surface-200, #e2e8f0);
+  background: var(--color-surface-900, #0f172a);
+  border: 1px solid var(--color-surface-700, #334155);
+  border-radius: 4px;
+  outline: none;
+}
+.file-search-input:focus {
+  border-color: var(--color-accent-cyan, #06b6d4);
+}
+.file-search-input::placeholder {
+  color: var(--color-surface-600, #475569);
+}
+
+.file-search-clear {
+  position: absolute;
+  top: 50%;
+  right: 0.75rem;
+  transform: translateY(-50%);
+  font-size: 16px;
+  line-height: 1;
+  color: var(--color-surface-500, #64748b);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+}
+.file-search-clear:hover {
+  color: var(--color-surface-200, #e2e8f0);
 }
 </style>

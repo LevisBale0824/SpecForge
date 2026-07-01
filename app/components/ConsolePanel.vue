@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { useProject } from "../composables/useProject";
-import { isElectron } from "../utils/electronBridge";
+import { isElectron, readDirectory } from "../utils/electronBridge";
 import type { ConsoleDataEvent } from "../types/electron";
 
 interface LogEntry {
@@ -56,6 +56,157 @@ function clear() {
 const cwdPath = computed(() => props.cwd || project.state.directoryPath || undefined);
 
 const promptText = computed(() => (inElectron ? "$" : ">"));
+
+// ── Tab completion ────────────────────────────────────────────────────────
+// Client-side only: command names (BUILTIN + history + a small preset of
+// common CLI tools) plus path completion against the cwd via readDirectory.
+// We deliberately don't shell out — a new IPC just for completion isn't worth
+// the complexity, and this covers the 80% case (typing git/npm/pnpm/cd paths).
+const COMMON_COMMANDS = [
+  "git",
+  "pnpm",
+  "npm",
+  "node",
+  "npx",
+  "yarn",
+  "bun",
+  "ls",
+  "cd",
+  "cat",
+  "grep",
+  "find",
+  "rm",
+  "mkdir",
+  "rmdir",
+  "mv",
+  "cp",
+  "touch",
+  "chmod",
+  "chown",
+  "tar",
+  "zip",
+  "unzip",
+  "echo",
+  "pwd",
+  "date",
+  "whoami",
+  "hostname",
+  "env",
+  "which",
+  "python",
+  "python3",
+  "pip",
+  "java",
+  "javac",
+  "go",
+  "cargo",
+  "rustc",
+  "docker",
+  "kubectl",
+  "ssh",
+  "scp",
+  "curl",
+  "wget",
+];
+
+function commandCandidates(): string[] {
+  const set = new Set<string>([...Object.keys(BUILTIN), ...COMMON_COMMANDS]);
+  for (const h of cmdHistory.value) {
+    const head = h.split(/\s+/)[0];
+    if (head) set.add(head);
+  }
+  return [...set];
+}
+
+// Longest common prefix of a list — used when Tab has multiple matches to
+// fill in the unambiguous portion (bash behavior).
+function longestCommonPrefix(list: string[]): string {
+  if (list.length === 0) return "";
+  let prefix = list[0];
+  for (let i = 1; i < list.length; i++) {
+    const s = list[i];
+    let j = 0;
+    while (j < prefix.length && j < s.length && prefix[j] === s[j]) j++;
+    prefix = prefix.slice(0, j);
+    if (!prefix) break;
+  }
+  return prefix;
+}
+
+async function completeToken(): Promise<void> {
+  const el = inputEl.value;
+  if (!el) return;
+  const caret = el.selectionStart ?? input.value.length;
+  const left = input.value.slice(0, caret);
+  const right = input.value.slice(caret);
+  // Match the trailing non-space run ending at the caret.
+  const m = left.match(/(\S*)$/);
+  const token = m?.[1] ?? "";
+  const tokenStart = caret - token.length;
+  const beforeToken = input.value.slice(0, tokenStart);
+  const isFirstToken = beforeToken.trim() === "";
+
+  let candidates: string[] = [];
+  let appendSlash = false;
+  if (isFirstToken) {
+    candidates = commandCandidates()
+      .filter((c) => c.startsWith(token) && c !== token)
+      .sort();
+  } else if (inElectron && cwdPath.value) {
+    // Split the token into a parent dir + prefix to list. "app/comp" → list
+    // cwd-rooted "app" and filter by "comp"; bare "comp" → list cwd root.
+    const slashIdx = token.lastIndexOf("/");
+    const parentRel = slashIdx >= 0 ? token.slice(0, slashIdx) : "";
+    const prefix = slashIdx >= 0 ? token.slice(slashIdx + 1) : token;
+    const entries = await readDirectory(cwdPath.value, parentRel);
+    if (entries) {
+      appendSlash = true;
+      candidates = entries
+        .filter((e) => e.name.startsWith(prefix) && e.name !== prefix)
+        .map((e) => (e.kind === "directory" ? `${e.name}/` : e.name))
+        .sort();
+      // Rebuild token path prefix (with trailing slash stripped) so we can
+      // replace the [tokenStart, caret) span cleanly with the candidate.
+    }
+  }
+
+  if (candidates.length === 0) return;
+
+  // For path completion we need to keep the parent portion of the token.
+  const slashIdx = token.lastIndexOf("/");
+  const tokenDir = slashIdx >= 0 ? token.slice(0, slashIdx + 1) : "";
+
+  if (candidates.length === 1) {
+    const pick = appendSlash
+      ? `${tokenDir}${candidates[0]}${candidates[0].endsWith("/") ? "" : ""}`
+      : candidates[0];
+    // Append a space after a completed command name so the user can keep
+    // typing args; for paths don't auto-space (bash appends nothing for
+    // directories so the user can chain another Tab).
+    const suffix = isFirstToken ? " " : "";
+    input.value = `${beforeToken}${pick}${suffix}${right}`;
+    const newCaret = (beforeToken + pick + suffix).length;
+    await nextTick();
+    el.setSelectionRange(newCaret, newCaret);
+    return;
+  }
+
+  // Multiple matches: fill the longest common prefix, then list candidates
+  // in the output area so the user can narrow with another Tab.
+  const withDir = candidates.map((c) => `${tokenDir}${c}`);
+  const lcp = longestCommonPrefix(withDir);
+  if (lcp.length > token.length) {
+    input.value = `${beforeToken}${lcp}${right}`;
+    const newCaret = (beforeToken + lcp).length;
+    await nextTick();
+    el.setSelectionRange(newCaret, newCaret);
+  }
+  // Echo the candidates the way a shell would: a single system line, names
+  // separated by spaces. Cap to avoid wrapping the panel into a scroll.
+  const shown = candidates.slice(0, 30).join("   ");
+  push("sys", shown + (candidates.length > 30 ? `   (+${candidates.length - 30} more)` : ""));
+  scrollToEnd();
+}
 
 // ── Built-in commands (always handled locally, both modes) ───────────────
 const BUILTIN: Record<string, (args: string[]) => string | void> = {
@@ -176,6 +327,9 @@ function onKeydown(e: KeyboardEvent) {
   if (e.key === "Enter") {
     e.preventDefault();
     submit();
+  } else if (e.key === "Tab") {
+    e.preventDefault();
+    void completeToken();
   } else if (e.key === "ArrowUp") {
     if (cmdHistory.value.length === 0) return;
     e.preventDefault();
