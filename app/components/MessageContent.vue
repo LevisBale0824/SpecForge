@@ -275,8 +275,14 @@ const renderItems = computed<RenderItem[]>(() => {
   return out;
 });
 
+// Per-message structure diagnostics. OFF by default — mapping every part +
+// JSON.stringifying the snapshot on each streaming token is expensive and
+// pointless outside debugging. Enable with: localStorage debug.specforge=1
+const DEBUG_MESSAGES =
+  typeof localStorage !== "undefined" && localStorage.getItem("debug.specforge") === "1";
 const lastDebugSnapshot = ref("");
 watchEffect(() => {
+  if (!DEBUG_MESSAGES) return;
   const parts = msgStore.getParts(props.messageId);
   if (parts.length === 0 && !isStreaming.value && !isError.value) return;
   const snapshot = {
@@ -788,7 +794,7 @@ function onJump(sessionId: string): void {
   max-height: 288px;
 }
 
-.tool-inline-diff :deep(.diff-grid) {
+.tool-inline-diff :deep(.diff-inline) {
   max-height: 288px;
 }
 </style>

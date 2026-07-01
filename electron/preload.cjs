@@ -16,6 +16,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
   openExternalUrl: (url) => ipcRenderer.invoke("openExternalUrl", url),
   readDirectory: (rootPath, relPath) =>
     ipcRenderer.invoke("readDirectory", rootPath, relPath || ""),
+  readFileIndex: (rootPath) => ipcRenderer.invoke("readFileIndex", rootPath),
   readWorkspaceDiff: (rootPath) => ipcRenderer.invoke("readWorkspaceDiff", rootPath),
   getServerStatus: () => ipcRenderer.invoke("getServerStatus"),
   restartServer: (kind) => ipcRenderer.invoke("restartServer", kind),

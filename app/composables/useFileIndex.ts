@@ -19,7 +19,7 @@
 // ---------------------------------------------------------------------------
 
 import { ref } from "vue";
-import { isElectron, readDirectory } from "../utils/electronBridge";
+import { isElectron, readFileIndex } from "../utils/electronBridge";
 import { useProject } from "./useProject";
 
 // Depth cap defends against pathological trees (e.g. a vendored copy of some
@@ -53,32 +53,11 @@ const WEB_IGNORED_DIRS = new Set([
 const files = ref<string[]>([]);
 const loaded = ref(false);
 const loading = ref(false);
-
-async function walkElectron(rootAbs: string): Promise<string[]> {
-  const out: string[] = [];
-  const queue: Array<{ rel: string; depth: number }> = [{ rel: "", depth: 0 }];
-  while (queue.length > 0) {
-    const { rel, depth } = queue.shift()!;
-    if (depth > MAX_DEPTH) continue;
-    const entries = await readDirectory(rootAbs, rel);
-    if (!entries) continue;
-    for (const e of entries) {
-      if (out.length >= MAX_FILES) return out;
-      const childRel = rel ? `${rel}/${e.name}` : e.name;
-      if (e.kind === "directory") {
-        // Trailing-slash entries mark directories so the @ menu can offer
-        // whole folders as context (the backend treats paths ending in `/`
-        // as directory references). The recursion still walks in so its
-        // file children also surface individually.
-        out.push(`${childRel}/`);
-        queue.push({ rel: childRel, depth: depth + 1 });
-      } else {
-        out.push(childRel);
-      }
-    }
-  }
-  return out;
-}
+// Guards a background `refresh` so rapid focus events don't stack overlapping
+// walks. Distinct from `loading` (the cold-load flag shown in the UI) — a
+// refresh never flips loading, so stale data stays visible until the fresh
+// list swaps in.
+let refreshing = false;
 
 async function walkHandle(
   handle: FileSystemDirectoryHandle,
@@ -101,21 +80,26 @@ async function walkHandle(
   }
 }
 
+// Collect the full flat path list. Electron: a single IPC round-trip (the main
+// process walks the tree synchronously). Web: a recursive directory-handle
+// walk. Both apply the same depth/file caps and trailing-slash dir convention.
+async function collect(rootAbs: string): Promise<string[]> {
+  if (isElectron() && rootAbs) {
+    return (await readFileIndex(rootAbs)) ?? [];
+  }
+  const project = useProject();
+  const rootHandle = project.state.rootHandle;
+  if (!rootHandle) return [];
+  const out: string[] = [];
+  await walkHandle(rootHandle, "", 0, out);
+  return out;
+}
+
 async function load(rootAbs: string): Promise<void> {
   if (loading.value) return;
   loading.value = true;
   try {
-    let result: string[] = [];
-    if (isElectron() && rootAbs) {
-      result = await walkElectron(rootAbs);
-    } else {
-      const project = useProject();
-      const rootHandle = project.state.rootHandle;
-      if (rootHandle) {
-        await walkHandle(rootHandle, "", 0, result);
-      }
-    }
-    files.value = result;
+    files.value = await collect(rootAbs);
     loaded.value = true;
   } catch (error) {
     // Do NOT flip `loaded` on error — ensureLoaded() would then suppress
@@ -132,10 +116,28 @@ function ensureLoaded(rootAbs: string): void {
   void load(rootAbs);
 }
 
+// Background refresh: re-read disk and swap in the fresh list WITHOUT flipping
+// `loading`, so the @ menu never re-shows "Loading files…". Stale data stays
+// visible until the new list lands. Used by focus/visibility handlers —
+// external edits (rm/mv/CLI) should refresh the index silently.
+async function refresh(rootAbs: string): Promise<void> {
+  if (refreshing) return;
+  refreshing = true;
+  try {
+    files.value = await collect(rootAbs);
+    loaded.value = true;
+  } catch (error) {
+    console.error("[useFileIndex] refresh failed:", error);
+  } finally {
+    refreshing = false;
+  }
+}
+
 function reset(): void {
   files.value = [];
   loaded.value = false;
   loading.value = false;
+  refreshing = false;
 }
 
 export function useFileIndex() {
@@ -144,6 +146,7 @@ export function useFileIndex() {
     loaded,
     loading,
     ensureLoaded,
+    refresh,
     reset,
   };
 }

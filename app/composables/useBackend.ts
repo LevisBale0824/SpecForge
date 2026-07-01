@@ -1098,11 +1098,14 @@ export function useBackend() {
     files: fileIndexStore.files,
     filesLoading: fileIndexStore.loading,
     ensureFilesLoaded,
-    // Drop the cached @ file index so the next `@` re-reads disk. Used by
-    // focus/visibility handlers — external edits (rm/mv/CLI) made while the
-    // window stayed focused bypass the `file.edited` SSE event.
+    // Refresh the @ file index in the background, keeping stale data visible
+    // until the fresh list swaps in. Used by focus/visibility handlers —
+    // external edits (rm/mv/CLI) made while the window stayed focused bypass
+    // the `file.edited` SSE event. Unlike a full reset, this never wipes the
+    // cache, so the @ menu stays responsive instead of re-showing "Loading…".
     reloadFileIndex: () => {
-      fileIndexStore.reset();
+      const dir = activeDirectory.value;
+      if (dir) fileIndexStore.refresh(dir);
     },
 
     // Global events (for SSE subscription)

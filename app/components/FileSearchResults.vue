@@ -10,6 +10,23 @@ const emit = defineEmits<{
   "open-file": [path: string];
 }>();
 
+// Same MIME contract as FileTree.vue — the InputPanel composer reads this to
+// turn a dragged result into an `@<relpath>` attachment. Mirroring it here
+// lets search results be dragged into the composer just like tree nodes.
+const TREE_MIME = "application/x-specforge-tree";
+
+function onDragStart(path: string, e: DragEvent) {
+  if (!e.dataTransfer) return;
+  // The file index stores relative paths; directory entries carry a trailing
+  // "/". Pass the kind through so the composer's drop handler can re-add the
+  // trailing slash for folders (it normalizes the path either way).
+  const isDir = path.endsWith("/");
+  const payload = JSON.stringify({ path, kind: isDir ? "directory" : "file" });
+  e.dataTransfer.setData(TREE_MIME, payload);
+  e.dataTransfer.setData("text/plain", path);
+  e.dataTransfer.effectAllowed = "copy";
+}
+
 // Upper bound on rendered rows. With a 20k-file index a broad query like
 // "test" can match thousands of entries — rendering all of them as DOM nodes
 // janks the sidebar hard. 100 is enough for a quick scan; the user narrows
@@ -53,9 +70,11 @@ function fileColor(name: string): string {
       v-for="path in results"
       :key="path"
       type="button"
-      class="flex w-full items-center gap-1.5 rounded px-2.5 py-1.5 text-left text-sm text-surface-400 transition-colors hover:bg-surface-800 hover:text-surface-200"
+      draggable="true"
+      class="flex w-full items-center gap-1.5 rounded px-2.5 py-1.5 text-left text-sm text-surface-400 transition-colors hover:bg-surface-800 hover:text-surface-200 cursor-grab active:cursor-grabbing"
       :title="path"
       @click="emit('open-file', path)"
+      @dragstart="onDragStart(path, $event)"
     >
       <svg
         class="h-3.5 w-3.5 shrink-0"

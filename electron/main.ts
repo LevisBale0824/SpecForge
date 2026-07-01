@@ -978,6 +978,62 @@ function registerIpcHandlers() {
     }
   });
 
+  // Full recursive file index for the @ mention menu, returned in a SINGLE
+  // IPC call. This replaces the renderer's old per-directory sequential IPC
+  // walk (one round-trip per folder → hundreds of awaits on medium repos),
+  // which kept "Loading files…" visible for seconds. Walking server-side with
+  // synchronous readdir is tens of ms for typical repos. Same IGNORED_DIRS
+  // filter + depth/file caps as useFileIndex so the result matches the old
+  // renderer-built list (directories carry a trailing "/").
+  const FILE_INDEX_MAX_DEPTH = 20;
+  const FILE_INDEX_MAX_FILES = 20000;
+  ipcMain.handle("readFileIndex", (_e, rootPath: string) => {
+    if (!rootPath) return [] as string[];
+    const out: string[] = [];
+    const queue: Array<{ abs: string; rel: string; depth: number }> = [
+      { abs: rootPath, rel: "", depth: 0 },
+    ];
+    try {
+      while (queue.length > 0) {
+        if (out.length >= FILE_INDEX_MAX_FILES) break;
+        const { abs, rel, depth } = queue.shift()!;
+        if (depth > FILE_INDEX_MAX_DEPTH) continue;
+        let entries: fs.Dirent[];
+        try {
+          entries = fs.readdirSync(abs, { withFileTypes: true });
+        } catch {
+          continue;
+        }
+        for (const entry of entries) {
+          if (out.length >= FILE_INDEX_MAX_FILES) break;
+          const name = entry.name;
+          const childRel = rel ? `${rel}/${name}` : name;
+          if (entry.isDirectory()) {
+            if (IGNORED_DIRS.has(name)) continue;
+            out.push(`${childRel}/`);
+            queue.push({ abs: path.join(abs, name), rel: childRel, depth: depth + 1 });
+          } else if (entry.isSymbolicLink()) {
+            // Surface symlinked dirs as directory entries (trailing slash) but
+            // do NOT recurse — avoids cycles from self-/mutually-referential
+            // links that would otherwise hang the walk.
+            let isDir = false;
+            try {
+              isDir = fs.statSync(path.join(abs, name)).isDirectory();
+            } catch {
+              isDir = false;
+            }
+            out.push(isDir ? `${childRel}/` : childRel);
+          } else {
+            out.push(childRel);
+          }
+        }
+      }
+    } catch (err) {
+      console.error("[electron] readFileIndex failed:", err);
+    }
+    return out;
+  });
+
   ipcMain.handle("readWorkspaceDiff", async (_e, rootPath: string) => {
     try {
       return await readWorkspaceDiffs(rootPath);

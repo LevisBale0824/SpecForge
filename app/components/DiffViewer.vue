@@ -12,43 +12,16 @@ const props = defineProps<{
   diff: MessageDiffEntry;
 }>();
 
-type NormalizedDiff = MessageDiffEntry & {
-  additions: number;
-  deletions: number;
-};
-
-function normalizeStats(diff: MessageDiffEntry): {
-  additions: number;
-  deletions: number;
-} {
-  if (typeof diff.additions === "number" || typeof diff.deletions === "number") {
-    return { additions: diff.additions ?? 0, deletions: diff.deletions ?? 0 };
-  }
-  const source = diff.diff || "";
-  let additions = 0;
-  let deletions = 0;
-  for (const line of source.split("\n")) {
-    if (line.startsWith("+") && !line.startsWith("+++")) additions += 1;
-    if (line.startsWith("-") && !line.startsWith("---")) deletions += 1;
-  }
-  return { additions, deletions };
-}
-
-const normalized = computed<NormalizedDiff>(() => ({
-  ...props.diff,
-  ...normalizeStats(props.diff),
-}));
-
-// Resolve side-by-side pairs.
+// Resolve change pairs.
 //
 // Priority:
 //   1. Patch text (Myers/git diff) → use the hunk structure directly. This
-//      matches VSCode exactly because we reuse git's own diff decision
-//      instead of re-running LCS over a lossy reconstruction.
+//      matches git's own diff decision instead of re-running LCS over a lossy
+//      reconstruction.
 //   2. Explicit before/after snapshots → fall back to LCS pairing.
 //   3. Empty array (no renderable content).
 const pairs = computed<SidePair[]>(() => {
-  const diff = normalized.value;
+  const diff = props.diff;
 
   // 1. Patch-first
   if (diff.diff && diff.diff.trim()) {
@@ -69,43 +42,57 @@ const pairs = computed<SidePair[]>(() => {
   return [];
 });
 
-// Only render rows that carry a change. Unchanged context lines (kind
-// "equal") add noise — the line numbers on the added/removed rows already
-// pinpoint where each edit happened.
-const visiblePairs = computed(() => pairs.value.filter((p) => p.kind !== "equal"));
+// Count additions/deletions from the SAME pairs we render, not from backend-
+// supplied stats. Backend stats are frequently 0 even when a patch carries
+// real +/- lines (snapshot-backed diffs, partial metadata), which previously
+// showed "+0 −0" beside visible red/green rows. Deriving from pairs keeps the
+// legend count and the rendered rows in lockstep.
+const additions = computed(() => pairs.value.filter((p) => p.kind === "added").length);
+const deletions = computed(() => pairs.value.filter((p) => p.kind === "removed").length);
 
-function leftCellClass(p: SidePair): string {
-  if (p.kind === "removed") return "cell-removed";
-  if (p.kind === "added") return "cell-empty";
-  return "cell-context";
-}
+// Inline (vertical) rows: drop unchanged context (it only adds noise — the
+// line numbers on each changed row already pinpoint where the edit happened),
+// then flatten to one row per changed line. Removed lines (编辑前, rose) sit
+// above added lines (编辑后, emerald) within each hunk because unified diffs
+// emit `-` runs before `+` runs.
+type InlineRow = { kind: "removed" | "added"; no?: number; text: string };
 
-function rightCellClass(p: SidePair): string {
-  if (p.kind === "added") return "cell-added";
-  if (p.kind === "removed") return "cell-empty";
-  return "cell-context";
-}
+const inlineRows = computed<InlineRow[]>(() =>
+  pairs.value
+    .filter((p) => p.kind === "removed" || p.kind === "added")
+    .map((p) =>
+      p.kind === "removed"
+        ? { kind: "removed", no: p.left?.no, text: p.left?.text ?? "" }
+        : { kind: "added", no: p.right?.no, text: p.right?.text ?? "" },
+    ),
+);
 </script>
 
 <template>
   <div class="diff-viewer">
     <div v-if="pairs.length === 0" class="diff-empty">此文件有变更，但后端未提供可对比的内容。</div>
-    <div v-else class="diff-grid">
-      <!-- Column headers -->
-      <div class="col-header">原文件</div>
-      <div class="col-header">修改后</div>
+    <div v-else class="diff-inline">
+      <!-- Color legend: makes the before/after semantics explicit since the
+           vertical layout no longer carries 原文件/修改后 column labels. -->
+      <div class="diff-legend">
+        <span class="legend-item legend-removed">− 编辑前</span>
+        <span class="legend-item legend-added">+ 编辑后</span>
+        <span class="legend-stats">
+          <span class="stat-add">+{{ additions }}</span>
+          <span class="stat-del">−{{ deletions }}</span>
+        </span>
+      </div>
 
-      <!-- Scrollable paired rows -->
-      <template v-for="(pair, idx) in visiblePairs" :key="idx">
-        <div class="cell" :class="leftCellClass(pair)">
-          <span class="line-no">{{ pair.left?.no ?? "" }}</span>
-          <span class="line-text">{{ pair.left?.text ?? "" }}</span>
-        </div>
-        <div class="cell" :class="rightCellClass(pair)">
-          <span class="line-no">{{ pair.right?.no ?? "" }}</span>
-          <span class="line-text">{{ pair.right?.text ?? "" }}</span>
-        </div>
-      </template>
+      <div
+        v-for="(row, idx) in inlineRows"
+        :key="idx"
+        class="diff-row"
+        :class="row.kind === 'removed' ? 'row-removed' : 'row-added'"
+      >
+        <span class="row-sign">{{ row.kind === "removed" ? "−" : "+" }}</span>
+        <span class="line-no">{{ row.no ?? "" }}</span>
+        <span class="line-text">{{ row.text }}</span>
+      </div>
     </div>
   </div>
 </template>
@@ -126,89 +113,95 @@ function rightCellClass(p: SidePair): string {
   color: var(--color-surface-500, #64748b);
 }
 
-.diff-grid {
+.diff-inline {
   flex: 1;
   min-height: 0;
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  grid-auto-rows: min-content;
   overflow: auto;
   font-family: var(--font-mono, monospace);
   font-size: 12px;
   line-height: 1.6;
 }
 
-.col-header {
+/* Sticky legend so the color meaning stays visible while scrolling long hunks. */
+.diff-legend {
   position: sticky;
   top: 0;
   z-index: 1;
-  padding: 0.35rem 0.6rem;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.3rem 0.6rem;
   font-size: 10px;
   font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--color-surface-400, #94a3b8);
+  letter-spacing: 0.04em;
   background: color-mix(in srgb, var(--color-surface-900, #0f172a) 95%, transparent);
   border-bottom: 1px solid color-mix(in srgb, var(--color-surface-800, #1e293b) 70%, transparent);
 }
 
-.col-header:first-child {
-  border-right: 1px solid color-mix(in srgb, var(--color-surface-800, #1e293b) 70%, transparent);
+.legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+.legend-removed {
+  color: var(--color-accent-rose, #f43f5e);
+}
+.legend-added {
+  color: var(--color-accent-emerald, #10b981);
+}
+.legend-stats {
+  margin-left: auto;
+  display: inline-flex;
+  gap: 0.5rem;
+}
+.stat-add {
+  color: var(--color-accent-emerald, #10b981);
+}
+.stat-del {
+  color: var(--color-accent-rose, #f43f5e);
 }
 
-.cell {
+.diff-row {
   display: grid;
-  grid-template-columns: 4ch 1fr;
+  grid-template-columns: 1.5ch 4ch 1fr;
   align-items: start;
   padding-right: 0.4rem;
   min-height: 1.6em;
 }
 
-.cell .line-no {
+.row-sign {
+  text-align: center;
+  user-select: none;
+  font-weight: 700;
+}
+
+.line-no {
   text-align: right;
   padding-right: 0.5ch;
-  /* surface-500 sits in the middle of the scale for both dark and light themes,
-     so the gutter stays readable without competing with line content. */
   color: var(--color-surface-500, #71717a);
   user-select: none;
   font-variant-numeric: tabular-nums;
 }
 
-.cell .line-text {
+.line-text {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   padding-left: 0.4ch;
 }
 
-/* Left column gets a right border so the two columns are visually separated */
-.cell:nth-child(odd):not(.col-header) {
-  border-right: 1px solid color-mix(in srgb, var(--color-surface-800, #1e293b) 50%, transparent);
-}
-
-.cell-context {
-  /* surface-100 is the highest-contrast text token in both modes (lightest on
-     dark backgrounds, darkest on light backgrounds). */
-  color: var(--color-surface-100, #f4f4f5);
-  background: transparent;
-}
-
-.cell-added {
-  background: color-mix(in srgb, var(--color-accent-emerald, #10b981) 22%, transparent);
+.row-removed {
+  background: color-mix(in srgb, var(--color-accent-rose, #f43f5e) 20%, transparent);
   color: var(--color-surface-100, #f4f4f5);
 }
+.row-removed .row-sign {
+  color: var(--color-accent-rose, #f43f5e);
+}
 
-.cell-removed {
-  background: color-mix(in srgb, var(--color-accent-rose, #f43f5e) 22%, transparent);
+.row-added {
+  background: color-mix(in srgb, var(--color-accent-emerald, #10b981) 20%, transparent);
   color: var(--color-surface-100, #f4f4f5);
 }
-
-.cell-empty {
-  background: color-mix(in srgb, var(--color-surface-800, #1e293b) 35%, transparent);
-  color: var(--color-surface-500, #71717a);
-  font-style: italic;
-}
-
-.cell-empty .line-text::before {
-  content: "—";
+.row-added .row-sign {
+  color: var(--color-accent-emerald, #10b981);
 }
 </style>

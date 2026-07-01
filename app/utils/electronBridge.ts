@@ -45,6 +45,13 @@ export async function readDirectory(
   return null;
 }
 
+export async function readFileIndex(rootPath: string): Promise<string[] | null> {
+  if (window.electronAPI) {
+    return window.electronAPI.readFileIndex(rootPath);
+  }
+  return null;
+}
+
 export async function readWorkspaceDiff(
   rootPath: string,
 ): Promise<import("../types/electron").WorkspaceFileDiff[] | null> {

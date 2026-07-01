@@ -75,6 +75,8 @@ export interface ElectronAPI {
   selectDirectory: () => Promise<string | null>;
   openExternalUrl: (url: string) => Promise<boolean>;
   readDirectory: (rootPath: string, relPath: string) => Promise<DirEntry[] | null>;
+  /** Full recursive file index (relative POSIX paths, dirs trailing "/") in one IPC call. */
+  readFileIndex: (rootPath: string) => Promise<string[]>;
   readWorkspaceDiff: (rootPath: string) => Promise<WorkspaceFileDiff[]>;
   getServerStatus: () => Promise<ServerStatus>;
   restartServer: (kind?: AgentKind) => Promise<ServerStatus>;
