@@ -5,6 +5,20 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，
 项目遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.4.6] - 2026-07-01
+
+### 修复 (Fixed)
+
+- 🔁 **流式文本重复乱码**：`part.updated` 快照到达时 delta lens 未按文本关系重新基线，分叉快照导致后续 delta 偏移检查系统性失效、同段内容被反复追加；改用最长公共前缀（LCP）重新基线 lens，覆盖扩展/截断/分叉三种关系（含 `useDeltaAccumulator` / `useMessages` 镜像逻辑与新增单元测试）
+- ✂️ **流式 Markdown 中途渲染抖动**：未闭合的代码围栏 / 行内代码 / 链接导致 markdown-it 解析异常，出现 DOM 抖动与字面标记外露；新增 `renderStreaming` 预处理在渲染前补全最小闭合符号（仅作用于流式分支，不污染最终渲染）
+- 👆 **拖拽/缩放手势泄漏**：浮窗拖拽、面板缩放仅监听 `pointerup` 未监听 `pointercancel`，系统抢占/多点触控中断手势后事件监听器残留卡死；补全 `pointercancel` 监听与清理
+- 🔄 **自动滚动与用户交互冲突**：流式追加时自动滚动抢占用户的手动滚动/选择；`scheduleAutoScroll` 在指针交互期间暂停，滚动容器补 `overscroll-behavior: contain` 与 `overflow-anchor: none` 防链式传播与锚点抢占
+- 🧩 **子 Agent 委派后父 session 卡死**：子 Agent 在独立 session 运行时其内容事件携带子 sessionID，父 session 的 no-content 看门狗（120s）因从未收到自身 sessionID 内容而误触发；part 事件改为沿 `parentID` 链向上对每个祖先 session 清除看门狗（复用 sessions store，无需自维护映射）
+- 🧹 **文本清洗补全**：`stripSystemReminder` 新增移除 `<think>...</think>` 推理块、单独成行的 chat 模板角色标记行（`assistant`/`user`）、以及多块噪声移除后残留的连续多余空行
+- 💬 **对话气泡宽度与折行**：助手/用户气泡 max-width 统一为 900px（原 760/820px 不一致且偏小）；`.md-content` 由 `word-break: break-word` 改为 `overflow-wrap: anywhere`，避免 flex 子元素被压到 min-content 导致中文段落未达 max-width 即被异常截断
+
+---
+
 ## [0.4.5] - 2026-06-29
 
 ### 新增 (Added)
