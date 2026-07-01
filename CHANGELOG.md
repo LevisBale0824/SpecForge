@@ -5,6 +5,23 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，
 项目遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.5.0] - 2026-07-02
+
+### 修复 (Fixed)
+
+- ⚡ **流式期间 CPU/内存偏高**：`MessageContent` 内一个始终开启的调试 `watchEffect` 在每个流式 token 上对所有消息全量 `map` + `JSON.stringify` + `console.info`，造成主线程繁忙与 GC 抖动；改为默认关闭（`localStorage debug.specforge=1` 可手动开启）
+- 📂 **@ 长时间 "Loading files…"**：`useFileIndex` 旧实现对每个目录发起一次串行 IPC 往返，中型仓库需数百次 await；改为单次主进程 `readFileIndex` 一次性遍历（数十 ms）。同时窗口聚焦的 `reloadFileIndex` 由 `reset()`（清空缓存）改为后台静默 `refresh()`，Alt-Tab 后不再重新全量加载
+- 💬 **对话气泡过早换行**：气泡 `max-width` 用 `calc(100% - 3.5rem)` 引用自身 shrink-to-fit 父宽，形成循环依赖导致塌缩到 `min-width`（180px），短消息被挤成两行；将 max-width 上移到外层 wrapper（参照确定宽度的行）并修复无效 calc 语法
+- 🖱️ **搜索结果无法拖拽**：`FileSearchResults` 缺少 `draggable` 与 `TREE_MIME` 负载，补齐后可与文件树节点一样拖入输入框生成 `@路径`
+- 🔢 **diff 统计显示 +0 −0**：`normalizeStats` 在后端给出数字型（哪怕为 0）时直接采用而跳过实际计数；增删改为直接数渲染用的 pairs，计数与可见红/绿行永远一致
+
+### 改进 (Changed)
+
+- 📝 **diff 视图改为纵向对比**：原左右双栏（原文件 | 修改后）改为单栏上下内联对比（红色=编辑前 / 绿色=编辑后，Codex 风格），顶部粘性图例 + 增删统计
+- 📏 **助手气泡最大宽度调大**：由固定 900px 改为对话框宽度的约 2/3（上限 1100px），长回复与代码块更宽敞
+
+---
+
 ## [0.4.6] - 2026-07-01
 
 ### 新增 (Added)
