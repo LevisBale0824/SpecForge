@@ -116,7 +116,8 @@ function nextStage() {
 }
 
 const injected = ref<Partial<Record<string, boolean>>>({});
-async function draft(stage: "explore" | "propose") {
+type DraftStage = "explore" | "propose" | "plan" | "apply" | "review";
+async function draft(stage: DraftStage) {
   if (!need.value.trim()) {
     draftMsg.value = "请先输入";
     return;
@@ -137,6 +138,12 @@ async function draft(stage: "explore" | "propose") {
   need.value = "";
   await backend.sendPrompt(text, []);
   window.setTimeout(() => (draftMsg.value = ""), 2500);
+}
+function sendForCurrent() {
+  const s = cur.value;
+  if (s === "explore" || s === "propose" || s === "plan" || s === "apply" || s === "review") {
+    draft(s);
+  }
 }
 async function runGates() {
   if (!changeId.value) return;
@@ -288,8 +295,21 @@ function verdictColor(v: string): string {
             </button>
           </template>
           <template v-else-if="cur === 'plan' || cur === 'apply' || cur === 'review'">
-            <button class="btn ghost" @click="router.push('/chat')">前往主对话 →</button>
-            <span class="composer-hint">{{ HINTS[cur] }}</span>
+            <input
+              v-model="need"
+              :placeholder="`${LABELS[cur]} 阶段 — 输入指令 / 补充… (首次发送注入阶段指令)`"
+              @keydown.enter="sendForCurrent"
+            />
+            <button class="btn violet" :disabled="!need.trim()" @click="sendForCurrent">
+              发送
+            </button>
+            <button
+              class="btn ghost"
+              @click="router.push('/chat')"
+              title="代码生成/审查在主对话区进行"
+            >
+              主对话 →
+            </button>
           </template>
           <template v-else-if="cur === 'verify'">
             <button class="btn emerald" :disabled="gating || !changeId" @click="runGates">
