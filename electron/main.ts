@@ -1189,6 +1189,88 @@ function registerIpcHandlers() {
     }
   });
 
+  // ── Gates & Evidence IPC ──────────────────────────────────────────────
+  async function runShell(
+    directory: string,
+    command: string,
+  ): Promise<{ stdout: string; stderr: string; code: number; durationMs: number }> {
+    const start = Date.now();
+    return new Promise((resolve) => {
+      const proc = spawn(command, {
+        cwd: directory,
+        shell: true,
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+      const out: Buffer[] = [];
+      const err: Buffer[] = [];
+      proc.stdout?.on("data", (c: Buffer) => out.push(c));
+      proc.stderr?.on("data", (c: Buffer) => err.push(c));
+      const finalize = (code: number) =>
+        resolve({
+          stdout: Buffer.concat(out).toString("utf8"),
+          stderr: Buffer.concat(err).toString("utf8"),
+          code,
+          durationMs: Date.now() - start,
+        });
+      proc.on("error", () => finalize(1));
+      proc.on("close", (code) => finalize(code ?? 1));
+    });
+  }
+
+  function safeArtifactPath(rootPath: string, changeId: string, filename: string): string | null {
+    if (!/^[a-zA-Z0-9._-]+$/.test(changeId)) return null;
+    if (!/^[a-zA-Z0-9._-]+$/.test(filename)) return null;
+    const abs = safeJoinPosix(rootPath, `openspec/changes/${changeId}/${filename}`);
+    if (!isPathInside(rootPath, abs)) return null;
+    return abs;
+  }
+
+  ipcMain.handle("runProjectGate", async (_e, rootPath: string, command: string) => {
+    try {
+      if (!command || typeof command !== "string") {
+        return {
+          command: String(command),
+          exitCode: 1,
+          stdout: "",
+          stderr: "empty command",
+          durationMs: 0,
+        };
+      }
+      return await runShell(rootPath, command);
+    } catch (err) {
+      return { command, exitCode: 1, stdout: "", stderr: String(err), durationMs: 0 };
+    }
+  });
+
+  ipcMain.handle(
+    "writeChangeArtifact",
+    async (_e, rootPath: string, changeId: string, filename: string, content: string) => {
+      try {
+        const abs = safeArtifactPath(rootPath, changeId, filename);
+        if (!abs) return { ok: false, reason: "invalid path" };
+        fs.mkdirSync(path.dirname(abs), { recursive: true });
+        fs.writeFileSync(abs, content, "utf-8");
+        return { ok: true };
+      } catch (err) {
+        console.error("[electron] writeChangeArtifact failed:", err);
+        return { ok: false, reason: String(err) };
+      }
+    },
+  );
+
+  ipcMain.handle(
+    "readChangeArtifact",
+    async (_e, rootPath: string, changeId: string, filename: string) => {
+      try {
+        const abs = safeArtifactPath(rootPath, changeId, filename);
+        if (!abs || !fs.existsSync(abs)) return null;
+        return fs.readFileSync(abs, "utf-8");
+      } catch {
+        return null;
+      }
+    },
+  );
+
   // ── Window controls (frameless titlebar) ──────────────────────────────
   ipcMain.handle("window:minimize", () => {
     mainWindow?.minimize();

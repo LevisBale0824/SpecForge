@@ -1,18 +1,22 @@
 // ---------------------------------------------------------------------------
 // OpenSpec Workflow Plugin
 // ---------------------------------------------------------------------------
-// Registers the 4-step workflow (EXPLORE → PROPOSE → APPLY → ARCHIVE)
-// as a Vue plugin. Disabled by default; toggle in settings.
+// 风险自适应工作流:按 tier 启用不同阶段子集。
+// Quick: propose→apply→verify→archive
+// Standard: explore→propose→apply→verify→archive
+// Full: explore→propose→plan→apply→verify→review→archive
 // ---------------------------------------------------------------------------
 
 import type { App } from "vue";
 import type { OpenSpecPlugin } from "./pluginTypes";
 import {
-  STEP_ORDER,
   createDefaultWorkflowState,
+  entryStageForTier,
+  stagesForTier,
   type StepName,
   type StepPhase,
   type WorkflowState,
+  type WorkflowTier,
 } from "../types/workflow";
 import { ref } from "vue";
 
@@ -21,17 +25,40 @@ import { ref } from "vue";
 const workflowState = ref<WorkflowState>(createDefaultWorkflowState());
 const workflowEnabled = ref(false);
 
+function ensureStep(step: StepName): StepState {
+  const steps = workflowState.value.steps;
+  if (!steps[step]) steps[step] = { name: step, phase: "idle" };
+  return steps[step]!;
+}
+
+// re-import locally to avoid cycle confusion in type-only position
+type StepState = import("../types/workflow").StepState;
+
 function setStepPhase(step: StepName, phase: StepPhase) {
-  const state = workflowState.value;
-  state.steps[step].phase = phase;
+  ensureStep(step).phase = phase;
 }
 
 function setActiveStep(step: StepName) {
   workflowState.value.activeStep = step;
 }
 
+/** 切换档位 — 重建 steps(按新 tier),保留已有阶段的 phase */
+function setTier(tier: WorkflowTier) {
+  const old = workflowState.value.steps;
+  const steps: Partial<Record<StepName, StepState>> = {};
+  for (const name of stagesForTier(tier)) {
+    steps[name] = old[name] ?? { name, phase: "idle" };
+  }
+  workflowState.value = {
+    ...workflowState.value,
+    tier,
+    steps,
+    activeStep: entryStageForTier(tier),
+  };
+}
+
 function resetWorkflow() {
-  workflowState.value = createDefaultWorkflowState();
+  workflowState.value = createDefaultWorkflowState(workflowState.value.tier);
 }
 
 function enableWorkflow() {
@@ -45,34 +72,50 @@ function disableWorkflow() {
   resetWorkflow();
 }
 
+/** 当前 tier 的启用阶段(有序) */
+function activeStages(): StepName[] {
+  return stagesForTier(workflowState.value.tier);
+}
+
 function nextStep(): boolean {
+  const order = activeStages();
   const current = workflowState.value.activeStep;
-  const idx = STEP_ORDER.indexOf(current);
-  if (idx >= STEP_ORDER.length - 1) return false;
-  const next = STEP_ORDER[idx + 1];
+  const idx = order.indexOf(current);
+  if (idx < 0 || idx >= order.length - 1) return false;
+  const next = order[idx + 1];
   setActiveStep(next);
   setStepPhase(next, "input");
   setStepPhase(current, "done");
   return true;
 }
 
+/**
+ * Step 3 — Archive gate:仅当 verify 阶段处于 done(证据已通过)才允许归档。
+ * 确定性拦截,不依赖人记。Quick/Standard/Full 都含 verify,故统一适用。
+ */
+function canArchive(): boolean {
+  const v = workflowState.value.steps.verify;
+  return v?.phase === "done";
+}
+
 export const workflowPlugin: OpenSpecPlugin = {
   name: "openspec-workflow",
-  description: "4-step workflow: Explore → Propose → Apply → Archive",
+  description: "Risk-adaptive workflow: Quick / Standard / Full",
   enabled: false,
 
   install(app: App) {
-    // Provide workflow state globally
     app.provide("workflowState", workflowState);
     app.provide("workflowEnabled", workflowEnabled);
 
-    // Expose workflow API via global properties
     app.config.globalProperties.$workflow = {
       state: workflowState,
       enabled: workflowEnabled,
       setActiveStep,
       setStepPhase,
+      setTier,
+      activeStages,
       nextStep,
+      canArchive,
       reset: resetWorkflow,
       enable: enableWorkflow,
       disable: disableWorkflow,
@@ -88,7 +131,10 @@ export function useWorkflow() {
     enabled: workflowEnabled,
     setActiveStep,
     setStepPhase,
+    setTier,
+    activeStages,
     nextStep,
+    canArchive,
     reset: resetWorkflow,
     enable: enableWorkflow,
     disable: disableWorkflow,

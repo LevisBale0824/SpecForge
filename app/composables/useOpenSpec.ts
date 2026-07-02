@@ -20,6 +20,8 @@ import {
   isElectron,
   readOpenSpecState,
   runOpenSpecValidate,
+  runProjectGate,
+  writeChangeArtifact,
   writeOpenSpecTasks,
 } from "../utils/electronBridge";
 import { useProject } from "./useProject";
@@ -33,6 +35,10 @@ import {
   updateTaskStatuses,
 } from "../utils/openspecParser";
 import type {
+  EvidenceFile,
+  GateLayer,
+  GateResult,
+  GateVerdict,
   OpenSpecChange,
   OpenSpecReadStateResult,
   OpenSpecState,
@@ -51,6 +57,7 @@ const state = reactive<OpenSpecState>({
   cliAvailable: false,
   cliVersion: undefined,
   validation: {},
+  evidence: {},
 });
 
 let refreshTimer: number | undefined;
@@ -393,6 +400,97 @@ async function runValidate(changeId?: string): Promise<void> {
   state.validation[changeId ?? "_global"] = placeholder;
 }
 
+const DEFAULT_GATES: { layer: GateLayer; command: string }[] = [
+  { layer: "lint", command: "npm run lint" },
+  { layer: "test", command: "npm test" },
+  { layer: "build", command: "npm run build" },
+];
+
+async function runGates(changeId?: string): Promise<EvidenceFile | null> {
+  const project = useProject();
+  const root = state.rootPath || project.state.directoryPath;
+  if (!root) return null;
+
+  const key = changeId ?? "_global";
+  const gates: GateResult[] = [];
+
+  await runValidate(changeId);
+  const v = state.validation[key];
+  gates.push({
+    layer: "spec",
+    command: `openspec validate${changeId ? ` ${changeId}` : ""} --strict`,
+    exitCode: v?.cliAvailable ? (v.passed ? 0 : 1) : null,
+    passed: v?.passed ?? false,
+    durationMs: 0,
+    outputSnippet: v?.rawOutput?.slice(0, 500),
+  });
+
+  if (isElectron()) {
+    for (const g of DEFAULT_GATES) {
+      const r = await runProjectGate(root, g.command);
+      gates.push({
+        layer: g.layer,
+        command: g.command,
+        exitCode: r?.exitCode ?? null,
+        passed: r?.exitCode === 0,
+        durationMs: r?.durationMs ?? 0,
+        outputSnippet: (r?.stderr || r?.stdout || "").slice(0, 500),
+      });
+    }
+  }
+
+  const anyFailed = gates.some((g) => g.exitCode !== null && !g.passed);
+  const allPassed = gates.every((g) => g.passed);
+  const verdict: GateVerdict = allPassed ? "READY" : anyFailed ? "NOT_READY" : "CONDITIONAL";
+
+  const evidence: EvidenceFile = {
+    changeId: key,
+    verdict,
+    gates,
+    ranAt: Date.now(),
+  };
+  state.evidence[key] = evidence;
+
+  if (isElectron() && changeId) {
+    await writeChangeArtifact(root, changeId, "evidence.json", JSON.stringify(evidence, null, 2));
+  }
+  return evidence;
+}
+
+async function archiveChange(changeId: string): Promise<{ ok: boolean; reason?: string }> {
+  const ev = state.evidence[changeId];
+  if (ev && ev.verdict === "NOT_READY") {
+    return {
+      ok: false,
+      reason: `verify 未通过（${ev.verdict}）— evidence gate 确定性阻止归档`,
+    };
+  }
+  if (isElectron()) {
+    const project = useProject();
+    const root = state.rootPath || project.state.directoryPath;
+    const r = await runProjectGate(root, `openspec archive ${changeId}`);
+    if (r?.exitCode !== 0) {
+      return { ok: false, reason: r?.stderr?.slice(0, 300) || "openspec archive 失败" };
+    }
+  }
+  await refresh();
+  return { ok: true };
+}
+
+async function captureKnowledge(
+  changeId: string,
+  summary: string,
+): Promise<{ ok: boolean; reason?: string }> {
+  if (!isElectron()) return { ok: false, reason: "仅 Electron 模式支持" };
+  const project = useProject();
+  const root = state.rootPath || project.state.directoryPath;
+  if (!root) return { ok: false, reason: "无根目录" };
+  const ts = new Date().toISOString();
+  const body = `# Knowledge Draft — ${changeId}\n\n_captured: ${ts}_\n\n${summary.trim()}\n`;
+  const r = await writeChangeArtifact(root, changeId, "knowledge.md", body);
+  return r?.ok ? { ok: true } : { ok: false, reason: r?.reason || "写入失败" };
+}
+
 async function init(): Promise<{ ok: boolean; method?: "cli" | "manual"; reason?: string }> {
   const project = useProject();
   state.error = "";
@@ -469,6 +567,9 @@ export function useOpenSpec() {
     scheduleRefresh,
     toggleTask,
     runValidate,
+    runGates,
+    archiveChange,
+    captureKnowledge,
     init,
   };
 }

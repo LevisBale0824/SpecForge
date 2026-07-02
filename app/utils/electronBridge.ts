@@ -195,6 +195,39 @@ export async function initOpenSpec(
   return null;
 }
 
+export async function runProjectGate(
+  rootPath: string,
+  command: string,
+): Promise<import("../types/openspec").ProjectGateResult | null> {
+  if (window.electronAPI) {
+    return window.electronAPI.runProjectGate(rootPath, command);
+  }
+  return null;
+}
+
+export async function writeChangeArtifact(
+  rootPath: string,
+  changeId: string,
+  filename: string,
+  content: string,
+): Promise<import("../types/openspec").WriteArtifactResult | null> {
+  if (window.electronAPI) {
+    return window.electronAPI.writeChangeArtifact(rootPath, changeId, filename, content);
+  }
+  return null;
+}
+
+export async function readChangeArtifact(
+  rootPath: string,
+  changeId: string,
+  filename: string,
+): Promise<string | null> {
+  if (window.electronAPI) {
+    return window.electronAPI.readChangeArtifact(rootPath, changeId, filename);
+  }
+  return null;
+}
+
 // ── Frameless titlebar window controls ────────────────────────────────────
 
 export function windowMinimize(): void {

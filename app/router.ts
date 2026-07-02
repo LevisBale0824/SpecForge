@@ -11,4 +11,9 @@ export const routes: RouteRecordRaw[] = [
     name: "chat",
     component: () => import("./components/ChatView.vue"),
   },
+  {
+    path: "/workflow",
+    name: "workflow",
+    component: () => import("./components/workflow/WorkflowStudio.vue"),
+  },
 ];
