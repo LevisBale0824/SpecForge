@@ -1,16 +1,14 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import { useI18n } from "vue-i18n";
-import SessionTree from "./SessionTree.vue";
-import FileTree from "./FileTree.vue";
 import FileSearchResults from "./FileSearchResults.vue";
+import FileTree from "./FileTree.vue";
 import MessageFileChanges from "./MessageFileChanges.vue";
-import SidePanelSection from "./SidePanelSection.vue";
-import { useProject } from "../composables/useProject";
+import SessionTree from "./SessionTree.vue";
 import { useFileIndex } from "../composables/useFileIndex";
 import { useMessages } from "../composables/useMessages";
 import { useOpenSpec } from "../composables/useOpenSpec";
-import { useRouter } from "vue-router";
+import { useProject } from "../composables/useProject";
 import { useWorkflow } from "../plugins/workflowPlugin";
 import type { MessageDiffEntry } from "../types/message";
 import type { FileDiff, SessionInfo, SessionStatusInfo } from "../types/sse";
@@ -20,31 +18,10 @@ const { state: projectState } = useProject();
 const fileIndex = useFileIndex();
 const msgStore = useMessages();
 const openspec = useOpenSpec();
-const router = useRouter();
 const wf = useWorkflow();
-const sideTab = ref<"sessions" | "spec">("sessions");
 
-const displayWorkflowTitle = computed(() => {
-  const ch = openspec.state.activeChanges[0];
-  if (ch) return ch.id;
-  return wf.state.value.label || "探索中…";
-});
-function openWorkflow() {
-  router.push({ name: "workflow" }).catch(() => {});
-}
-
-// File-tree search. Empty query keeps the regular hierarchical tree; typing
-// swaps to a flat filtered list sourced from the same @ mention index. Lazy
-// load on focus in case the user opens this panel before opening composer.
+const sideTab = ref<"sessions" | "spec" | "files" | "changes">("sessions");
 const fileSearch = ref("");
-function onSearchFocus() {
-  if (projectState.directoryPath) {
-    fileIndex.ensureLoaded(projectState.directoryPath);
-  }
-}
-function clearSearch() {
-  fileSearch.value = "";
-}
 
 const props = withDefaults(
   defineProps<{
@@ -61,23 +38,6 @@ const props = withDefaults(
   },
 );
 
-// Collapsible sections.
-// Each section can be independently collapsed. When all expanded, they share
-// the available height evenly (flex: 1 1 0). A collapsed section contributes
-// only its header height.
-
-type SectionId = "sessions" | "files" | "diff";
-// All sections start collapsed; the user opts in to each one.
-const collapsed = ref<Record<SectionId, boolean>>({
-  sessions: true,
-  files: true,
-  diff: true,
-});
-
-function toggleSection(id: SectionId) {
-  collapsed.value[id] = !collapsed.value[id];
-}
-
 const emit = defineEmits<{
   "select-session": [sessionId: string];
   "delete-session": [sessionId: string];
@@ -86,14 +46,19 @@ const emit = defineEmits<{
   "open-file": [path: string];
   "open-diff": [diff: MessageDiffEntry];
   "open-folder": [];
+  "open-chat": [];
+  "open-workflow": [changeId?: string];
   "refresh-files": [];
 }>();
 
-function handleOpenDiff(diff: MessageDiffEntry) {
-  emit("open-diff", diff);
-}
-
-// Diff data.
+const displayWorkflowTitle = computed(() => {
+  const ch = openspec.state.activeChanges[0];
+  if (ch) return ch.id;
+  return wf.state.value.label || "探索中...";
+});
+const hasWorkflowDraft = computed(
+  () => openspec.state.activeChanges.length > 0 || Boolean(wf.state.value.label?.trim()),
+);
 
 const workspaceDiffEntries = computed<MessageDiffEntry[]>(() =>
   props.workspaceDiffs
@@ -115,166 +80,306 @@ const activeDiffs = computed(() => {
 });
 
 const activeDiffCount = computed(() => activeDiffs.value?.length ?? 0);
+const rootSessionCount = computed(
+  () => props.sessions.filter((session) => !session.parentID).length,
+);
 
-const sections = computed(() => [
-  {
-    id: "sessions" as const,
-    title: t("sidebar.sessions"),
-    // Count only root sessions (those without a parentID). Sub-agent
-    // sessions are nested under their parent and shouldn't inflate the
-    // top-level count; otherwise "5 sessions" might really be 1 parent
-    // + 4 sub-agents.
-    badge: props.sessions.filter((s) => !s.parentID).length,
-    collapsed: collapsed.value.sessions,
-    canCreate: true,
-  },
-  {
-    id: "files" as const,
-    title: t("sidebar.files"),
-    badge: 0,
-    collapsed: collapsed.value.files,
-    canCreate: true,
-    canRefresh: true,
-    refreshTitle: t("sidebar.refreshFiles"),
-    actionIcon: "folder" as const,
-  },
-  {
-    id: "diff" as const,
-    title: "Diff",
-    badge: activeDiffCount.value,
-    collapsed: collapsed.value.diff,
-    canCreate: false,
-  },
-]);
+function openWorkflow(changeId?: string) {
+  emit("open-workflow", changeId);
+}
+
+function onSearchFocus() {
+  if (projectState.directoryPath) {
+    fileIndex.ensureLoaded(projectState.directoryPath);
+  }
+}
+
+function clearSearch() {
+  fileSearch.value = "";
+}
+
+function handleOpenDiff(diff: MessageDiffEntry) {
+  emit("open-diff", diff);
+}
 </script>
 
 <template>
   <aside class="side-panel">
     <div v-if="!projectState.directoryPath && !projectState.rootHandle" class="no-project">
-      <button class="open-folder-btn" @click="emit('open-folder')">
-        📂 打开文件夹
-      </button>
+      <div class="project-empty-card">
+        <span class="project-empty-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+            <path
+              d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-8l-2-2H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2Z"
+            />
+          </svg>
+        </span>
+        <div class="project-empty-copy">
+          <span class="project-empty-title">选择项目</span>
+          <span class="project-empty-text">打开一个本地文件夹后开始工作</span>
+        </div>
+        <button class="open-folder-btn" type="button" @click="emit('open-folder')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+            <path d="M12 5v14M5 12h14" />
+          </svg>
+          <span>{{ t("welcome.openProject", "Open project") }}</span>
+        </button>
+      </div>
     </div>
+
     <template v-else>
-    <div class="side-openfolder">
-      <button @click="emit('open-folder')">
-        📂 {{ projectState.directoryName || "切换文件夹" }}
-      </button>
-    </div>
-    <div class="side-tabs">
-      <button
-        class="side-tab"
-        :class="{ active: sideTab === 'sessions' }"
-        @click="sideTab = 'sessions'"
-      >
-        {{ t("sidebar.sessions") }}
-      </button>
-      <button
-        class="side-tab spec"
-        :class="{ active: sideTab === 'spec' }"
-        @click="sideTab = 'spec'"
-      >
-        Spec 探索
-      </button>
-    </div>
-    <div v-show="sideTab === 'sessions'" class="side-tab-pane">
-      <SidePanelSection
-        v-for="section in sections"
-        :key="section.id"
-        :title="section.title"
-        :badge="section.badge"
-        :collapsed="section.collapsed"
-        :can-create="section.canCreate"
-        :can-refresh="section.canRefresh"
-        :refresh-title="section.refreshTitle"
-        :action-icon="section.actionIcon"
-        @toggle="toggleSection(section.id)"
-        @new="section.id === 'files' ? emit('open-folder') : emit('new-session')"
-        @refresh="emit('refresh-files')"
-      >
-        <!-- Sessions -->
-        <template v-if="section.id === 'sessions'">
-          <SessionTree
-            :sessions="sessions"
-            :active-session-id="activeSessionId"
-            :status-of="statusOf"
-            @select="emit('select-session', $event)"
-            @delete="emit('delete-session', $event)"
-            @abort="emit('abort-session', $event)"
-          />
-        </template>
-
-        <!-- Files -->
-        <template v-else-if="section.id === 'files'">
-          <div v-if="projectState.loading" class="section-empty">Loading...</div>
-          <div v-else-if="projectState.error" class="section-error">
-            {{ projectState.error }}
-          </div>
-          <template v-else-if="projectState.root">
-            <!-- Search box: shown when the user has a project open. Focus lazy
-               loads the flat index so the first keystroke already has data. -->
-            <div class="file-search-row">
-              <input
-                v-model="fileSearch"
-                type="text"
-                class="file-search-input"
-                :placeholder="t('sidebar.searchFiles', 'Search files...')"
-                @focus="onSearchFocus"
+      <div class="side-content-shell">
+        <nav class="side-rail" aria-label="Sidebar navigation">
+          <button
+            type="button"
+            class="rail-button"
+            :class="{ active: sideTab === 'sessions' }"
+            title="会话"
+            @click="
+              sideTab = 'sessions';
+              emit('open-chat');
+            "
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+              <path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z" />
+            </svg>
+            <span v-if="rootSessionCount > 0" class="rail-badge">{{ rootSessionCount }}</span>
+          </button>
+          <button
+            type="button"
+            class="rail-button spec"
+            :class="{ active: sideTab === 'spec' }"
+            title="Spec 探索"
+            @click="
+              sideTab = 'spec';
+              openWorkflow();
+            "
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+              <path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.74V16h8v-1.26A7 7 0 0 0 12 2z" />
+            </svg>
+          </button>
+          <button
+            type="button"
+            class="rail-button"
+            :class="{ active: sideTab === 'files' }"
+            title="文件"
+            @click="sideTab = 'files'"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+              <path
+                d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-8l-2-2H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2Z"
               />
-              <button
-                v-if="fileSearch"
-                type="button"
-                class="file-search-clear"
-                :title="t('sidebar.clearSearch', 'Clear')"
-                @click="clearSearch"
-              >
-                ×
-              </button>
-            </div>
-            <FileSearchResults
-              v-if="fileSearch.trim()"
-              :query="fileSearch"
-              :files="fileIndex.files.value"
-              @open-file="emit('open-file', $event)"
-            />
-            <FileTree
-              v-else
-              :node="projectState.root"
-              :depth="0"
-              @open-file="emit('open-file', $event)"
-            />
-          </template>
-          <div v-else class="section-empty">{{ t("welcome.openProject") }}</div>
-        </template>
+            </svg>
+          </button>
+          <button
+            type="button"
+            class="rail-button"
+            :class="{ active: sideTab === 'changes' }"
+            title="修改（Diff）"
+            @click="sideTab = 'changes'"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+              <path d="M16 3h5v5M8 3H3v5M21 16v5h-5M3 16v5h5M10 7l4 10M14 7l-4 10" />
+            </svg>
+            <span v-if="activeDiffCount > 0" class="rail-badge">{{ activeDiffCount }}</span>
+          </button>
+        </nav>
 
-        <!-- Diff -->
-        <template v-else-if="section.id === 'diff'">
-          <MessageFileChanges
-            v-if="activeDiffCount > 0"
-            :diffs="activeDiffs"
-            @open-diff="handleOpenDiff"
-          />
-          <div v-else class="section-empty">No file changes</div>
-        </template>
-      </SidePanelSection>
-    </div>
-    <div v-show="sideTab === 'spec'" class="side-tab-pane spec-pane">
-      <div class="spec-section-label">探索</div>
-      <div v-if="wf.enabled.value" class="spec-item ongoing" @click="openWorkflow">
-        <span class="spec-dot violet"></span>{{ displayWorkflowTitle }}
+        <div class="side-pane-host">
+          <div v-show="sideTab === 'sessions'" class="side-tab-pane">
+            <div class="pane-header">
+              <div class="pane-title-group">
+                <span class="section-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                    <path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z" />
+                  </svg>
+                </span>
+                <div class="pane-title-copy">
+                  <span class="section-kicker">最近会话</span>
+                  <span class="section-subtitle">按更新时间排序</span>
+                </div>
+              </div>
+              <div class="pane-actions">
+                <span v-if="rootSessionCount > 0" class="count-pill">{{ rootSessionCount }}</span>
+                <button
+                  type="button"
+                  class="header-icon-button"
+                  :title="t('sidebar.newSession', 'New session')"
+                  @click="emit('new-session')"
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                    <path d="M12 5v14M5 12h14" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            <div class="pane-body">
+              <SessionTree
+                :sessions="sessions"
+                :active-session-id="activeSessionId"
+                :status-of="statusOf"
+                @select="emit('select-session', $event)"
+                @delete="emit('delete-session', $event)"
+                @abort="emit('abort-session', $event)"
+              />
+            </div>
+          </div>
+
+          <div v-show="sideTab === 'spec'" class="side-tab-pane">
+            <div class="pane-header">
+              <div class="pane-title-group">
+                <span class="section-icon spec" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                    <path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.74V16h8v-1.26A7 7 0 0 0 12 2z" />
+                  </svg>
+                </span>
+                <div class="pane-title-copy">
+                  <span class="section-kicker">Spec 探索</span>
+                  <span class="section-subtitle">需求、方案与任务</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="pane-body spec-pane">
+              <div
+                v-if="wf.enabled.value && !openspec.state.activeChanges.length && hasWorkflowDraft"
+                class="spec-item ongoing"
+                @click="openWorkflow(openspec.state.activeChanges[0]?.id)"
+              >
+                <span class="spec-dot violet"></span>{{ displayWorkflowTitle }}
+              </div>
+              <div
+                v-for="change in openspec.state.activeChanges"
+                :key="change.id"
+                class="spec-item"
+                @click="openWorkflow(change.id)"
+              >
+                <span class="spec-dot"></span>{{ change.id }}
+              </div>
+              <div
+                v-if="!openspec.state.activeChanges.length && !hasWorkflowDraft"
+                class="spec-empty"
+              >
+                选择 Quick / Standard / Full 开始一次新的探索
+              </div>
+            </div>
+          </div>
+
+          <div v-show="sideTab === 'files'" class="side-tab-pane">
+            <div class="pane-header">
+              <div class="pane-title-group">
+                <span class="section-icon file" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                    <path
+                      d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-8l-2-2H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2Z"
+                    />
+                  </svg>
+                </span>
+                <div class="pane-title-copy">
+                  <span class="section-kicker">文件</span>
+                  <span class="section-subtitle">浏览并拖拽引用</span>
+                </div>
+              </div>
+              <div class="pane-actions">
+                <button
+                  type="button"
+                  class="header-icon-button"
+                  :title="projectState.directoryName || t('welcome.openProject', 'Open project')"
+                  @click="emit('open-folder')"
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                    <path
+                      d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-8l-2-2H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2Z"
+                    />
+                  </svg>
+                </button>
+                <button
+                  type="button"
+                  class="header-icon-button"
+                  :title="t('sidebar.refreshFiles')"
+                  @click="emit('refresh-files')"
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                    <path d="M4 4v6h6M20 20v-6h-6M5 10a8 8 0 0 1 14-3M19 14a8 8 0 0 1-14 3" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            <div class="pane-body">
+              <div v-if="projectState.loading" class="section-empty">Loading...</div>
+              <div v-else-if="projectState.error" class="section-error">
+                {{ projectState.error }}
+              </div>
+              <template v-else-if="projectState.root">
+                <div class="file-search-row">
+                  <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                    <circle cx="11" cy="11" r="7" />
+                    <path d="m20 20-3.5-3.5" />
+                  </svg>
+                  <input
+                    v-model="fileSearch"
+                    type="text"
+                    class="file-search-input"
+                    :placeholder="t('sidebar.searchFiles', 'Search files...')"
+                    @focus="onSearchFocus"
+                  />
+                  <button
+                    v-if="fileSearch"
+                    type="button"
+                    class="file-search-clear"
+                    :title="t('sidebar.clearSearch', 'Clear')"
+                    @click="clearSearch"
+                  >
+                    x
+                  </button>
+                </div>
+                <FileSearchResults
+                  v-if="fileSearch.trim()"
+                  :query="fileSearch"
+                  :files="fileIndex.files.value"
+                  @open-file="emit('open-file', $event)"
+                />
+                <FileTree
+                  v-else
+                  :node="projectState.root"
+                  :depth="0"
+                  @open-file="emit('open-file', $event)"
+                />
+              </template>
+              <div v-else class="section-empty">{{ t("welcome.openProject") }}</div>
+            </div>
+          </div>
+
+          <div v-show="sideTab === 'changes'" class="side-tab-pane">
+            <div class="pane-header">
+              <div class="pane-title-group">
+                <span class="section-icon changes" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                    <path d="M16 3h5v5M8 3H3v5M21 16v5h-5M3 16v5h5M10 7l4 10M14 7l-4 10" />
+                  </svg>
+                </span>
+                <div class="pane-title-copy">
+                  <span class="section-kicker">修改</span>
+                  <span class="section-subtitle">当前工作区 Diff</span>
+                </div>
+              </div>
+              <span v-if="activeDiffCount > 0" class="count-pill">{{ activeDiffCount }}</span>
+            </div>
+
+            <div class="pane-body">
+              <MessageFileChanges
+                v-if="activeDiffCount > 0"
+                :diffs="activeDiffs"
+                @open-diff="handleOpenDiff"
+              />
+              <div v-else class="section-empty">No file changes</div>
+            </div>
+          </div>
+        </div>
       </div>
-      <div
-        v-for="change in openspec.state.activeChanges"
-        :key="change.id"
-        class="spec-item"
-        @click="openWorkflow"
-      >
-        <span class="spec-dot"></span>{{ change.id }}
-      </div>
-      <div v-if="!openspec.state.activeChanges.length && !wf.enabled.value" class="spec-empty">
-        选择 Quick / Standard / Full 开始一次新的探索
-      </div>
-    </div>
     </template>
   </aside>
 </template>
@@ -285,85 +390,200 @@ const sections = computed(() => [
   flex-direction: column;
   height: 100%;
   min-height: 0;
-  background: var(--color-surface-900, #0f172a);
   overflow: hidden;
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--color-surface-800, #1e293b) 64%, transparent),
+      var(--color-surface-900, #0f172a)
+    ),
+    var(--color-surface-900, #0f172a);
 }
 
 .no-project {
   flex: 1;
   display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 72px 12px 16px;
+}
+
+.project-empty-card {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 18px 14px 16px;
+  border: 1px solid color-mix(in srgb, var(--color-surface-700, #334155) 30%, transparent);
+  border-radius: 16px;
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--color-surface-800, #1e293b) 45%, transparent),
+      color-mix(in srgb, var(--color-surface-950, #020617) 28%, transparent)
+    ),
+    color-mix(in srgb, var(--color-surface-900, #0f172a) 72%, transparent);
+}
+
+.project-empty-icon {
+  width: 38px;
+  height: 38px;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 20px;
+  border-radius: 13px;
+  background: color-mix(in srgb, var(--color-accent-amber, #f59e0b) 12%, transparent);
+  color: var(--color-accent-amber, #f59e0b);
 }
+
+.project-empty-icon svg {
+  width: 19px;
+  height: 19px;
+  stroke-width: 1.8;
+}
+
+.project-empty-copy {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  text-align: center;
+}
+
+.project-empty-title {
+  color: var(--color-surface-100, #f1f5f9);
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.project-empty-text {
+  color: var(--color-surface-600, #475569);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
 .open-folder-btn {
-  background: var(--color-surface-800, #1e293b);
-  border: 1px solid var(--color-surface-700, #334155);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  width: 100%;
+  background: color-mix(in srgb, var(--color-accent-cyan, #22d3ee) 9%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-accent-cyan, #22d3ee) 18%, transparent);
   color: var(--color-surface-200, #e2e8f0);
   font-size: 13px;
   padding: 10px 20px;
-  border-radius: 8px;
+  border-radius: 10px;
   cursor: pointer;
   font-family: inherit;
-}
-.open-folder-btn:hover {
-  border-color: var(--color-accent-cyan, #22d3ee);
-  color: var(--color-accent-cyan, #22d3ee);
-}
-.side-openfolder {
-  padding: 8px 10px;
-  border-bottom: 1px solid var(--color-surface-800, #1e293b);
-  flex-shrink: 0;
-}
-.side-openfolder button {
-  width: 100%;
-  background: var(--color-surface-800, #1e293b);
-  border: 1px solid var(--color-surface-700, #334155);
-  color: var(--color-surface-300, #cbd5e1);
-  font-size: 12px;
-  padding: 6px 10px;
-  border-radius: 6px;
-  cursor: pointer;
-  font-family: inherit;
-  text-align: left;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.side-openfolder button:hover {
-  color: var(--color-surface-100, #f1f5f9);
-  border-color: var(--color-surface-600, #475569);
 }
 
-.side-tabs {
-  display: flex;
-  gap: 4px;
-  padding: 8px 8px 6px;
-  border-bottom: 1px solid var(--color-surface-800, #1e293b);
-  flex-shrink: 0;
+.open-folder-btn svg {
+  width: 14px;
+  height: 14px;
+  stroke-width: 2;
 }
-.side-tab {
+
+.open-folder-btn:hover {
+  color: var(--color-accent-cyan, #22d3ee);
+  border-color: color-mix(in srgb, var(--color-accent-cyan, #22d3ee) 30%, transparent);
+  background: color-mix(in srgb, var(--color-accent-cyan, #22d3ee) 13%, transparent);
+}
+
+.side-content-shell {
   flex: 1;
-  background: transparent;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  border-top: 1px solid color-mix(in srgb, var(--color-surface-700, #334155) 24%, transparent);
+}
+
+.side-rail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 6px;
+  border-right: 1px solid color-mix(in srgb, var(--color-surface-700, #334155) 28%, transparent);
+  background: color-mix(in srgb, var(--color-surface-950, #020617) 24%, transparent);
+}
+
+.rail-button {
+  position: relative;
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
   color: var(--color-surface-500, #64748b);
-  font-size: 11px;
-  padding: 5px;
-  border-radius: 6px;
   cursor: pointer;
-  font-family: inherit;
 }
-.side-tab:hover {
-  color: var(--color-surface-300, #cbd5e1);
-}
-.side-tab.active {
-  background: var(--color-surface-800, #1e293b);
+
+.rail-button:hover {
   color: var(--color-surface-100, #f1f5f9);
+  background: color-mix(in srgb, var(--color-surface-700, #334155) 20%, transparent);
 }
-.side-tab.spec.active {
+
+.rail-button.active {
+  color: var(--color-accent-cyan, #06b6d4);
+  background: color-mix(in srgb, var(--color-accent-cyan, #06b6d4) 12%, transparent);
+  border-color: color-mix(in srgb, var(--color-accent-cyan, #06b6d4) 20%, transparent);
+}
+
+.rail-button.spec.active {
   color: var(--color-accent-violet, #a78bfa);
   background: color-mix(in srgb, var(--color-accent-violet, #a78bfa) 12%, transparent);
+  border-color: color-mix(in srgb, var(--color-accent-violet, #a78bfa) 20%, transparent);
 }
+
+.rail-button.active::before {
+  content: "";
+  position: absolute;
+  left: -7px;
+  width: 3px;
+  height: 18px;
+  border-radius: 999px;
+  background: currentColor;
+  box-shadow: 0 0 12px currentColor;
+}
+
+.rail-button svg {
+  width: 16px;
+  height: 16px;
+  stroke-width: 1.8;
+}
+
+.rail-badge {
+  position: absolute;
+  top: -3px;
+  right: -4px;
+  min-width: 16px;
+  height: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 4px;
+  border: 1px solid var(--color-surface-900, #0f172a);
+  border-radius: 999px;
+  background: var(--color-accent-cyan, #06b6d4);
+  color: var(--color-surface-950, #020617);
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.side-pane-host {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
 .side-tab-pane {
   flex: 1;
   min-height: 0;
@@ -371,31 +591,168 @@ const sections = computed(() => [
   flex-direction: column;
   overflow: hidden;
 }
-.spec-pane {
-  padding: 6px 0;
-  overflow-y: auto;
+
+.pane-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 9px 9px 6px;
+  padding: 8px 9px;
+  border: 1px solid color-mix(in srgb, var(--color-surface-700, #334155) 28%, transparent);
+  border-radius: 12px;
+  background:
+    linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--color-surface-800, #1e293b) 44%, transparent),
+      color-mix(in srgb, var(--color-accent-cyan, #06b6d4) 5%, transparent)
+    ),
+    color-mix(in srgb, var(--color-surface-900, #0f172a) 66%, transparent);
+  flex: 0 0 auto;
 }
-.spec-section-label {
-  padding: 8px 14px 4px;
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
+
+.pane-title-group {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.section-icon {
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--color-accent-cyan, #06b6d4) 12%, transparent);
+  color: var(--color-accent-cyan, #06b6d4);
+}
+
+.section-icon.spec {
+  background: color-mix(in srgb, var(--color-accent-violet, #a78bfa) 12%, transparent);
+  color: var(--color-accent-violet, #a78bfa);
+}
+
+.section-icon.file {
+  background: color-mix(in srgb, var(--color-accent-amber, #f59e0b) 12%, transparent);
+  color: var(--color-accent-amber, #f59e0b);
+}
+
+.section-icon.changes {
+  background: color-mix(in srgb, var(--color-accent-emerald, #10b981) 12%, transparent);
+  color: var(--color-accent-emerald, #10b981);
+}
+
+.section-icon svg {
+  width: 14px;
+  height: 14px;
+  stroke-width: 1.8;
+}
+
+.pane-title-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.section-kicker {
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.2;
+  color: var(--color-surface-100, #f1f5f9);
+}
+
+.section-subtitle {
+  overflow: hidden;
   color: var(--color-surface-600, #475569);
+  font-size: 10px;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
+
+.pane-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  flex: 0 0 auto;
+  padding: 3px;
+  border: 1px solid color-mix(in srgb, var(--color-surface-700, #334155) 28%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-surface-950, #020617) 32%, transparent);
+}
+
+.count-pill {
+  min-width: 22px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-accent-cyan, #06b6d4) 18%, transparent);
+  color: var(--color-accent-cyan, #06b6d4);
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.header-icon-button {
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--color-surface-500, #64748b);
+  cursor: pointer;
+}
+
+.header-icon-button:hover {
+  background: color-mix(in srgb, var(--color-accent-cyan, #06b6d4) 12%, transparent);
+  color: var(--color-accent-cyan, #06b6d4);
+}
+
+.header-icon-button svg {
+  width: 13px;
+  height: 13px;
+  stroke-width: 2;
+}
+
+.pane-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 2px 9px 9px;
+}
+
+.spec-pane {
+  padding-top: 2px;
+}
+
 .spec-item {
   display: flex;
   align-items: center;
   gap: 7px;
-  padding: 6px 14px;
+  padding: 7px 8px;
+  border-radius: 10px;
   font-size: 12px;
   color: var(--color-surface-400, #94a3b8);
   cursor: pointer;
   font-family: var(--font-mono, monospace);
 }
+
 .spec-item:hover {
-  background: var(--color-surface-800, #1e293b);
+  background: color-mix(in srgb, var(--color-surface-700, #334155) 22%, transparent);
   color: var(--color-surface-100, #f1f5f9);
 }
+
 .spec-dot {
   width: 5px;
   height: 5px;
@@ -403,25 +760,22 @@ const sections = computed(() => [
   background: var(--color-accent-emerald, #34d399);
   flex-shrink: 0;
 }
+
 .spec-dot.violet {
   background: var(--color-accent-violet, #a78bfa);
 }
+
 .spec-item.ongoing {
   color: var(--color-accent-violet, #a78bfa);
   background: color-mix(in srgb, var(--color-accent-violet, #a78bfa) 10%, transparent);
 }
-.spec-empty {
-  padding: 14px 12px;
-  font-size: 11px;
-  color: var(--color-surface-600, #475569);
-  text-align: center;
-  line-height: 1.5;
-}
 
+.spec-empty,
 .section-empty {
   padding: 1rem 0.5rem;
   text-align: center;
-  font-size: 13px;
+  font-size: 12px;
+  line-height: 1.5;
   color: var(--color-surface-600, #475569);
 }
 
@@ -433,41 +787,58 @@ const sections = computed(() => [
 
 .file-search-row {
   position: relative;
-  padding: 0.25rem 0.5rem 0.5rem;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  height: 32px;
+  margin-bottom: 8px;
+  padding: 0 8px;
+  border: 1px solid color-mix(in srgb, var(--color-surface-600, #475569) 26%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--color-surface-800, #1e293b) 48%, transparent);
+}
+
+.search-icon {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  color: var(--color-surface-500, #64748b);
+  stroke-width: 1.8;
 }
 
 .file-search-input {
-  width: 100%;
+  min-width: 0;
+  flex: 1;
   box-sizing: border-box;
-  padding: 0.3rem 1.5rem 0.3rem 0.5rem;
+  padding: 0;
   font-size: 12px;
   color: var(--color-surface-200, #e2e8f0);
-  background: var(--color-surface-900, #0f172a);
-  border: 1px solid var(--color-surface-700, #334155);
-  border-radius: 4px;
+  background: transparent;
+  border: 0;
   outline: none;
 }
-.file-search-input:focus {
-  border-color: var(--color-accent-cyan, #06b6d4);
-}
+
 .file-search-input::placeholder {
   color: var(--color-surface-600, #475569);
 }
 
 .file-search-clear {
-  position: absolute;
-  top: 50%;
-  right: 0.75rem;
-  transform: translateY(-50%);
-  font-size: 16px;
-  line-height: 1;
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
   color: var(--color-surface-500, #64748b);
   background: transparent;
-  border: none;
   cursor: pointer;
-  padding: 0;
 }
+
 .file-search-clear:hover {
-  color: var(--color-surface-200, #e2e8f0);
+  color: var(--color-surface-100, #f1f5f9);
+  background: color-mix(in srgb, var(--color-surface-600, #475569) 24%, transparent);
 }
 </style>

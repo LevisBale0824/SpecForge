@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, ref, onActivated, onMounted } from "vue";
-import { useRouter } from "vue-router";
+import { computed, ref, onActivated, onMounted, watch } from "vue";
+import { useRoute, useRouter } from "vue-router";
 import { useWorkflow } from "../../plugins/workflowPlugin";
 import { useOpenSpec } from "../../composables/useOpenSpec";
 import { useBackend } from "../../composables/useBackend";
@@ -11,6 +11,7 @@ import { useTaskRunner } from "../../composables/useTaskRunner";
 import { TIER_LABELS, stagesForTier, type StepName, type WorkflowTier } from "../../types/workflow";
 import type { ExecutionContract } from "../../types/openspec";
 
+const route = useRoute();
 const router = useRouter();
 const wf = useWorkflow();
 const openspec = useOpenSpec();
@@ -64,30 +65,167 @@ const gating = ref(false);
 const archiving = ref(false);
 const draftMsg = ref("");
 const archiveMsg = ref<{ ok: boolean; text: string } | null>(null);
-
-onMounted(() => {
-  if (wf.enabled.value) view.value = "wf";
-});
-onActivated(() => {
-  if (wf.enabled.value) view.value = "wf";
-});
+const STAGE_SESSIONS_KEY = "specforge.workflow.stageSessions";
+const CHANGE_TIERS_KEY = "specforge.workflow.changeTiers";
+const stageSessions = ref<Record<string, Partial<Record<StepName, string>>>>(
+  JSON.parse(localStorage.getItem(STAGE_SESSIONS_KEY) || "{}"),
+);
+const changeTiers = ref<Record<string, WorkflowTier>>(
+  JSON.parse(localStorage.getItem(CHANGE_TIERS_KEY) || "{}"),
+);
+const draftKnownChangeIds = ref<Set<string>>(new Set());
+const creatingDraftChange = ref(false);
 
 const stages = computed(() => stagesForTier(wf.state.value.tier));
 const cur = computed(() => wf.state.value.activeStep);
 const activeIdx = computed(() => stages.value.indexOf(cur.value));
 const isLast = computed(() => activeIdx.value === stages.value.length - 1);
 const nextLabel = computed(() => (isLast.value ? "" : LABELS[stages.value[activeIdx.value + 1]]));
-const changeId = computed(() => openspec.state.activeChanges[0]?.id ?? "");
+const requestedChangeId = computed(() => {
+  const value = route.query.change;
+  return typeof value === "string" ? value : "";
+});
+const selectedChange = computed(() => {
+  if (creatingDraftChange.value) return undefined;
+  if (requestedChangeId.value) {
+    return openspec.state.activeChanges.find((change) => change.id === requestedChangeId.value);
+  }
+  return undefined;
+});
+const changeId = computed(() => selectedChange.value?.id ?? "");
 const evidence = computed(() =>
   changeId.value ? openspec.state.evidence[changeId.value] : undefined,
 );
-const stageInteracted = computed(() => messages.value.length > 0 || injected.value[cur.value] === true);
+const stageInteracted = computed(
+  () => messages.value.length > 0 || injected.value[cur.value] === true,
+);
 const canAdvance = computed(() => !isLast.value && stageInteracted.value);
+const hasStartedWorkflow = computed(
+  () =>
+    Boolean(wf.state.value.label?.trim()) ||
+    messages.value.length > 0 ||
+    Object.values(injected.value).some(Boolean) ||
+    Boolean(changeId.value),
+);
 const displayTitle = computed(() => {
   if (changeId.value) return changeId.value;
   if (need.value.trim()) return need.value.slice(0, 30);
   return "新建探索";
 });
+
+const workflowKey = computed(() => changeId.value || wf.state.value.label || "__draft__");
+
+function normalizeLookup(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, "");
+}
+
+function findSessionForChange(id: string): string | undefined {
+  const needle = normalizeLookup(id);
+  if (!needle) return undefined;
+  return backend.sessions.value.find((session) => {
+    return [session.id, session.slug, session.title].some((value) =>
+      normalizeLookup(value || "").includes(needle),
+    );
+  })?.id;
+}
+
+function stageSessionId(stage: StepName): string | undefined {
+  return (
+    stageSessions.value[workflowKey.value]?.[stage] ||
+    wf.state.value.steps[stage]?.sessionId ||
+    (changeId.value ? findSessionForChange(changeId.value) : undefined)
+  );
+}
+
+function rememberStageSession(stage: StepName, sessionId?: string) {
+  if (!sessionId) return;
+  const key = workflowKey.value;
+  stageSessions.value[key] = {
+    ...(stageSessions.value[key] ?? {}),
+    [stage]: sessionId,
+  };
+  localStorage.setItem(STAGE_SESSIONS_KEY, JSON.stringify(stageSessions.value));
+  if (wf.state.value.steps[stage]) {
+    wf.state.value.steps[stage]!.sessionId = sessionId;
+  }
+}
+
+async function openStageSession(stage: StepName) {
+  const sessionId = stageSessionId(stage);
+  if (!sessionId || backend.selectedSessionId.value === sessionId) return;
+  await backend.selectSession(sessionId);
+}
+
+function stageForChange(): StepName {
+  const change = selectedChange.value;
+  if (!change) return wf.state.value.activeStep;
+  if (openspec.state.evidence[change.id]) return "verify";
+  if (change.taskStats.total > 0) return "apply";
+  if (change.deltaSpecs.length > 0 || change.proposal) return "propose";
+  return "explore";
+}
+
+function tierForChange(stage: StepName): WorkflowTier {
+  if (!changeId.value) return wf.state.value.tier;
+  const remembered = changeTiers.value[changeId.value];
+  if (remembered) return remembered;
+  const sessions = stageSessions.value[changeId.value];
+  if (sessions?.plan || sessions?.review) return "full";
+  if (sessions?.explore) return "standard";
+  if (stage === "explore") return "standard";
+  return "quick";
+}
+
+function openSelectedChange() {
+  if (!requestedChangeId.value) {
+    if (wf.enabled.value) view.value = "wf";
+    return;
+  }
+  if (!changeId.value) {
+    if (wf.enabled.value) view.value = "wf";
+    return;
+  }
+  wf.enable();
+  const inferredStage = stageForChange();
+  const nextTier = tierForChange(inferredStage);
+  const nextStages = stagesForTier(nextTier);
+  wf.setTier(nextTier);
+  wf.setActiveStep(nextStages.includes(inferredStage) ? inferredStage : nextStages[0]);
+  wf.state.value.label = changeId.value;
+  view.value = "wf";
+  creatingDraftChange.value = false;
+}
+
+onMounted(openSelectedChange);
+onActivated(openSelectedChange);
+watch(
+  () => [
+    requestedChangeId.value,
+    openspec.state.activeChanges.length,
+    openspec.state.lastRefreshedAt,
+  ],
+  openSelectedChange,
+);
+watch(
+  () => [openspec.state.activeChanges.length, openspec.state.lastRefreshedAt],
+  () => {
+    if (!creatingDraftChange.value || requestedChangeId.value) return;
+    const created = openspec.state.activeChanges.find(
+      (change) => !draftKnownChangeIds.value.has(change.id),
+    );
+    if (!created) return;
+    changeTiers.value[created.id] = wf.state.value.tier;
+    localStorage.setItem(CHANGE_TIERS_KEY, JSON.stringify(changeTiers.value));
+    if (stageSessions.value.__draft__) {
+      stageSessions.value[created.id] = { ...stageSessions.value.__draft__ };
+      delete stageSessions.value.__draft__;
+      localStorage.setItem(STAGE_SESSIONS_KEY, JSON.stringify(stageSessions.value));
+    }
+    wf.state.value.label = created.id;
+    creatingDraftChange.value = false;
+    router.replace({ name: "workflow", query: { change: created.id } });
+  },
+);
 
 function extractText(id: string): string {
   return msgStore
@@ -109,9 +247,12 @@ const tddGreen = computed(() =>
   messages.value.some((m) => /pass.*[✓]|[✓].*pass|exit 0/.test(m.text)),
 );
 
-function stageState(i: number): "done" | "current" | "idle" {
+function stageState(i: number): "done" | "current" | "locked" {
   if (i === activeIdx.value) return "current";
-  return i < activeIdx.value ? "done" : "idle";
+  return i < activeIdx.value ? "done" : "locked";
+}
+function canOpenStage(i: number): boolean {
+  return i <= activeIdx.value;
 }
 function tierDots(t: WorkflowTier): number {
   return stagesForTier(t).length;
@@ -123,16 +264,37 @@ function tierFlow(t: WorkflowTier): string {
 }
 
 function pick(t: WorkflowTier) {
+  if (route.query.change) {
+    router.replace({ name: "workflow" });
+  }
+  draftKnownChangeIds.value = new Set(openspec.state.activeChanges.map((change) => change.id));
+  creatingDraftChange.value = true;
   wf.setTier(t);
   wf.enable();
   view.value = "wf";
   injected.value = {};
+  wf.state.value.label = "";
+  need.value = "";
+  draftMsg.value = "";
+  contract.value = undefined;
 }
 function backToSelect() {
+  if (!hasStartedWorkflow.value) {
+    wf.disable();
+    injected.value = {};
+    need.value = "";
+    draftMsg.value = "";
+  }
   view.value = "select";
+  if (route.query.change) {
+    router.replace({ name: "workflow" });
+  }
 }
 function gotoStage(s: StepName) {
+  const idx = stages.value.indexOf(s);
+  if (idx > activeIdx.value) return;
   wf.setActiveStep(s);
+  void openStageSession(s);
   if (s === "apply" && changeId.value) {
     loadContract(changeId.value).then((c) => {
       if (c) contract.value = c;
@@ -144,6 +306,7 @@ function nextStage() {
   const from = cur.value;
   const to = stages.value[activeIdx.value + 1];
   wf.setActiveStep(to);
+  rememberStageSession(from, backend.selectedSessionId.value);
   if (from === "propose" && changeId.value) {
     generateContract(changeId.value, need.value || changeId.value, wf.state.value.tier);
   }
@@ -163,7 +326,7 @@ async function draft(stage: DraftStage) {
     return;
   }
   const isFirst = !injected.value[stage];
-  const change = openspec.state.activeChanges[0];
+  const change = selectedChange.value;
   const text = isFirst
     ? getStagePrompt(stage, {
         tier: wf.state.value.tier,
@@ -179,7 +342,17 @@ async function draft(stage: DraftStage) {
     wf.state.value.label = need.value.slice(0, 40);
   }
   need.value = "";
-  await backend.sendPrompt(text, []);
+  const sent = await backend.sendPrompt(text, []);
+  if (sent) {
+    rememberStageSession(stage, backend.selectedSessionId.value);
+    const currentChangeId = selectedChange.value?.id;
+    if (currentChangeId) {
+      changeTiers.value[currentChangeId] = wf.state.value.tier;
+      localStorage.setItem(CHANGE_TIERS_KEY, JSON.stringify(changeTiers.value));
+    } else {
+      creatingDraftChange.value = true;
+    }
+  }
   window.setTimeout(() => (draftMsg.value = ""), 2500);
 }
 function sendForCurrent() {
@@ -199,7 +372,7 @@ async function runGates() {
 }
 async function runSddTasks() {
   if (!changeId.value) return;
-  const change = openspec.state.activeChanges.find((c) => c.id === changeId.value);
+  const change = selectedChange.value;
   if (!change) return;
   const pending = change.tasks.filter((t) => t.status === "pending");
   const specs = pending.map((t) => ({
@@ -269,7 +442,13 @@ function verdictColor(v: string): string {
         <div class="ckicker">流程 · {{ TIER_LABELS[wf.state.value.tier] }}</div>
         <div class="track-nodes">
           <template v-for="(s, i) in stages" :key="s">
-            <button class="tnode" :class="stageState(i)" @click="gotoStage(s)">
+            <button
+              class="tnode"
+              :class="stageState(i)"
+              :disabled="!canOpenStage(i)"
+              :title="canOpenStage(i) ? '' : '完成当前阶段后才能进入'"
+              @click="gotoStage(s)"
+            >
               <span class="tnode-dot">
                 <span v-if="stageState(i) === 'done'">✓</span>
                 <span v-else>{{ i + 1 }}</span>
@@ -287,12 +466,17 @@ function verdictColor(v: string): string {
       <!-- 右侧 -->
       <div class="conv">
         <div class="header">
-          <span class="back" @click="backToSelect">← 返回</span>
-          <span class="h-title">
-            <span class="accent">Spec 探索</span> · {{ displayTitle }}
-            <span class="sub">{{ LABELS[cur] }} · {{ SUBS[cur] }}</span>
-          </span>
-          <span class="h-spacer" />
+          <button type="button" class="back" @click="backToSelect">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+              <path d="M15 18l-6-6 6-6" />
+            </svg>
+            <span>返回</span>
+          </button>
+          <div class="h-title">
+            <span class="h-main">{{ displayTitle }}</span>
+            <span class="h-sub">Spec 探索</span>
+          </div>
+          <span class="stage-pill">{{ LABELS[cur] }}</span>
         </div>
 
         <!-- 对话流(真实当前会话消息) -->
@@ -353,17 +537,29 @@ function verdictColor(v: string): string {
               </button>
             </div>
             <div v-if="!taskRunner.tasks.value.length && !taskRunner.busy.value" class="sdd-empty">
-              没有待办任务。{{ changeId ? '点上方「运行全部待办」或先检查 tasks.md' : '先创建一个 change' }}
+              没有待办任务。{{
+                changeId ? "点上方「运行全部待办」或先检查 tasks.md" : "先创建一个 change"
+              }}
             </div>
             <div v-for="t in taskRunner.tasks.value" :key="t.taskId" class="sdd-row">
               <span class="sdd-status" :class="t.status">
-                {{ t.status === "pending" ? "○" : t.status === "running" ? "◐" : t.status === "done" ? "✓" : "✗" }}
+                {{
+                  t.status === "pending"
+                    ? "○"
+                    : t.status === "running"
+                      ? "◐"
+                      : t.status === "done"
+                        ? "✓"
+                        : "✗"
+                }}
               </span>
               <span class="sdd-id">{{ t.taskId }}</span>
               <span class="sdd-label">{{ t.title }}</span>
               <span v-if="t.status === 'running'" class="sdd-spin">⋯</span>
               <span v-else-if="t.status === 'done'" class="sdd-exit pass">exit 0</span>
-              <span v-else-if="t.status === 'failed'" class="sdd-exit fail">exit {{ t.exitCode ?? "?" }}</span>
+              <span v-else-if="t.status === 'failed'" class="sdd-exit fail"
+                >exit {{ t.exitCode ?? "?" }}</span
+              >
             </div>
           </div>
 
@@ -464,7 +660,9 @@ function verdictColor(v: string): string {
         <!-- 下一步(composer 下方,仅在当前阶段有交互后显示) -->
         <div v-if="canAdvance" class="advance-bar">
           <button class="next-cta" @click="nextStage">
-            <span>完成 {{ LABELS[cur] }} · 进入 <b>{{ nextLabel }}</b></span>
+            <span
+              >完成 {{ LABELS[cur] }} · 进入 <b>{{ nextLabel }}</b></span
+            >
             <span class="next-cta-arrow">→</span>
           </button>
         </div>
@@ -641,6 +839,13 @@ function verdictColor(v: string): string {
   font-family: inherit;
   text-align: left;
 }
+.tnode:disabled {
+  cursor: not-allowed;
+}
+.tnode.done:hover .tnode-label,
+.tnode.current:hover .tnode-label {
+  color: var(--color-surface-100, #f1f5f9);
+}
 .tnode-dot {
   width: 22px;
   height: 22px;
@@ -667,6 +872,11 @@ function verdictColor(v: string): string {
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent-violet, #a78bfa) 20%, transparent);
   animation: pulse 2s infinite;
 }
+.tnode.locked .tnode-dot {
+  background: transparent;
+  border-color: color-mix(in srgb, var(--color-surface-700, #334155) 70%, transparent);
+  color: var(--color-surface-500, #64748b);
+}
 @keyframes pulse {
   50% {
     box-shadow: 0 0 0 7px color-mix(in srgb, var(--color-accent-violet, #a78bfa) 8%, transparent);
@@ -687,6 +897,10 @@ function verdictColor(v: string): string {
 .tnode.current .tnode-label {
   color: var(--color-surface-100, #f1f5f9);
   font-weight: 600;
+}
+.tnode.locked .tnode-label,
+.tnode.locked .tnode-sub {
+  color: color-mix(in srgb, var(--color-surface-600, #475569) 78%, transparent);
 }
 .tnode-sub {
   font-size: 11px;
@@ -716,33 +930,69 @@ function verdictColor(v: string): string {
 .header {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 14px 22px;
+  gap: 10px;
+  min-height: 52px;
+  padding: 10px 18px;
   border-bottom: 1px solid var(--color-surface-800, #1e293b);
   flex-shrink: 0;
 }
 .back {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 28px;
+  padding: 0 10px 0 8px;
+  border: 1px solid color-mix(in srgb, var(--color-surface-700, #334155) 70%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-surface-900, #0f172a) 55%, transparent);
   color: var(--color-surface-500, #64748b);
-  font-size: 13px;
+  font-size: 12px;
   cursor: pointer;
-  font-family: var(--font-mono, monospace);
+  font-family: inherit;
 }
 .back:hover {
-  color: var(--color-surface-300, #cbd5e1);
+  color: var(--color-surface-100, #f1f5f9);
+  border-color: color-mix(in srgb, var(--color-accent-violet, #a78bfa) 34%, transparent);
+  background: color-mix(in srgb, var(--color-accent-violet, #a78bfa) 9%, transparent);
+}
+.back svg {
+  width: 14px;
+  height: 14px;
+  stroke-width: 2;
 }
 .h-title {
-  font-size: 15px;
-  font-weight: 600;
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
 }
-.h-title .accent {
+.h-main {
+  overflow: hidden;
+  color: var(--color-surface-100, #f1f5f9);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.h-sub {
+  color: var(--color-surface-600, #475569);
+  font-size: 11px;
+  line-height: 1.2;
+}
+.stage-pill {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 9px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-accent-violet, #a78bfa) 12%, transparent);
   color: var(--color-accent-violet, #a78bfa);
-}
-.h-title .sub {
-  color: var(--color-surface-500, #64748b);
-  font-weight: 400;
-  font-size: 13px;
-  margin-left: 10px;
   font-family: var(--font-mono, monospace);
+  font-size: 11px;
+  font-weight: 700;
 }
 
 /* 对话流 */

@@ -165,6 +165,20 @@ function onNewSession() {
   router.push({ name: "chat" });
 }
 
+function onOpenChat() {
+  activeDiff.value = null;
+  activeFilePath.value = null;
+  showOpenSpecDialog.value = false;
+  router.push({ name: "chat" });
+}
+
+function onOpenWorkflow(changeId?: string) {
+  activeDiff.value = null;
+  activeFilePath.value = null;
+  showOpenSpecDialog.value = false;
+  router.push({ name: "workflow", query: changeId ? { change: changeId } : {} });
+}
+
 function onOpenDiff(diff: MessageDiffEntry) {
   showOpenSpecDialog.value = false;
   activeDiff.value = diff;
@@ -274,9 +288,11 @@ function submitManualPath() {
         @delete-session="onDeleteSession"
         @abort-session="onAbortSession"
         @new-session="onNewSession"
+        @open-chat="onOpenChat"
         @open-diff="onOpenDiff"
         @open-file="onOpenFile"
         @open-folder="handleOpenFolder"
+        @open-workflow="onOpenWorkflow"
         @refresh-files="onRefreshFiles"
       />
       <!-- Sidebar drag handle -->
