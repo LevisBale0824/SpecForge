@@ -27,10 +27,13 @@ const sideTab = ref<"sessions" | "spec">("sessions");
 const displayWorkflowTitle = computed(() => {
   const ch = openspec.state.activeChanges[0];
   if (ch) return ch.id;
-  return "探索中…";
+  return wf.state.value.label || "探索中…";
 });
 function openWorkflow() {
-  router.push({ name: "workflow" });
+  if (wf.enabled.value) {
+    wf.state.value.enabled = true;
+  }
+  router.push({ name: "workflow" }).catch(() => {});
 }
 
 // File-tree search. Empty query keeps the regular hierarchical tree; typing
@@ -249,8 +252,8 @@ const sections = computed(() => [
     </div>
     <div v-show="sideTab === 'spec'" class="side-tab-pane spec-pane">
       <div class="spec-section-label">探索</div>
-      <div v-if="wf.enabled.value" class="spec-item active" @click="openWorkflow">
-        <span class="spec-dot pulse"></span>{{ displayWorkflowTitle }}
+      <div v-if="wf.enabled.value" class="spec-item ongoing" @click="openWorkflow">
+        <span class="spec-dot violet"></span>{{ displayWorkflowTitle }}
       </div>
       <div
         v-for="change in openspec.state.activeChanges"
@@ -346,13 +349,12 @@ const sections = computed(() => [
   background: var(--color-accent-emerald, #34d399);
   flex-shrink: 0;
 }
-.spec-dot.pulse {
+.spec-dot.violet {
   background: var(--color-accent-violet, #a78bfa);
-  animation: spec-pulse 1.5s infinite;
 }
-@keyframes spec-pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.3; }
+.spec-item.ongoing {
+  color: var(--color-accent-violet, #a78bfa);
+  background: color-mix(in srgb, var(--color-accent-violet, #a78bfa) 10%, transparent);
 }
 .spec-empty {
   padding: 14px 12px;

@@ -1,4 +1,4 @@
-import { ref, type Ref } from "vue";
+import { ref } from "vue";
 import * as cliBridge from "../utils/cliBridge";
 
 export interface TaskSpec {

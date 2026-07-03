@@ -64,6 +64,7 @@ export type StepState = {
 export type WorkflowState = {
   tier: WorkflowTier;
   activeStep: StepName;
+  label?: string;
   /** 仅当前 tier 启用的阶段会有条目 */
   steps: Partial<Record<StepName, StepState>>;
   enabled: boolean;

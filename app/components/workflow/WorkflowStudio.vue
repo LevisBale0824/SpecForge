@@ -66,7 +66,7 @@ const draftMsg = ref("");
 const archiveMsg = ref<{ ok: boolean; text: string } | null>(null);
 
 onActivated(() => {
-  if (wf.enabled.value && view.value === "select") {
+  if (wf.enabled.value) {
     view.value = "wf";
   }
 });
@@ -174,6 +174,9 @@ async function draft(stage: DraftStage) {
     : need.value;
   injected.value[stage] = true;
   draftMsg.value = isFirst ? "已注入阶段指令 + 需求" : "已发送";
+  if (!wf.state.value.label) {
+    wf.state.value.label = need.value.slice(0, 40);
+  }
   need.value = "";
   await backend.sendPrompt(text, []);
   window.setTimeout(() => (draftMsg.value = ""), 2500);
