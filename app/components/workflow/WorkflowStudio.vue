@@ -7,6 +7,7 @@ import { useBackend } from "../../composables/useBackend";
 import { useMessages, stripSystemReminder } from "../../composables/useMessages";
 import { getStagePrompt } from "../../composables/useStageRunner";
 import { useContract } from "../../composables/useContract";
+import { useTaskRunner } from "../../composables/useTaskRunner";
 import { TIER_LABELS, stagesForTier, type StepName, type WorkflowTier } from "../../types/workflow";
 import type { ExecutionContract } from "../../types/openspec";
 
@@ -16,6 +17,7 @@ const openspec = useOpenSpec();
 const backend = useBackend();
 const msgStore = useMessages();
 const { generateContract, loadContract } = useContract();
+const taskRunner = useTaskRunner();
 
 const LABELS: Record<StepName, string> = {
   explore: "Explore",
@@ -178,6 +180,26 @@ async function runGates() {
     gating.value = false;
   }
 }
+async function runSddTasks() {
+  if (!changeId.value) return;
+  const change = openspec.state.activeChanges.find((c) => c.id === changeId.value);
+  if (!change) return;
+  const pending = change.tasks.filter((t) => t.status === "pending");
+  const specs = pending.map((t) => ({
+    id: t.id,
+    title: t.title,
+    prompt: `你处于 Apply 阶段(TDD 模式)。\n任务: ${t.id} - ${t.title}\n${t.verification ? `验证命令: ${t.verification}` : ""}\n背景: ${change.proposal?.why ?? ""}\n\n流程:写测试→红灯→实现→绿灯→验证。只改这个 task scope,不改其他。完成后更新 tasks.md(${t.id} → [x])。`,
+    verification: t.verification,
+  }));
+  const projectRoot = openspec.state.rootPath;
+  taskRunner.setSpecs(specs);
+  await taskRunner.loadPendingTasks(specs);
+  await taskRunner.runAll(projectRoot || ".");
+  for (const r of taskRunner.tasks.value) {
+    if (r.status === "done") await openspec.toggleTask(changeId.value, r.taskId, true);
+  }
+  await openspec.refresh();
+}
 async function doArchive() {
   if (!changeId.value) return;
   archiving.value = true;
@@ -299,6 +321,33 @@ function verdictColor(v: string): string {
             <span class="tdd-item" :class="tddGreen ? 'green' : ''">
               <span class="tdd-light" :class="tddGreen ? 'green' : ''"></span>GREEN · 通过
             </span>
+          </div>
+
+          <!-- SDD Task Runner(apply 阶段) -->
+          <div v-if="cur === 'apply'" class="sdd-panel">
+            <div class="sdd-head">
+              <span class="sdd-title">SDD · 子代理任务</span>
+              <button
+                class="sdd-run-btn"
+                :disabled="taskRunner.busy.value || !changeId"
+                @click="runSddTasks"
+              >
+                {{ taskRunner.busy.value ? "运行中…" : "▶ 运行全部待办" }}
+              </button>
+            </div>
+            <div v-if="!taskRunner.tasks.value.length && !taskRunner.busy.value" class="sdd-empty">
+              没有待办任务。{{ changeId ? '点上方「运行全部待办」或先检查 tasks.md' : '先创建一个 change' }}
+            </div>
+            <div v-for="t in taskRunner.tasks.value" :key="t.taskId" class="sdd-row">
+              <span class="sdd-status" :class="t.status">
+                {{ t.status === "pending" ? "○" : t.status === "running" ? "◐" : t.status === "done" ? "✓" : "✗" }}
+              </span>
+              <span class="sdd-id">{{ t.taskId }}</span>
+              <span class="sdd-label">{{ t.title }}</span>
+              <span v-if="t.status === 'running'" class="sdd-spin">⋯</span>
+              <span v-else-if="t.status === 'done'" class="sdd-exit pass">exit 0</span>
+              <span v-else-if="t.status === 'failed'" class="sdd-exit fail">exit {{ t.exitCode ?? "?" }}</span>
+            </div>
           </div>
 
           <!-- review verdict 卡片 -->
@@ -828,6 +877,107 @@ function verdictColor(v: string): string {
   color: var(--color-surface-500, #64748b);
   font-size: 10px;
   font-family: var(--font-sans);
+}
+
+.sdd-panel {
+  align-self: flex-start;
+  margin-left: 41px;
+  max-width: 820px;
+  width: 100%;
+  border: 1px solid var(--color-surface-800, #1e293b);
+  border-radius: 10px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--color-surface-950, #020617) 50%, transparent);
+}
+.sdd-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 14px;
+  background: var(--color-surface-900, #0f172a);
+  border-bottom: 1px solid var(--color-surface-800, #1e293b);
+}
+.sdd-title {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-surface-400, #94a3b8);
+}
+.sdd-run-btn {
+  margin-left: auto;
+  background: var(--color-accent-violet, #a78bfa);
+  color: #1e1b3a;
+  border: none;
+  border-radius: 6px;
+  padding: 5px 12px;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: inherit;
+}
+.sdd-run-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.sdd-empty {
+  padding: 14px;
+  font-size: 12px;
+  color: var(--color-surface-500, #64748b);
+  text-align: center;
+}
+.sdd-row {
+  display: grid;
+  grid-template-columns: 20px 40px 1fr auto;
+  gap: 8px;
+  align-items: center;
+  padding: 7px 14px;
+  font-size: 12px;
+  border-bottom: 1px solid color-mix(in srgb, var(--color-surface-800, #1e293b) 50%, transparent);
+}
+.sdd-row:last-child {
+  border-bottom: none;
+}
+.sdd-status {
+  font-size: 14px;
+  font-family: var(--font-mono, monospace);
+}
+.sdd-status.pending {
+  color: var(--color-surface-500, #64748b);
+}
+.sdd-status.running {
+  color: var(--color-accent-amber, #fbbf24);
+}
+.sdd-status.done {
+  color: var(--color-accent-emerald, #34d399);
+}
+.sdd-status.failed {
+  color: var(--color-accent-rose, #f43f5e);
+}
+.sdd-id {
+  font-family: var(--font-mono, monospace);
+  color: var(--color-surface-500, #64748b);
+}
+.sdd-label {
+  color: var(--color-surface-200, #e2e8f0);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sdd-spin {
+  font-size: 16px;
+  color: var(--color-accent-amber, #fbbf24);
+}
+.sdd-exit {
+  font-family: var(--font-mono, monospace);
+  font-weight: 700;
+  font-size: 11px;
+}
+.sdd-exit.pass {
+  color: var(--color-accent-emerald, #34d399);
+}
+.sdd-exit.fail {
+  color: var(--color-accent-rose, #f43f5e);
 }
 
 .tdd-bar {
