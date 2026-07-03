@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, ref, onActivated } from "vue";
 import { useRouter } from "vue-router";
 import { useWorkflow } from "../../plugins/workflowPlugin";
 import { useOpenSpec } from "../../composables/useOpenSpec";
@@ -64,6 +64,12 @@ const gating = ref(false);
 const archiving = ref(false);
 const draftMsg = ref("");
 const archiveMsg = ref<{ ok: boolean; text: string } | null>(null);
+
+onActivated(() => {
+  if (wf.enabled.value && view.value === "select") {
+    view.value = "wf";
+  }
+});
 
 const stages = computed(() => stagesForTier(wf.state.value.tier));
 const cur = computed(() => wf.state.value.activeStep);
