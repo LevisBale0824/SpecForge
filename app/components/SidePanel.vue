@@ -11,6 +11,7 @@ import { useFileIndex } from "../composables/useFileIndex";
 import { useMessages } from "../composables/useMessages";
 import { useOpenSpec } from "../composables/useOpenSpec";
 import { useRouter } from "vue-router";
+import { useWorkflow } from "../plugins/workflowPlugin";
 import type { MessageDiffEntry } from "../types/message";
 import type { FileDiff, SessionInfo, SessionStatusInfo } from "../types/sse";
 
@@ -20,7 +21,14 @@ const fileIndex = useFileIndex();
 const msgStore = useMessages();
 const openspec = useOpenSpec();
 const router = useRouter();
+const wf = useWorkflow();
 const sideTab = ref<"sessions" | "spec">("sessions");
+
+const displayWorkflowTitle = computed(() => {
+  const ch = openspec.state.activeChanges[0];
+  if (ch) return ch.id;
+  return "探索中…";
+});
 function openWorkflow() {
   router.push({ name: "workflow" });
 }
@@ -241,6 +249,9 @@ const sections = computed(() => [
     </div>
     <div v-show="sideTab === 'spec'" class="side-tab-pane spec-pane">
       <div class="spec-section-label">探索</div>
+      <div v-if="wf.enabled.value" class="spec-item active" @click="openWorkflow">
+        <span class="spec-dot pulse"></span>{{ displayWorkflowTitle }}
+      </div>
       <div
         v-for="change in openspec.state.activeChanges"
         :key="change.id"
@@ -249,8 +260,8 @@ const sections = computed(() => [
       >
         <span class="spec-dot"></span>{{ change.id }}
       </div>
-      <div v-if="!openspec.state.activeChanges.length" class="spec-empty">
-        暂无 active change — 在 OpenSpec 面板创建后即可探索
+      <div v-if="!openspec.state.activeChanges.length && !wf.enabled.value" class="spec-empty">
+        点下方按钮开始一次新的探索
       </div>
       <button class="spec-new-btn" @click="openWorkflow">+ 新建 Spec 探索</button>
     </div>
@@ -334,6 +345,14 @@ const sections = computed(() => [
   border-radius: 50%;
   background: var(--color-accent-emerald, #34d399);
   flex-shrink: 0;
+}
+.spec-dot.pulse {
+  background: var(--color-accent-violet, #a78bfa);
+  animation: spec-pulse 1.5s infinite;
+}
+@keyframes spec-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
 }
 .spec-empty {
   padding: 14px 12px;
