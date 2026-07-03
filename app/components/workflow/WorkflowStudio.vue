@@ -74,6 +74,13 @@ const changeId = computed(() => openspec.state.activeChanges[0]?.id ?? "");
 const evidence = computed(() =>
   changeId.value ? openspec.state.evidence[changeId.value] : undefined,
 );
+const stageInteracted = computed(() => messages.value.length > 0 || injected.value[cur.value] === true);
+const canAdvance = computed(() => !isLast.value && stageInteracted.value);
+const displayTitle = computed(() => {
+  if (changeId.value) return changeId.value;
+  if (need.value.trim()) return need.value.slice(0, 30);
+  return "新建探索";
+});
 
 function extractText(id: string): string {
   return msgStore
@@ -272,7 +279,7 @@ function verdictColor(v: string): string {
         <div class="header">
           <span class="back" @click="backToSelect">← 返回</span>
           <span class="h-title">
-            <span class="accent">Spec 探索</span> · {{ changeId || "未选择 change" }}
+            <span class="accent">Spec 探索</span> · {{ displayTitle }}
             <span class="sub">{{ LABELS[cur] }} · {{ SUBS[cur] }}</span>
           </span>
           <span class="h-spacer" />
@@ -385,17 +392,9 @@ function verdictColor(v: string): string {
               </span>
             </div>
           </div>
-
-          <!-- 下一步引导(非最后阶段) -->
-          <button v-if="!isLast" class="next-cta" @click="nextStage">
-            <span
-              >完成 {{ LABELS[cur] }} · 进入 <b>{{ nextLabel }}</b></span
-            >
-            <span class="next-cta-arrow">→</span>
-          </button>
         </div>
 
-        <!-- composer(阶段特定,下一步在 header) -->
+        <!-- composer(阶段特定) -->
         <div class="composer">
           <template v-if="cur === 'explore'">
             <input
@@ -450,6 +449,14 @@ function verdictColor(v: string): string {
             }}</span>
           </template>
           <span v-if="draftMsg" class="composer-hint warn">{{ draftMsg }}</span>
+        </div>
+
+        <!-- 下一步(composer 下方,仅在当前阶段有交互后显示) -->
+        <div v-if="canAdvance" class="advance-bar">
+          <button class="next-cta" @click="nextStage">
+            <span>完成 {{ LABELS[cur] }} · 进入 <b>{{ nextLabel }}</b></span>
+            <span class="next-cta-arrow">→</span>
+          </button>
         </div>
       </div>
     </div>
@@ -1136,14 +1143,16 @@ function verdictColor(v: string): string {
   color: var(--color-surface-600, #475569);
 }
 
+.advance-bar {
+  flex-shrink: 0;
+  padding: 0 22px 14px;
+}
 .next-cta {
-  align-self: flex-start;
-  margin-left: 41px;
-  margin-top: 10px;
+  width: 100%;
   display: flex;
   align-items: center;
   gap: 14px;
-  padding: 14px 20px;
+  padding: 12px 18px;
   background: color-mix(in srgb, var(--color-accent-violet, #a78bfa) 10%, transparent);
   border: 1px solid color-mix(in srgb, var(--color-accent-violet, #a78bfa) 35%, transparent);
   border-radius: 10px;
@@ -1152,11 +1161,9 @@ function verdictColor(v: string): string {
   font-size: 14px;
   font-family: inherit;
   transition: all 0.15s;
-  max-width: 820px;
 }
 .next-cta:hover {
   background: color-mix(in srgb, var(--color-accent-violet, #a78bfa) 18%, transparent);
-  transform: translateX(2px);
 }
 .next-cta b {
   color: var(--color-accent-violet, #a78bfa);
