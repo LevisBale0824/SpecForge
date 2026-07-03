@@ -18,6 +18,7 @@ import { reactive, watch } from "vue";
 import {
   initOpenSpec,
   isElectron,
+  readChangeArtifact,
   readOpenSpecState,
   runOpenSpecValidate,
   runProjectGate,
@@ -305,6 +306,22 @@ async function refresh(): Promise<void> {
     state.error = String(e);
   } finally {
     state.loading = false;
+  }
+  await loadEvidence();
+}
+
+async function loadEvidence(): Promise<void> {
+  if (!isElectron()) return;
+  const project = useProject();
+  const root = state.rootPath || project.state.directoryPath;
+  if (!root) return;
+  for (const change of state.activeChanges) {
+    try {
+      const raw = await readChangeArtifact(root, change.id, "evidence.json");
+      if (raw) state.evidence[change.id] = JSON.parse(raw) as EvidenceFile;
+    } catch {
+      // evidence.json 缺失或损坏 — 跳过，保留内存中已有值
+    }
   }
 }
 

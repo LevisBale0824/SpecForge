@@ -85,6 +85,11 @@ const messages = computed(() =>
     .filter((m) => m.text),
 );
 
+const tddRed = computed(() => messages.value.some((m) => /fail|✗|exit [^0]/.test(m.text)));
+const tddGreen = computed(() =>
+  messages.value.some((m) => /pass.*[✓]|[✓].*pass|exit 0/.test(m.text)),
+);
+
 function stageState(i: number): "done" | "current" | "idle" {
   if (i === activeIdx.value) return "current";
   return i < activeIdx.value ? "done" : "idle";
@@ -240,6 +245,31 @@ function verdictColor(v: string): string {
             <div class="mb">
               <div class="name">{{ m.role === "user" ? "you" : "opencode · agent" }}</div>
               <div class="bubble">{{ m.text }}</div>
+            </div>
+          </div>
+
+          <!-- Apply TDD 可视化 -->
+          <div v-if="cur === 'apply'" class="tdd-bar">
+            <span class="tdd-item" :class="tddRed ? 'red' : ''">
+              <span class="tdd-light" :class="tddRed ? 'red' : ''"></span>RED · 写测试
+            </span>
+            <span class="tdd-line" :class="tddGreen ? 'green' : tddRed ? 'progress' : ''"></span>
+            <span class="tdd-item" :class="tddGreen ? 'green' : ''">
+              <span class="tdd-light" :class="tddGreen ? 'green' : ''"></span>GREEN · 通过
+            </span>
+          </div>
+
+          <!-- review verdict 卡片 -->
+          <div v-if="cur === 'review'" class="review-card">
+            <div class="rc-head">Review Verdict</div>
+            <div class="rc-row">
+              <span class="rc-key">Spec 合规</span><span class="rc-val">—</span>
+            </div>
+            <div class="rc-row">
+              <span class="rc-key">代码质量</span><span class="rc-val">—</span>
+            </div>
+            <div class="rc-row">
+              <span class="rc-key">Scope creep</span><span class="rc-val">—</span>
             </div>
           </div>
 
@@ -693,6 +723,102 @@ function verdictColor(v: string): string {
   border-radius: 10px;
   overflow: hidden;
   background: color-mix(in srgb, var(--color-surface-950, #020617) 50%, transparent);
+}
+
+.tdd-bar {
+  align-self: flex-start;
+  margin-left: 41px;
+  display: flex;
+  align-items: center;
+  gap: 0;
+  padding: 10px 14px;
+  border: 1px solid var(--color-surface-800, #1e293b);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--color-surface-950, #020617) 50%, transparent);
+  font-size: 12px;
+  font-family: var(--font-mono, monospace);
+}
+.tdd-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--color-surface-500, #64748b);
+}
+.tdd-item.red {
+  color: var(--color-accent-rose, #f43f5e);
+}
+.tdd-item.green {
+  color: var(--color-accent-emerald, #34d399);
+}
+.tdd-light {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid var(--color-surface-700, #334155);
+  background: var(--color-surface-950, #020617);
+  transition: all 0.3s;
+}
+.tdd-light.red {
+  border-color: var(--color-accent-rose, #f43f5e);
+  background: var(--color-accent-rose, #f43f5e);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--color-accent-rose, #f43f5e) 50%, transparent);
+}
+.tdd-light.green {
+  border-color: var(--color-accent-emerald, #34d399);
+  background: var(--color-accent-emerald, #34d399);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--color-accent-emerald, #34d399) 50%, transparent);
+}
+.tdd-line {
+  width: 40px;
+  height: 2px;
+  background: var(--color-surface-700, #334155);
+  margin: 0 12px;
+  transition: background 0.3s;
+}
+.tdd-line.progress {
+  background: var(--color-accent-rose, #f43f5e);
+}
+.tdd-line.green {
+  background: var(--color-accent-emerald, #34d399);
+}
+
+.review-card {
+  align-self: flex-start;
+  margin-left: 41px;
+  max-width: 820px;
+  border: 1px solid var(--color-surface-800, #1e293b);
+  border-radius: 10px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--color-surface-950, #020617) 50%, transparent);
+}
+.rc-head {
+  padding: 9px 14px;
+  background: var(--color-surface-900, #0f172a);
+  border-bottom: 1px solid var(--color-surface-800, #1e293b);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-surface-400, #94a3b8);
+}
+.rc-row {
+  display: grid;
+  grid-template-columns: 100px 1fr;
+  gap: 10px;
+  padding: 8px 14px;
+  font-size: 12px;
+  border-bottom: 1px solid color-mix(in srgb, var(--color-surface-800, #1e293b) 50%, transparent);
+}
+.rc-row:last-child {
+  border-bottom: none;
+}
+.rc-key {
+  color: var(--color-surface-500, #64748b);
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+}
+.rc-val {
+  color: var(--color-surface-400, #94a3b8);
 }
 .ev-head {
   display: flex;
