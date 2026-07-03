@@ -150,6 +150,17 @@ const sections = computed(() => [
 
 <template>
   <aside class="side-panel">
+    <div v-if="!projectState.directoryPath && !projectState.rootHandle" class="no-project">
+      <button class="open-folder-btn" @click="emit('open-folder')">
+        📂 打开文件夹
+      </button>
+    </div>
+    <template v-else>
+    <div class="side-openfolder">
+      <button @click="emit('open-folder')">
+        📂 {{ projectState.directoryName || "切换文件夹" }}
+      </button>
+    </div>
     <div class="side-tabs">
       <button
         class="side-tab"
@@ -261,10 +272,10 @@ const sections = computed(() => [
         <span class="spec-dot"></span>{{ change.id }}
       </div>
       <div v-if="!openspec.state.activeChanges.length && !wf.enabled.value" class="spec-empty">
-        点下方按钮开始一次新的探索
+        选择 Quick / Standard / Full 开始一次新的探索
       </div>
-      <button class="spec-new-btn" @click="openWorkflow">+ 新建 Spec 探索</button>
     </div>
+    </template>
   </aside>
 </template>
 
@@ -276,6 +287,52 @@ const sections = computed(() => [
   min-height: 0;
   background: var(--color-surface-900, #0f172a);
   overflow: hidden;
+}
+
+.no-project {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+.open-folder-btn {
+  background: var(--color-surface-800, #1e293b);
+  border: 1px solid var(--color-surface-700, #334155);
+  color: var(--color-surface-200, #e2e8f0);
+  font-size: 13px;
+  padding: 10px 20px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-family: inherit;
+}
+.open-folder-btn:hover {
+  border-color: var(--color-accent-cyan, #22d3ee);
+  color: var(--color-accent-cyan, #22d3ee);
+}
+.side-openfolder {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--color-surface-800, #1e293b);
+  flex-shrink: 0;
+}
+.side-openfolder button {
+  width: 100%;
+  background: var(--color-surface-800, #1e293b);
+  border: 1px solid var(--color-surface-700, #334155);
+  color: var(--color-surface-300, #cbd5e1);
+  font-size: 12px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-family: inherit;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.side-openfolder button:hover {
+  color: var(--color-surface-100, #f1f5f9);
+  border-color: var(--color-surface-600, #475569);
 }
 
 .side-tabs {
@@ -359,21 +416,6 @@ const sections = computed(() => [
   color: var(--color-surface-600, #475569);
   text-align: center;
   line-height: 1.5;
-}
-.spec-new-btn {
-  margin: 12px 10px 0;
-  background: transparent;
-  border: 1px dashed var(--color-surface-700, #334155);
-  color: var(--color-surface-400, #94a3b8);
-  font-size: 11px;
-  padding: 8px;
-  border-radius: 6px;
-  cursor: pointer;
-  font-family: inherit;
-}
-.spec-new-btn:hover {
-  color: var(--color-accent-violet, #a78bfa);
-  border-color: var(--color-accent-violet, #a78bfa);
 }
 
 .section-empty {
