@@ -6,13 +6,16 @@ import { useOpenSpec } from "../../composables/useOpenSpec";
 import { useBackend } from "../../composables/useBackend";
 import { useMessages, stripSystemReminder } from "../../composables/useMessages";
 import { getStagePrompt } from "../../composables/useStageRunner";
+import { useContract } from "../../composables/useContract";
 import { TIER_LABELS, stagesForTier, type StepName, type WorkflowTier } from "../../types/workflow";
+import type { ExecutionContract } from "../../types/openspec";
 
 const router = useRouter();
 const wf = useWorkflow();
 const openspec = useOpenSpec();
 const backend = useBackend();
 const msgStore = useMessages();
+const { generateContract, loadContract } = useContract();
 
 const LABELS: Record<StepName, string> = {
   explore: "Explore",
@@ -114,13 +117,29 @@ function backToSelect() {
 }
 function gotoStage(s: StepName) {
   wf.setActiveStep(s);
+  if (s === "apply" && changeId.value) {
+    loadContract(changeId.value).then((c) => {
+      if (c) contract.value = c;
+    });
+  }
 }
 function nextStage() {
   if (isLast.value) return;
-  wf.setActiveStep(stages.value[activeIdx.value + 1]);
+  const from = cur.value;
+  const to = stages.value[activeIdx.value + 1];
+  wf.setActiveStep(to);
+  if (from === "propose" && changeId.value) {
+    generateContract(changeId.value, need.value || changeId.value, wf.state.value.tier);
+  }
+  if (to === "apply" && changeId.value) {
+    loadContract(changeId.value).then((c) => {
+      if (c) contract.value = c;
+    });
+  }
 }
 
 const injected = ref<Partial<Record<string, boolean>>>({});
+const contract = ref<ExecutionContract | null | undefined>(undefined);
 type DraftStage = "explore" | "propose" | "plan" | "apply" | "review";
 async function draft(stage: DraftStage) {
   if (!need.value.trim()) {
@@ -245,6 +264,29 @@ function verdictColor(v: string): string {
             <div class="mb">
               <div class="name">{{ m.role === "user" ? "you" : "opencode · agent" }}</div>
               <div class="bubble">{{ m.text }}</div>
+            </div>
+          </div>
+
+          <!-- Execution Contract(apply 阶段生效) -->
+          <div v-if="cur === 'apply' && contract" class="contract-card">
+            <div class="cc-head">Contract — {{ contract.changeId }} · {{ contract.tier }}</div>
+            <div class="cc-section">
+              <span class="cc-sl">Scope</span>
+              <div v-for="f in contract.scope.files" :key="f" class="cc-item">▸ {{ f }}</div>
+              <div v-if="contract.scope.api?.length" class="cc-item api">
+                API: {{ contract.scope.api.join(", ") }}
+              </div>
+            </div>
+            <div class="cc-section">
+              <span class="cc-sl">Verify</span>
+              <div v-for="v in contract.verify" :key="v.command" class="cc-item mon">
+                <span class="cc-check">$</span> {{ v.command }}
+                <span v-if="v.description" class="cc-desc">{{ v.description }}</span>
+              </div>
+            </div>
+            <div v-if="contract.risks.length" class="cc-section">
+              <span class="cc-sl">Risks</span>
+              <div v-for="(r, i) in contract.risks" :key="i" class="cc-item warn">⚠ {{ r }}</div>
             </div>
           </div>
 
@@ -723,6 +765,69 @@ function verdictColor(v: string): string {
   border-radius: 10px;
   overflow: hidden;
   background: color-mix(in srgb, var(--color-surface-950, #020617) 50%, transparent);
+}
+
+.contract-card {
+  align-self: flex-start;
+  margin-left: 41px;
+  max-width: 820px;
+  width: 100%;
+  border: 1px solid var(--color-accent-amber, #fbbf24);
+  border-radius: 10px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--color-surface-950, #020617) 50%, transparent);
+}
+.cc-head {
+  padding: 9px 14px;
+  background: var(--color-surface-900, #0f172a);
+  border-bottom: 1px solid color-mix(in srgb, var(--color-accent-amber, #fbbf24) 30%, transparent);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-accent-amber, #fbbf24);
+  letter-spacing: 0.04em;
+}
+.cc-section {
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--color-surface-800, #1e293b);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.cc-section:last-child {
+  border-bottom: none;
+}
+.cc-sl {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-surface-500, #64748b);
+  font-weight: 600;
+  margin-bottom: 3px;
+}
+.cc-item {
+  font-size: 12px;
+  color: var(--color-surface-300, #cbd5e1);
+  font-family: var(--font-mono, monospace);
+  padding-left: 8px;
+}
+.cc-item.api {
+  color: var(--color-accent-violet, #a78bfa);
+}
+.cc-item.warn {
+  color: var(--color-accent-rose, #f43f5e);
+}
+.cc-item.mon {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.cc-check {
+  color: var(--color-surface-500, #64748b);
+}
+.cc-desc {
+  color: var(--color-surface-500, #64748b);
+  font-size: 10px;
+  font-family: var(--font-sans);
 }
 
 .tdd-bar {

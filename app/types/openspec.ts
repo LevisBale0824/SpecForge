@@ -254,3 +254,20 @@ export interface WriteArtifactResult {
   ok: boolean;
   reason?: string;
 }
+
+/** Execution Contract — propose 完成时生成,apply 前检查 */
+export interface ExecutionContract {
+  changeId: string;
+  need: string;
+  tier: string;
+  scope: ScopeBoundary;
+  verify: { command: string; description?: string }[];
+  risks: string[];
+  generatedAt: number;
+}
+
+export interface ScopeBoundary {
+  files: string[];
+  api?: string[];
+  modules?: string[];
+}
