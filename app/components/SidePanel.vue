@@ -30,9 +30,6 @@ const displayWorkflowTitle = computed(() => {
   return wf.state.value.label || "探索中…";
 });
 function openWorkflow() {
-  if (wf.enabled.value) {
-    wf.state.value.enabled = true;
-  }
   router.push({ name: "workflow" }).catch(() => {});
 }
 
