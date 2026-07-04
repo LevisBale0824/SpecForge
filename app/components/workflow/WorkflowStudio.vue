@@ -7,10 +7,10 @@ import { useOpenSpec } from "../../composables/useOpenSpec";
 import { useBackend } from "../../composables/useBackend";
 import { useMessages, stripSystemReminder } from "../../composables/useMessages";
 import { getStagePrompt } from "../../composables/useStageRunner";
-import { useContract } from "../../composables/useContract";
+import { useContract, checkRequirementsCoverage } from "../../composables/useContract";
 import { useTaskRunner } from "../../composables/useTaskRunner";
 import { TIER_LABELS, stagesForTier, type StepName, type WorkflowTier } from "../../types/workflow";
-import type { ExecutionContract } from "../../types/openspec";
+import type { ExecutionContract, ContractStaleResult } from "../../types/openspec";
 
 const route = useRoute();
 const router = useRouter();
@@ -19,7 +19,7 @@ const wf = useWorkflow();
 const openspec = useOpenSpec();
 const backend = useBackend();
 const msgStore = useMessages();
-const { generateContract, loadContract } = useContract();
+const { generateContract, loadContract, checkStale } = useContract();
 const taskRunner = useTaskRunner();
 
 const LABELS: Record<StepName, string> = {
@@ -257,6 +257,7 @@ function pick(t: WorkflowTier) {
   need.value = "";
   draftMsg.value = "";
   contract.value = undefined;
+  contractStale.value = null;
   // 清空上一轮会话消息，避免新探索的结果区残留旧内容
   backend.startNewSession();
 }
@@ -275,8 +276,10 @@ function gotoStage(s: StepName) {
   if (s === "apply" && changeId.value) {
     loadContract(changeId.value).then((c) => {
       if (c) contract.value = c;
+      contractStale.value = checkStale(changeId.value, c);
     });
   }
+  if (s === "verify") refreshVerifyWarnings();
 }
 function nextStage() {
   if (isLast.value) return;
@@ -290,12 +293,33 @@ function nextStage() {
   if (to === "apply" && changeId.value) {
     loadContract(changeId.value).then((c) => {
       if (c) contract.value = c;
+      contractStale.value = checkStale(changeId.value, c);
     });
   }
+  if (to === "verify") refreshVerifyWarnings();
 }
 
 const injected = ref<Partial<Record<string, boolean>>>({});
 const contract = ref<ExecutionContract | null | undefined>(undefined);
+const contractStale = ref<ContractStaleResult | null>(null);
+const verifyWarnings = ref<string[]>([]);
+
+function refreshVerifyWarnings() {
+  if (!changeId.value) {
+    verifyWarnings.value = [];
+    return;
+  }
+  const warns: string[] = [];
+  const staleResult = checkStale(changeId.value, contract.value);
+  if (staleResult.stale) {
+    warns.push(`契约过期(${staleResult.reason}):${staleResult.detail}`);
+  }
+  const cov = checkRequirementsCoverage(selectedChange.value, contract.value);
+  if (cov.uncovered.length > 0) {
+    warns.push(`验收点未覆盖:${cov.uncovered.join(", ")}(无对应 completed task)`);
+  }
+  verifyWarnings.value = warns;
+}
 type DraftStage = "explore" | "propose" | "plan" | "apply" | "review";
 async function draft(stage: DraftStage) {
   if (!need.value.trim()) {
@@ -340,6 +364,7 @@ function sendForCurrent() {
 }
 async function runGates() {
   if (!changeId.value) return;
+  refreshVerifyWarnings();
   gating.value = true;
   try {
     await openspec.runGates(changeId.value);
@@ -477,11 +502,39 @@ function verdictColor(v: string): string {
           <!-- Execution Contract(apply 阶段生效) -->
           <div v-if="cur === 'apply' && contract" class="contract-card">
             <div class="cc-head">Contract — {{ contract.changeId }} · {{ contract.tier }}</div>
+            <div v-if="contractStale?.stale" class="cc-section">
+              <div class="cc-item warn">
+                ⚠ 契约过期 ({{ contractStale.reason }}):{{ contractStale.detail }}。 建议回到
+                Propose 重新生成,否则 Apply 可能偏离当前规划
+              </div>
+            </div>
+            <div v-if="contract.intent" class="cc-section">
+              <span class="cc-sl">Intent Lock</span>
+              <div class="cc-item intent">{{ contract.intent }}</div>
+            </div>
+            <div v-if="contract.outOfScope?.length" class="cc-section">
+              <span class="cc-sl">Out of Scope</span>
+              <div v-for="(o, i) in contract.outOfScope" :key="i" class="cc-item fence">
+                ⊘ {{ o }}
+              </div>
+            </div>
             <div class="cc-section">
               <span class="cc-sl">Scope</span>
               <div v-for="f in contract.scope.files" :key="f" class="cc-item">▸ {{ f }}</div>
               <div v-if="contract.scope.api?.length" class="cc-item api">
                 API: {{ contract.scope.api.join(", ") }}
+              </div>
+            </div>
+            <div v-if="contract.requirements?.length" class="cc-section">
+              <span class="cc-sl">Requirements ({{ contract.requirements.length }})</span>
+              <div
+                v-for="r in contract.requirements"
+                :key="`${r.source}::${r.name}`"
+                class="cc-item mon"
+              >
+                <span class="cc-level" :class="r.level.toLowerCase()">{{ r.level }}</span>
+                {{ r.name }}
+                <span class="cc-src">{{ r.source }}</span>
               </div>
             </div>
             <div class="cc-section">
@@ -558,6 +611,16 @@ function verdictColor(v: string): string {
             </div>
             <div class="rc-row">
               <span class="rc-key">Scope creep</span><span class="rc-val">—</span>
+            </div>
+          </div>
+
+          <!-- verify 前置门禁警告(契约过期 / Requirements 未覆盖) -->
+          <div v-if="cur === 'verify' && verifyWarnings.length" class="verify-warn-card">
+            <div class="vw-head">⚠ Pre-Gate 检测到 {{ verifyWarnings.length }} 项风险</div>
+            <div v-for="(w, i) in verifyWarnings" :key="i" class="vw-item">· {{ w }}</div>
+            <div class="vw-foot">
+              这些风险不阻断 Run Gates,但 verdict 应判为 NOT_READY。 契约过期请回 Propose
+              重建;未覆盖请回 Apply 补 task
             </div>
           </div>
 
@@ -1122,6 +1185,64 @@ function verdictColor(v: string): string {
   color: var(--color-surface-500, #64748b);
   font-size: 10px;
   font-family: var(--font-sans);
+}
+.cc-item.intent {
+  color: var(--color-accent-amber, #fbbf24);
+  font-style: italic;
+  font-family: var(--font-sans);
+}
+.cc-item.fence {
+  color: var(--color-accent-rose, #f43f5e);
+  opacity: 0.85;
+}
+.cc-level {
+  font-size: 9px;
+  font-weight: 700;
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--color-surface-700, #334155) 60%, transparent);
+  color: var(--color-surface-200, #e2e8f0);
+}
+.cc-level.must,
+.cc-level.shall {
+  background: color-mix(in srgb, var(--color-accent-rose, #f43f5e) 30%, transparent);
+  color: var(--color-accent-rose, #f43f5e);
+}
+.cc-src {
+  color: var(--color-surface-500, #64748b);
+  font-size: 10px;
+  margin-left: auto;
+}
+.verify-warn-card {
+  align-self: flex-start;
+  margin-left: 41px;
+  max-width: 820px;
+  width: 100%;
+  border: 1px solid var(--color-accent-rose, #f43f5e);
+  border-radius: 10px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--color-accent-rose, #f43f5e) 8%, transparent);
+}
+.vw-head {
+  padding: 8px 14px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-accent-rose, #f43f5e);
+  letter-spacing: 0.04em;
+  border-bottom: 1px solid color-mix(in srgb, var(--color-accent-rose, #f43f5e) 25%, transparent);
+}
+.vw-item {
+  padding: 4px 14px;
+  font-size: 12px;
+  color: var(--color-surface-200, #e2e8f0);
+  font-family: var(--font-mono, monospace);
+}
+.vw-foot {
+  padding: 6px 14px 8px;
+  font-size: 10px;
+  color: var(--color-surface-500, #64748b);
+  font-family: var(--font-sans);
+  border-top: 1px solid color-mix(in srgb, var(--color-accent-rose, #f43f5e) 15%, transparent);
 }
 
 .sdd-panel {

@@ -1,5 +1,7 @@
 # SpecForge 架构文档
 
+> 相关文档:[执行契约机制](./execution-contract.md)(Propose/Apply/Verify 之间的硬约束层)
+
 ## 概述
 
 SpecForge 是一个基于 Vue 3 + Electron 的现代化 AI 辅助开发工作台。项目采用分层架构，支持 Web 和 Electron 两种运行模式。

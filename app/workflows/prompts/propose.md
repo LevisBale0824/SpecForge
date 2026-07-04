@@ -11,7 +11,12 @@
 
 ## 任务
 
-1. 生成 `proposal.md`:`## Why` / `## What Changes` / `## Capabilities` / `## Impact`
+1. 生成 `proposal.md`,必含以下 section(顺序固定):
+   - `## Why`:一句话锁定本次变更的核心意图(=Intent Lock,Apply 阶段会以此拦截偏离建议)
+   - `## What Changes`:涉及哪些文件/模块,列出具体路径
+   - `## Out of Scope`:本次明确**不做**的事(=Scope Fence,每条独占一行,`-` 起始)。常见项:不重构 X、不调整 Y 的 API、不动 Z 的数据迁移
+   - `## Capabilities`:涉及哪些 capability
+   - `## Impact`:向后兼容 / 性能 / 迁移路径
 2. 档位为 thorough 时,额外生成 spec delta + `design.md`(记录关键决策与权衡)
 
 ## 档位差异(深度而非数量)

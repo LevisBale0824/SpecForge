@@ -261,6 +261,14 @@ export interface ExecutionContract {
   need: string;
   tier: string;
   scope: ScopeBoundary;
+  /** 意图锁:一句话锁定本次变更核心意图(提取自 proposal ## Why) */
+  intent: string;
+  /** 范围围栏:本次明确不做的事(提取自 proposal ## Out of Scope)。Apply 检测到触碰即拦截 */
+  outOfScope: string[];
+  /** 验收义务:从 delta specs 的 SHALL/MUST 提取,每条必须有对应实现证据 */
+  requirements: ContractRequirement[];
+  /** 源工件内容指纹(proposal+specs+design 拼接哈希),用于 stale 检测 */
+  sourceHash: string;
   verify: { command: string; description?: string }[];
   risks: string[];
   generatedAt: number;
@@ -270,6 +278,30 @@ export interface ScopeBoundary {
   files: string[];
   api?: string[];
   modules?: string[];
+}
+
+/** 契约中的验收义务条目 */
+export interface ContractRequirement {
+  /** `### Requirement: <Name>` 中的 Name */
+  name: string;
+  /** RFC 2119 强度 */
+  level: SpecLevel;
+  /** 相对 openspec 根的来源路径 */
+  source: string;
+}
+
+/** 契约过期检测结果 */
+export type ContractStaleReason =
+  | "proposal-scope-expanded"
+  | "requirements-changed"
+  | "source-hash-mismatch"
+  | "missing-contract";
+
+export interface ContractStaleResult {
+  stale: boolean;
+  reason?: ContractStaleReason;
+  /** 人类可读说明 */
+  detail?: string;
 }
 
 // SidePanel → 详情窗口的导航目标
