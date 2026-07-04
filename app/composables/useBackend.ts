@@ -195,21 +195,31 @@ function migrateDraftSelections(realSessionId: string): void {
 // slower machines while still recovering from a crashed backend in
 // reasonable time.
 const IDLE_FALLBACK_GRACE_MS = 30000;
+// A tool may legitimately run for minutes (builds/tests/lint). While one is
+// still executing (or a message is streaming), re-arm instead of forcing
+// idle — otherwise we'd mis-mark a mid-build tool as completed.
+const IDLE_FALLBACK_MAX_MS = 5 * 60 * 1000;
 const idleFallbackTimers = new Map<string, ReturnType<typeof setTimeout>>();
+const idleFallbackFirstArmed = new Map<string, number>();
 const CONNECTION_LOST_GRACE_MS = 3000;
 let connectionLostTimer: ReturnType<typeof setTimeout> | undefined;
 let markedConnectionLost = false;
 
-function scheduleIdleFallback(sessionId: string): void {
-  if (!sessionId) return;
-  const existing = idleFallbackTimers.get(sessionId);
-  if (existing) clearTimeout(existing);
-  const armedAt = Date.now();
+function armIdleFallback(sessionId: string, firstArmedAt: number): void {
   const timer = setTimeout(() => {
     idleFallbackTimers.delete(sessionId);
+    const now = Date.now();
+    // Still working — don't force idle mid-flight; let session.status=idle land.
+    const stillWorking =
+      msgStore.hasActiveToolParts(sessionId) || msgStore.hasStreamingAssistantMessages(sessionId);
+    if (stillWorking && now - firstArmedAt < IDLE_FALLBACK_MAX_MS) {
+      armIdleFallback(sessionId, firstArmedAt);
+      return;
+    }
+    idleFallbackFirstArmed.delete(sessionId);
     msgStore.markActiveToolPartsCompleted(sessionId);
     if (sessionStatus.isBusyOf(sessionId)) {
-      const elapsedMs = Date.now() - armedAt;
+      const elapsedMs = now - firstArmedAt;
       sessionStatus.markIdle(sessionId);
       console.warn(
         `[useBackend] Forced session ${sessionId} idle after ${elapsedMs}ms grace — ` +
@@ -222,12 +232,26 @@ function scheduleIdleFallback(sessionId: string): void {
   idleFallbackTimers.set(sessionId, timer);
 }
 
+function scheduleIdleFallback(sessionId: string): void {
+  if (!sessionId) return;
+  const existing = idleFallbackTimers.get(sessionId);
+  if (existing) clearTimeout(existing);
+  // firstArmedAt survives re-arms within a round; reset on clearIdleFallback.
+  let firstArmedAt = idleFallbackFirstArmed.get(sessionId);
+  if (!firstArmedAt) {
+    firstArmedAt = Date.now();
+    idleFallbackFirstArmed.set(sessionId, firstArmedAt);
+  }
+  armIdleFallback(sessionId, firstArmedAt);
+}
+
 function clearIdleFallback(sessionId: string): void {
   const existing = idleFallbackTimers.get(sessionId);
   if (existing) {
     clearTimeout(existing);
     idleFallbackTimers.delete(sessionId);
   }
+  idleFallbackFirstArmed.delete(sessionId);
 }
 
 // No-content fallback: armed when a prompt is dispatched, cleared when the

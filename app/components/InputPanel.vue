@@ -559,7 +559,6 @@ async function handleSend() {
           ref="textareaEl"
           v-model="inputText"
           :placeholder="t('chat.placeholder')"
-          :disabled="backend.isSending.value || backend.isBusy.value"
           rows="3"
           class="flex-1 resize-none rounded-lg bg-surface-800 border px-4 py-3 text-base text-surface-100 placeholder:text-surface-600 focus:outline-none focus:border-accent-cyan/50 transition-colors"
           :class="isDragOver ? 'border-accent-cyan' : 'border-surface-700'"
