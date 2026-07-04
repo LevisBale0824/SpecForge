@@ -179,6 +179,10 @@ function onOpenWorkflow(changeId?: string) {
   router.push({ name: "workflow", query: changeId ? { change: changeId } : {} });
 }
 
+function onOpenOpenSpecDialog(_changeId?: string) {
+  showOpenSpecDialog.value = true;
+}
+
 function onOpenDiff(diff: MessageDiffEntry) {
   showOpenSpecDialog.value = false;
   activeDiff.value = diff;
@@ -266,11 +270,9 @@ function submitManualPath() {
     <!-- Top Bar -->
     <TopBar
       :console-active="showConsole"
-      :openspec-active="showOpenSpecDialog"
       @toggle-settings="showSettings = !showSettings"
       @toggle-help="showHelp = !showHelp"
       @toggle-console="toggleConsole"
-      @toggle-openspec="showOpenSpecDialog = !showOpenSpecDialog"
       @open-folder="handleOpenFolder"
     />
 
@@ -293,6 +295,7 @@ function submitManualPath() {
         @open-file="onOpenFile"
         @open-folder="handleOpenFolder"
         @open-workflow="onOpenWorkflow"
+        @open-openspec-dialog="onOpenOpenSpecDialog"
         @refresh-files="onRefreshFiles"
       />
       <!-- Sidebar drag handle -->

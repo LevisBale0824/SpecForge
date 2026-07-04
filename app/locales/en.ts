@@ -269,6 +269,8 @@ export default {
     progress: "{done}/{total}",
     noActiveChanges: "No active changes",
     noArchivedChanges: "No archived changes",
+    selectChange: "Select a change to view",
+    openInDialog: "Open in OpenSpec dialog",
     tabActive: "Active",
     tabArchived: "Archived",
     tabCapabilities: "Capabilities",

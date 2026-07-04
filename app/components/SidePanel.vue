@@ -48,6 +48,7 @@ const emit = defineEmits<{
   "open-folder": [];
   "open-chat": [];
   "open-workflow": [changeId?: string];
+  "open-openspec-dialog": [changeId?: string];
   "refresh-files": [];
 }>();
 
@@ -158,6 +159,9 @@ function handleOpenDiff(diff: MessageDiffEntry) {
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
               <path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.74V16h8v-1.26A7 7 0 0 0 12 2z" />
             </svg>
+            <span v-if="openspec.state.activeChanges.length > 0" class="rail-badge violet">{{
+              openspec.state.activeChanges.length
+            }}</span>
           </button>
           <button
             type="button"
@@ -240,6 +244,18 @@ function handleOpenDiff(diff: MessageDiffEntry) {
                   <span class="section-subtitle">需求、方案与任务</span>
                 </div>
               </div>
+              <div class="pane-actions">
+                <button
+                  type="button"
+                  class="header-icon-button"
+                  :title="t('openspec.openInDialog', 'Open in OpenSpec dialog')"
+                  @click="emit('open-openspec-dialog')"
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                    <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" />
+                  </svg>
+                </button>
+              </div>
             </div>
 
             <div class="pane-body spec-pane">
@@ -248,7 +264,8 @@ function handleOpenDiff(diff: MessageDiffEntry) {
                 class="spec-item ongoing"
                 @click="openWorkflow(openspec.state.activeChanges[0]?.id)"
               >
-                <span class="spec-dot violet"></span>{{ displayWorkflowTitle }}
+                <span class="spec-dot violet"></span>
+                <span class="spec-id">{{ displayWorkflowTitle }}</span>
               </div>
               <div
                 v-for="change in openspec.state.activeChanges"
@@ -256,7 +273,18 @@ function handleOpenDiff(diff: MessageDiffEntry) {
                 class="spec-item"
                 @click="openWorkflow(change.id)"
               >
-                <span class="spec-dot"></span>{{ change.id }}
+                <span class="spec-dot"></span>
+                <span class="spec-id">{{ change.id }}</span>
+                <button
+                  type="button"
+                  class="spec-expand-btn"
+                  :title="t('openspec.openInDialog', 'Open in OpenSpec dialog')"
+                  @click.stop="emit('open-openspec-dialog', change.id)"
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                    <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" />
+                  </svg>
+                </button>
               </div>
               <div
                 v-if="!openspec.state.activeChanges.length && !hasWorkflowDraft"
@@ -576,6 +604,10 @@ function handleOpenDiff(diff: MessageDiffEntry) {
   font-weight: 800;
 }
 
+.rail-badge.violet {
+  background: var(--color-accent-violet, #a78bfa);
+}
+
 .side-pane-host {
   min-width: 0;
   min-height: 0;
@@ -751,6 +783,50 @@ function handleOpenDiff(diff: MessageDiffEntry) {
 .spec-item:hover {
   background: color-mix(in srgb, var(--color-surface-700, #334155) 22%, transparent);
   color: var(--color-surface-100, #f1f5f9);
+}
+
+.spec-id {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.spec-expand-btn {
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--color-surface-500, #64748b);
+  cursor: pointer;
+  opacity: 0.4;
+  transition:
+    opacity 0.12s,
+    color 0.12s,
+    background 0.12s;
+}
+
+.spec-item:hover .spec-expand-btn {
+  opacity: 0.9;
+}
+
+.spec-expand-btn:hover {
+  opacity: 1;
+  color: var(--color-accent-violet, #a78bfa);
+  background: color-mix(in srgb, var(--color-accent-violet, #a78bfa) 14%, transparent);
+}
+
+.spec-expand-btn svg {
+  width: 12px;
+  height: 12px;
+  stroke-width: 2;
 }
 
 .spec-dot {

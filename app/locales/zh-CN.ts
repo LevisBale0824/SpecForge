@@ -258,6 +258,8 @@ export default {
     progress: "{done}/{total}",
     noActiveChanges: "无活跃变更",
     noArchivedChanges: "无归档变更",
+    selectChange: "选择一个 change 查看",
+    openInDialog: "在 OpenSpec 大窗中查看",
     tabActive: "活跃",
     tabArchived: "已归档",
     tabCapabilities: "能力",
