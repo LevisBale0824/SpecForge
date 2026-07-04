@@ -29,6 +29,11 @@ const pendingNewDraftTier = ref<WorkflowTier | null>(null);
 function requestNewDraft(tier: WorkflowTier) {
   pendingNewDraftTier.value = tier;
 }
+/** 由 WorkflowStudio 请求重新打开档位选择对话框(切换档位);App.vue 监听后开弹窗 */
+const pickerOpenRequested = ref(false);
+function requestOpenPicker() {
+  pickerOpenRequested.value = true;
+}
 
 function ensureStep(step: StepName): StepState {
   const steps = workflowState.value.steps;
@@ -117,6 +122,8 @@ export const workflowPlugin: OpenSpecPlugin = {
       enabled: workflowEnabled,
       pendingNewDraftTier,
       requestNewDraft,
+      pickerOpenRequested,
+      requestOpenPicker,
       setActiveStep,
       setStepPhase,
       setTier,
@@ -138,6 +145,8 @@ export function useWorkflow() {
     enabled: workflowEnabled,
     pendingNewDraftTier,
     requestNewDraft,
+    pickerOpenRequested,
+    requestOpenPicker,
     setActiveStep,
     setStepPhase,
     setTier,

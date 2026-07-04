@@ -204,6 +204,16 @@ function onPickTier(tier: WorkflowTier) {
   router.push({ name: "workflow" });
 }
 
+// WorkflowStudio 请求重新打开档位选择对话框(切换档位)
+watch(
+  () => wf.pickerOpenRequested.value,
+  (requested) => {
+    if (!requested) return;
+    showTierPicker.value = true;
+    wf.pickerOpenRequested.value = false;
+  },
+);
+
 function onOpenDiff(diff: MessageDiffEntry) {
   showOpenSpecDialog.value = false;
   specDetailTarget.value = null;
