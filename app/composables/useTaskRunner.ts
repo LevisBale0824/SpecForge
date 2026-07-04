@@ -115,9 +115,10 @@ export function useTaskRunner() {
       } | null;
       if (!s) return { exitCode: null, output: "session lost" };
       if (s.status === "idle" || s.status === "error") {
-        const msgs = (await cliBridge.listSessionMessages(
-          sessionId,
-        )) as Array<{ role: string; content?: string }> | null;
+        const msgs = (await cliBridge.listSessionMessages(sessionId)) as Array<{
+          role: string;
+          content?: string;
+        }> | null;
         const output =
           msgs
             ?.filter((m) => m.role === "assistant")
