@@ -5,6 +5,28 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，
 项目遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.0.0] - 2026-07-04
+
+### 新增 (Added)
+
+- 🎯 **OpenSpec 工作流原型集成**：从独立 HTML 原型迁移进 Vue 应用，新增 `WorkflowStudio` 主视图 + `TierPickerDialog` 选档弹框
+- 🧭 **风险自适应三档流程**：`lean` / `standard` / `thorough` —— 小改走捷径、跨模块大改上完整流程；底层 tier 值同步重命名（原 `quick` / `full`）
+- 📋 **Spec 探索下沉到 SidePanel**：移除 TopBar OpenSpec 按钮，改为左侧 Spec 探索 tab；CTA、分组、选中态、双向跳转完整化
+- 🔍 **SpecDetailView 中央主视图**：归档 / 能力 详情用 markdown 渲染，反查的活跃 change 可点击跳工作流
+- 🎁 **欢迎页重写**：项目品牌（Spec/Forge 双着色）+ 能力卡片 + 操作指南 + Agent 选择
+
+### 改进 (Changed)
+
+- 工作流 prompts（explore / propose / review）按档位深度区分，去掉固定问题数
+- vite dev port 由 4173（Windows 保留段）改为 5180，规避 EACCES
+
+### 修复 (Fixed)
+
+- 修复 `welcome.intro.steps.items` 数组经 `t()` 返回字符串导致 v-for 逐字符渲染的问题（改用 `tm()`）
+- 修复 Quick 档实际 4 步但 UI 显示 "3 步" 的计数错误
+
+---
+
 ## [0.5.0] - 2026-07-02
 
 ### 修复 (Fixed)
