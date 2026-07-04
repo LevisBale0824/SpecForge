@@ -69,10 +69,13 @@ function onOpen(diff: NormalizedDiff) {
       v-for="diff in normalized"
       :key="diff.file"
       type="button"
-      class="file-item"
+      class="diff-item"
       :title="diff.file"
       @click="onOpen(diff)"
     >
+      <svg class="diff-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+        <path d="M16 3h5v5M8 3H3v5M21 16v5h-5M3 16v5h5M10 7l4 10M14 7l-4 10" />
+      </svg>
       <span class="file-basename">{{ basename(diff.file) }}</span>
       <span v-if="statusLabel(diff)" class="file-status">{{ statusLabel(diff) }}</span>
       <span class="file-stats">
@@ -83,11 +86,15 @@ function onOpen(diff: NormalizedDiff) {
     <div
       v-for="file in patchOnlyFiles"
       :key="`patch-${file}`"
-      class="file-item patch-only"
+      class="diff-item patch-only"
       :title="file"
     >
+      <svg class="diff-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+        <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" />
+        <path d="M14 2v4a2 2 0 0 0 2 2h4" />
+      </svg>
       <span class="file-basename">{{ basename(file) }}</span>
-      <span class="patch-waiting">等待 diff</span>
+      <span class="patch-waiting">Waiting</span>
     </div>
   </div>
   <div v-else class="diff-list-empty">No file changes</div>
@@ -97,91 +104,95 @@ function onOpen(diff: NormalizedDiff) {
 .diff-list {
   display: flex;
   flex-direction: column;
-  gap: 0.2rem;
+  gap: 3px;
 }
 
 .diff-list-empty {
   padding: 2rem 0.5rem;
   text-align: center;
   font-size: 12px;
-  color: var(--color-surface-500);
+  color: var(--color-surface-500, #64748b);
 }
 
-.file-item {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
+.diff-item {
   width: 100%;
-  padding: 0.4rem 0.5rem;
+  min-height: 32px;
+  display: grid;
+  grid-template-columns: 15px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 7px;
   border: 0;
-  border-radius: 5px;
+  border-radius: 9px;
   background: transparent;
-  /* surface-400 sits in the readable middle for both modes (bright grey on
-     dark, dark grey on light). */
-  color: var(--color-surface-400);
+  color: var(--color-surface-400, #94a3b8);
   font-size: 11px;
   text-align: left;
   cursor: pointer;
-  transition: background 0.12s;
+  font-family: inherit;
+  transition:
+    background-color 0.12s ease,
+    color 0.12s ease;
 }
 
-.file-item:hover {
-  background: color-mix(in srgb, var(--color-surface-800) 70%, transparent);
-  color: var(--color-surface-100);
+.diff-item:hover {
+  background: color-mix(in srgb, var(--color-surface-700, #334155) 22%, transparent);
+  color: var(--color-surface-100, #f1f5f9);
+}
+
+.diff-icon {
+  width: 15px;
+  height: 15px;
+  color: var(--color-surface-500, #64748b);
+  stroke-width: 1.8;
 }
 
 .file-basename {
-  flex: 1;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-family: var(--font-mono);
+  font-family: var(--font-mono, monospace);
 }
 
 .file-status {
-  flex: 0 0 auto;
-  padding: 0 0.3rem;
-  border-radius: 3px;
+  padding: 0 0.35rem;
+  border-radius: 999px;
   font-size: 9px;
-  font-weight: 700;
+  font-weight: 800;
   letter-spacing: 0.04em;
-  background: color-mix(in srgb, var(--color-accent-amber) 22%, transparent);
-  /* Mix toward surface-100 (the highest-contrast text token in either mode)
-     so the amber label stays readable on both dark and light backgrounds. */
-  color: color-mix(in srgb, var(--color-accent-amber) 65%, var(--color-surface-100));
+  background: color-mix(in srgb, var(--color-accent-amber, #f59e0b) 18%, transparent);
+  color: color-mix(in srgb, var(--color-accent-amber, #f59e0b) 68%, var(--color-surface-100));
 }
 
 .file-stats {
-  flex: 0 0 auto;
   display: flex;
-  gap: 0.3rem;
-  font-family: var(--font-mono);
+  gap: 5px;
+  font-family: var(--font-mono, monospace);
   font-size: 10px;
-  font-weight: 700;
+  font-weight: 800;
 }
 
 .stat-add {
-  color: color-mix(in srgb, var(--color-accent-emerald) 70%, var(--color-surface-100));
+  color: color-mix(in srgb, var(--color-accent-emerald, #10b981) 74%, var(--color-surface-100));
 }
 
 .stat-del {
-  color: color-mix(in srgb, var(--color-accent-rose) 75%, var(--color-surface-100));
+  color: color-mix(in srgb, var(--color-accent-rose, #f43f5e) 78%, var(--color-surface-100));
 }
 
 .patch-only {
   cursor: default;
-  opacity: 0.55;
+  opacity: 0.62;
 }
 
 .patch-only:hover {
   background: transparent;
-  color: var(--color-surface-400);
+  color: var(--color-surface-400, #94a3b8);
 }
 
 .patch-waiting {
-  flex: 0 0 auto;
   font-size: 10px;
-  color: var(--color-surface-500);
+  color: var(--color-surface-500, #64748b);
 }
 </style>

@@ -11,6 +11,8 @@ import ConsolePanel from "./components/ConsolePanel.vue";
 import DiffViewer from "./components/DiffViewer.vue";
 import FileViewer from "./components/FileViewer.vue";
 import OpenSpecPanel from "./components/openspec/OpenSpecPanel.vue";
+import SpecDetailView from "./components/openspec/SpecDetailView.vue";
+import TierPickerDialog from "./components/workflow/TierPickerDialog.vue";
 import UpdateToast from "./components/UpdateToast.vue";
 import UpdateDialog from "./components/UpdateDialog.vue";
 import { useRoute, useRouter } from "vue-router";
@@ -18,9 +20,12 @@ import { useFloatingWindows } from "./composables/useFloatingWindows";
 import { useProject } from "./composables/useProject";
 import { useBackend } from "./composables/useBackend";
 import { useOpenSpec } from "./composables/useOpenSpec";
+import { useWorkflow } from "./plugins/workflowPlugin";
 import { useResizable } from "./composables/useResizable";
 import { isElectron, onOpenFolder, selectDirectory } from "./utils/electronBridge";
 import type { MessageDiffEntry } from "./types/message";
+import type { SpecTarget } from "./types/openspec";
+import type { WorkflowTier } from "./types/workflow";
 
 const route = useRoute();
 const router = useRouter();
@@ -40,6 +45,8 @@ const showSettings = ref(false);
 const showHelp = ref(false);
 const showConsole = ref(false);
 const showOpenSpecDialog = ref(false);
+const specDetailTarget = ref<SpecTarget | null>(null);
+const showTierPicker = ref(false);
 const consoleHeight = ref(220);
 const consolePanelEl = ref<InstanceType<typeof ConsolePanel> | null>(null);
 const backend = useBackend();
@@ -83,6 +90,7 @@ watch(
 
 const project = useProject();
 const openspec = useOpenSpec();
+const wf = useWorkflow();
 let unsubOpenFolder: (() => void) | null = null;
 
 // On window focus / tab visibility: assume the user might have modified files
@@ -134,6 +142,7 @@ function onSelectSession(sessionId: string) {
   activeDiff.value = null;
   activeFilePath.value = null;
   showOpenSpecDialog.value = false;
+  specDetailTarget.value = null;
   backend.selectSession(sessionId);
   router.push({ name: "chat" });
 }
@@ -161,17 +170,49 @@ function onNewSession() {
   activeDiff.value = null;
   activeFilePath.value = null;
   showOpenSpecDialog.value = false;
+  specDetailTarget.value = null;
   backend.startNewSession();
   router.push({ name: "chat" });
 }
 
+function onOpenChat() {
+  activeDiff.value = null;
+  activeFilePath.value = null;
+  showOpenSpecDialog.value = false;
+  specDetailTarget.value = null;
+  router.push({ name: "chat" });
+}
+
+function onOpenWorkflow(changeId?: string) {
+  activeDiff.value = null;
+  activeFilePath.value = null;
+  showOpenSpecDialog.value = false;
+  specDetailTarget.value = null;
+  router.push({ name: "workflow", query: changeId ? { change: changeId } : {} });
+}
+
+function onOpenSpecDetail(target: SpecTarget) {
+  specDetailTarget.value = target;
+}
+
+function onPickTier(tier: WorkflowTier) {
+  showTierPicker.value = false;
+  specDetailTarget.value = null;
+  activeDiff.value = null;
+  activeFilePath.value = null;
+  wf.requestNewDraft(tier);
+  router.push({ name: "workflow" });
+}
+
 function onOpenDiff(diff: MessageDiffEntry) {
   showOpenSpecDialog.value = false;
+  specDetailTarget.value = null;
   activeDiff.value = diff;
 }
 
 function onOpenFile(path: string) {
   showOpenSpecDialog.value = false;
+  specDetailTarget.value = null;
   // Tab behavior: dedupe by path, push if new, always activate. Mirrors
   // VSCode-style behavior: clicking a file in the explorer opens or focuses a tab.
   if (!openFiles.value.includes(path)) {
@@ -252,11 +293,9 @@ function submitManualPath() {
     <!-- Top Bar -->
     <TopBar
       :console-active="showConsole"
-      :openspec-active="showOpenSpecDialog"
       @toggle-settings="showSettings = !showSettings"
       @toggle-help="showHelp = !showHelp"
       @toggle-console="toggleConsole"
-      @toggle-openspec="showOpenSpecDialog = !showOpenSpecDialog"
       @open-folder="handleOpenFolder"
     />
 
@@ -270,13 +309,18 @@ function submitManualPath() {
         :active-session-id="backend.selectedSessionId.value"
         :workspace-diffs="backend.workspaceDiffs.value"
         :status-of="backend.statusOf"
+        :spec-detail-target="specDetailTarget"
         @select-session="onSelectSession"
         @delete-session="onDeleteSession"
         @abort-session="onAbortSession"
         @new-session="onNewSession"
+        @open-chat="onOpenChat"
         @open-diff="onOpenDiff"
         @open-file="onOpenFile"
         @open-folder="handleOpenFolder"
+        @open-workflow="onOpenWorkflow"
+        @open-spec-detail="onOpenSpecDetail"
+        @open-tier-picker="showTierPicker = true"
         @refresh-files="onRefreshFiles"
       />
       <!-- Sidebar drag handle -->
@@ -291,7 +335,15 @@ function submitManualPath() {
 
       <!-- Center Content: chat OR diff comparison (mutually exclusive) -->
       <main class="flex-1 flex flex-col overflow-hidden min-w-0">
-        <template v-if="activeDiff">
+        <template v-if="specDetailTarget">
+          <SpecDetailView
+            :target="specDetailTarget"
+            @close="specDetailTarget = null"
+            @navigate="onOpenSpecDetail"
+            @open-workflow="onOpenWorkflow"
+          />
+        </template>
+        <template v-else-if="activeDiff">
           <div class="diff-toolbar">
             <span class="diff-toolbar-title" :title="activeDiff.file">
               {{ activeDiff.file }}
@@ -379,7 +431,9 @@ function submitManualPath() {
         </template>
         <template v-else>
           <router-view v-slot="{ Component }">
-            <component :is="Component" @navigate-session="onSelectSession" />
+            <keep-alive>
+              <component :is="Component" @navigate-session="onSelectSession" />
+            </keep-alive>
           </router-view>
           <InputPanel v-if="isChatRoute()" />
         </template>
@@ -407,6 +461,8 @@ function submitManualPath() {
     <UpdateToast />
     <!-- Auto-updater prompt dialog (available/progress/downloaded) -->
     <UpdateDialog />
+    <!-- 新建探索:档位选择对话框 -->
+    <TierPickerDialog :open="showTierPicker" @pick="onPickTier" @close="showTierPicker = false" />
     <!-- OpenSpec Dialog -->
     <Teleport to="body">
       <div v-if="showOpenSpecDialog" class="openspec-dialog-layer">

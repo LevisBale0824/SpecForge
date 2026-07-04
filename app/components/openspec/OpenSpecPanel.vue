@@ -798,6 +798,8 @@ function progressPct(stats: { progress: number }): number {
   padding-bottom: 24px;
 }
 
+/* (dialog-split 双栏样式已移除,改回单栏) */
+
 .change-item {
   border-radius: 4px;
 }

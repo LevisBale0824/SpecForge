@@ -29,6 +29,12 @@ contextBridge.exposeInMainWorld("electronAPI", {
   runOpenSpecValidate: (rootPath, changeId) =>
     ipcRenderer.invoke("runOpenSpecValidate", rootPath, changeId),
   initOpenSpec: (rootPath) => ipcRenderer.invoke("initOpenSpec", rootPath),
+  runProjectGate: (rootPath, command) =>
+    ipcRenderer.invoke("runProjectGate", rootPath, command),
+  writeChangeArtifact: (rootPath, changeId, filename, content) =>
+    ipcRenderer.invoke("writeChangeArtifact", rootPath, changeId, filename, content),
+  readChangeArtifact: (rootPath, changeId, filename) =>
+    ipcRenderer.invoke("readChangeArtifact", rootPath, changeId, filename),
   windowMinimize: () => ipcRenderer.invoke("window:minimize"),
   windowToggleMaximize: () => ipcRenderer.invoke("window:toggleMaximize"),
   windowClose: () => ipcRenderer.invoke("window:close"),

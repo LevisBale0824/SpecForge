@@ -12,4 +12,9 @@ export const routes: RouteRecordRaw[] = [
     component: () => import("../components/MessageViewer.vue"),
     props: true,
   },
+  {
+    path: "/workflow",
+    name: "workflow",
+    component: () => import("../components/workflow/WorkflowStudio.vue"),
+  },
 ];

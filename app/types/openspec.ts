@@ -198,6 +198,8 @@ export interface OpenSpecState {
   cliVersion?: string;
   /** 按 changeId 索引的最近一次校验结果;"_global" 表示全局 */
   validation: Record<string, OpenSpecValidationResult>;
+  /** 按 changeId 索引的多层 gate 证据汇总;"_global" 表示全局 */
+  evidence: Record<string, EvidenceFile>;
 }
 
 // ── IPC 返回类型 ────────────────────────────────────────────────────────
@@ -215,3 +217,60 @@ export interface OpenSpecWriteTasksResult {
   ok: boolean;
   reason?: string;
 }
+
+export type GateLayer = "spec" | "lint" | "test" | "build";
+
+export interface GateResult {
+  layer: GateLayer;
+  command: string;
+  /** 退出码;null = 未运行 / 跳过 / CLI 不可用 */
+  exitCode: number | null;
+  passed: boolean;
+  durationMs: number;
+  outputSnippet?: string;
+}
+
+export type GateVerdict = "READY" | "CONDITIONAL" | "NOT_READY";
+
+/** 写入 openspec/changes/<id>/evidence.json 的结构化证据 */
+export interface EvidenceFile {
+  changeId: string;
+  verdict: GateVerdict;
+  gates: GateResult[];
+  ranAt: number;
+}
+
+/** 通用项目命令执行结果(任意 shell 命令) */
+export interface ProjectGateResult {
+  command: string;
+  exitCode: number;
+  stdout: string;
+  stderr: string;
+  durationMs: number;
+}
+
+/** 写入 change 产物的结果 */
+export interface WriteArtifactResult {
+  ok: boolean;
+  reason?: string;
+}
+
+/** Execution Contract — propose 完成时生成,apply 前检查 */
+export interface ExecutionContract {
+  changeId: string;
+  need: string;
+  tier: string;
+  scope: ScopeBoundary;
+  verify: { command: string; description?: string }[];
+  risks: string[];
+  generatedAt: number;
+}
+
+export interface ScopeBoundary {
+  files: string[];
+  api?: string[];
+  modules?: string[];
+}
+
+// SidePanel → 详情窗口的导航目标
+export type SpecTarget = { kind: "capability"; name: string } | { kind: "archived"; id: string };

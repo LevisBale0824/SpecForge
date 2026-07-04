@@ -42,6 +42,12 @@ export type {
   OpenSpecReadStateResult,
   OpenSpecWriteTasksResult,
   OpenSpecValidationResult,
+  ProjectGateResult,
+  WriteArtifactResult,
+  GateResult,
+  EvidenceFile,
+  GateVerdict,
+  GateLayer,
 } from "./openspec";
 
 // ── Auto-updater IPC ────────────────────────────────────────────────────
@@ -107,6 +113,21 @@ export interface ElectronAPI {
   initOpenSpec: (
     rootPath: string,
   ) => Promise<{ ok: boolean; method?: "cli" | "manual"; reason?: string }>;
+  runProjectGate: (
+    rootPath: string,
+    command: string,
+  ) => Promise<import("./openspec").ProjectGateResult>;
+  writeChangeArtifact: (
+    rootPath: string,
+    changeId: string,
+    filename: string,
+    content: string,
+  ) => Promise<import("./openspec").WriteArtifactResult>;
+  readChangeArtifact: (
+    rootPath: string,
+    changeId: string,
+    filename: string,
+  ) => Promise<string | null>;
   /** 无边框标题栏:窗口控制 + 最大化状态变化事件 */
   windowMinimize: () => Promise<void>;
   windowToggleMaximize: () => Promise<boolean>;

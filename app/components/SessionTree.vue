@@ -24,7 +24,6 @@ const emit = defineEmits<{
   abort: [sessionId: string];
 }>();
 
-// Sort helper: pinned first, then by updated descending.
 function sortByDefault(list: SessionInfo[]): SessionInfo[] {
   return list.sort((a, b) => {
     if (a.time.pinned && !b.time.pinned) return -1;
@@ -33,27 +32,23 @@ function sortByDefault(list: SessionInfo[]): SessionInfo[] {
   });
 }
 
-// Cap the rendered list so a backlog of hundreds of historical sessions
-// doesn't tank DOM performance. Sorted by recency first (sortByDefault),
-// then sliced — older sessions stay in storage / backend, just not rendered.
 const MAX_ROOT_SESSIONS = 100;
 
-// Root sessions: no parentID.
 const rootSessions = computed(() =>
-  sortByDefault([...props.sessions].filter((s) => !s.parentID)).slice(0, MAX_ROOT_SESSIONS),
+  sortByDefault([...props.sessions].filter((session) => !session.parentID)).slice(
+    0,
+    MAX_ROOT_SESSIONS,
+  ),
 );
 
-// Children grouped by parentID (only one level).
 const childrenByParent = computed(() => {
   const map = new Map<string, SessionInfo[]>();
-  const parentIds = new Set(props.sessions.map((s) => s.id));
-  for (const s of props.sessions) {
-    if (!s.parentID) continue;
-    // Orphan: parent not loaded yet. Skip here, handled separately.
-    if (!parentIds.has(s.parentID)) continue;
-    const arr = map.get(s.parentID) ?? [];
-    arr.push(s);
-    map.set(s.parentID, arr);
+  const parentIds = new Set(props.sessions.map((session) => session.id));
+  for (const session of props.sessions) {
+    if (!session.parentID || !parentIds.has(session.parentID)) continue;
+    const arr = map.get(session.parentID) ?? [];
+    arr.push(session);
+    map.set(session.parentID, arr);
   }
   for (const arr of map.values()) {
     arr.sort((a, b) => (b.time.updated ?? 0) - (a.time.updated ?? 0));
@@ -61,17 +56,15 @@ const childrenByParent = computed(() => {
   return map;
 });
 
-// Orphan children: have parentID but parent session not in the list.
 const orphanSessions = computed(() =>
   sortByDefault(
-    props.sessions.filter((s) => s.parentID && !props.sessions.some((p) => p.id === s.parentID)),
+    props.sessions.filter(
+      (session) =>
+        session.parentID && !props.sessions.some((parent) => parent.id === session.parentID),
+    ),
   ),
 );
 
-// Expanded parent ids. Default empty = all collapsed. Most users don't need
-// to see sub-agent sessions every time they open the sidebar — the children
-// badge already tells them how many there are. Opt-in expansion via the
-// toggle button keeps the list scannable.
 const expandedParents = ref(new Set<string>());
 
 function toggleCollapse(parentId: string) {
@@ -85,14 +78,11 @@ function isExpanded(parentId: string): boolean {
   return expandedParents.value.has(parentId);
 }
 
-// Auto-expand the parent when activating one of its children, so the active
-// sub-agent stays visible in the sidebar instead of being hidden by the
-// default-collapsed state.
 watch(
   () => props.activeSessionId,
   (newId) => {
     if (!newId) return;
-    const child = props.sessions.find((s) => s.id === newId);
+    const child = props.sessions.find((session) => session.id === newId);
     if (child?.parentID && !expandedParents.value.has(child.parentID)) {
       const next = new Set(expandedParents.value);
       next.add(child.parentID);
@@ -107,17 +97,10 @@ function childrenOf(sessionId: string): SessionInfo[] {
 
 function formatTime(timestamp?: number): string {
   if (!timestamp) return "";
-  // Tolerate both second and millisecond precision. The opencode server has
-  // been observed sending ms values on some endpoints; treating those as
-  // seconds (the historical convention) pushes the date into the far future,
-  // makes `diffMs` hugely negative, and every session renders as "just now".
-  // 1e12 ≈ year 2001 in ms / year 33658 in seconds — a clean threshold.
   const ms = timestamp > 1e12 ? timestamp : timestamp * 1000;
   const date = new Date(ms);
   const now = new Date();
   const diffMs = now.getTime() - date.getTime();
-  // Negative diff (future timestamp) usually means clock skew or a unit
-  // detection miss; fall through to "just now" rather than a negative age.
   if (diffMs < 60000) return t("sidebar.justNow");
   const diffMins = Math.floor(diffMs / 60000);
   if (diffMins < 60) return `${diffMins}m`;
@@ -140,245 +123,374 @@ function statusIcon(session: SessionInfo): string {
 </script>
 
 <template>
-  <div class="space-y-0.5">
+  <div class="session-tree">
     <template v-for="session in rootSessions" :key="session.id">
-      <!-- Root session row -->
-      <button
-        class="w-full text-left px-2.5 py-2 rounded text-sm transition-colors group"
-        :class="
-          activeSessionId === session.id
-            ? 'bg-accent-cyan/10 text-surface-100'
-            : 'text-surface-400 hover:bg-surface-800 hover:text-surface-200'
-        "
+      <div
+        role="button"
+        tabindex="0"
+        class="session-row"
+        :class="{ active: activeSessionId === session.id }"
         @click="emit('select', session.id)"
+        @keydown.enter.space.prevent="emit('select', session.id)"
       >
-        <div class="flex items-center gap-1.5">
-          <!-- Collapse toggle (only when has children) -->
+        <button
+          v-if="childrenOf(session.id).length > 0"
+          type="button"
+          class="session-disclosure"
+          :class="{ expanded: isExpanded(session.id) }"
+          :title="isExpanded(session.id) ? t('sidebar.collapse') : t('sidebar.expand')"
+          @click.stop="toggleCollapse(session.id)"
+        >
+          <svg viewBox="0 0 20 20" fill="currentColor">
+            <path
+              clip-rule="evenodd"
+              fill-rule="evenodd"
+              d="M7.21 14.77a.75.75 0 0 1 .02-1.06L11.168 10 7.23 6.29a.75.75 0 1 1 1.04-1.08l4.5 4.25a.75.75 0 0 1 0 1.08l-4.5 4.25a.75.75 0 0 1-1.06-.02z"
+            />
+          </svg>
+        </button>
+        <span
+          v-else
+          class="session-dot"
+          :class="{
+            busy: isBusy(session.id),
+            pinned: !isBusy(session.id) && statusIcon(session) === 'pinned',
+            archived: !isBusy(session.id) && statusIcon(session) === 'archived',
+          }"
+        />
+
+        <span class="session-title">{{ session.title || session.id.slice(0, 8) }}</span>
+
+        <span v-if="childrenOf(session.id).length > 0" class="child-count">
+          {{ childrenOf(session.id).length }}
+        </span>
+        <span class="session-time">{{ formatTime(session.time.updated) }}</span>
+
+        <button
+          v-if="isBusy(session.id)"
+          type="button"
+          class="row-action danger"
+          :title="t('sidebar.abortSession')"
+          @click.stop="emit('abort', session.id)"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+            <path d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+
+        <button
+          type="button"
+          class="row-action danger"
+          :title="t('sidebar.deleteSession')"
+          @click.stop="emit('delete', session.id)"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+            <path
+              d="M19 7l-.867 12.142A2 2 0 0 1 16.138 21H7.862a2 2 0 0 1-1.995-1.858L5 7m5 4v6m4-6v6M1 7h22M9 7V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v3"
+            />
+          </svg>
+        </button>
+      </div>
+
+      <div
+        v-if="isExpanded(session.id) && childrenOf(session.id).length > 0"
+        class="subthread-list"
+      >
+        <div
+          v-for="child in childrenOf(session.id)"
+          :key="child.id"
+          role="button"
+          tabindex="0"
+          class="subthread-row"
+          :class="{ active: activeSessionId === child.id }"
+          @click="emit('select', child.id)"
+          @keydown.enter.space.prevent="emit('select', child.id)"
+        >
+          <span class="session-dot subagent" :class="{ busy: isBusy(child.id) }" />
+          <span class="session-title">{{ child.title || child.id.slice(0, 8) }}</span>
+          <span class="session-time">{{ formatTime(child.time.updated) }}</span>
+
           <button
-            v-if="childrenOf(session.id).length > 0"
-            class="flex-shrink-0 w-3 h-3 flex items-center justify-center text-surface-500 hover:text-surface-200 transition-colors"
-            :title="isExpanded(session.id) ? t('sidebar.collapse') : t('sidebar.expand')"
-            @click.stop="toggleCollapse(session.id)"
-          >
-            <svg
-              class="w-2.5 h-2.5 transition-transform"
-              :class="isExpanded(session.id) ? 'rotate-90' : ''"
-              fill="currentColor"
-              viewBox="0 0 20 20"
-            >
-              <path
-                clip-rule="evenodd"
-                fill-rule="evenodd"
-                d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z"
-              />
-            </svg>
-          </button>
-          <!-- Status dot: busy pulse > pinned/archived > empty placeholder -->
-          <span
-            v-if="isBusy(session.id)"
-            class="w-1.5 h-1.5 rounded-full bg-accent-emerald animate-pulse flex-shrink-0"
-          />
-          <span
-            v-else-if="childrenOf(session.id).length === 0 && statusIcon(session)"
-            class="w-1.5 h-1.5 rounded-full flex-shrink-0"
-            :class="statusIcon(session) === 'pinned' ? 'bg-accent-amber' : 'bg-surface-600'"
-          />
-          <span v-else-if="childrenOf(session.id).length === 0" class="w-1.5 h-1.5 flex-shrink-0" />
-
-          <!-- Title -->
-          <span class="truncate flex-1">
-            {{ session.title || session.id.slice(0, 8) }}
-          </span>
-
-          <!-- Children count badge -->
-          <span
-            v-if="childrenOf(session.id).length > 0"
-            class="text-xs text-surface-500 bg-surface-800 rounded px-1.5 leading-tight"
-          >
-            {{ childrenOf(session.id).length }}
-          </span>
-
-          <!-- Time -->
-          <span
-            class="text-xs text-surface-600 opacity-0 group-hover:opacity-100 transition-opacity"
-          >
-            {{ formatTime(session.time.updated) }}
-          </span>
-
-          <!-- Abort button (only when busy) -->
-          <button
-            v-if="isBusy(session.id)"
-            class="opacity-0 group-hover:opacity-100 flex-shrink-0 p-0.5 rounded hover:bg-accent-rose/20 hover:text-accent-rose text-surface-500 transition-all"
+            v-if="isBusy(child.id)"
+            type="button"
+            class="row-action danger"
             :title="t('sidebar.abortSession')"
-            @click.stop="emit('abort', session.id)"
+            @click.stop="emit('abort', child.id)"
           >
-            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M6 18L18 6M6 6l12 12"
-              />
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+              <path d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
 
-          <!-- Delete button -->
           <button
-            class="opacity-0 group-hover:opacity-100 flex-shrink-0 p-0.5 rounded hover:bg-accent-rose/20 hover:text-accent-rose text-surface-500 transition-all"
+            type="button"
+            class="row-action danger"
             :title="t('sidebar.deleteSession')"
-            @click.stop="emit('delete', session.id)"
+            @click.stop="emit('delete', child.id)"
           >
-            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
               <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M1 7h22M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3"
+                d="M19 7l-.867 12.142A2 2 0 0 1 16.138 21H7.862a2 2 0 0 1-1.995-1.858L5 7m5 4v6m4-6v6M1 7h22M9 7V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v3"
               />
             </svg>
           </button>
         </div>
-      </button>
-
-      <!-- Children list (one level deep) -->
-      <div
-        v-if="isExpanded(session.id) && childrenOf(session.id).length > 0"
-        class="mt-0.5 space-y-0.5"
-      >
-        <button
-          v-for="child in childrenOf(session.id)"
-          :key="child.id"
-          class="w-full text-left pl-7 pr-2.5 py-1.5 rounded text-sm transition-colors group"
-          :class="
-            activeSessionId === child.id
-              ? 'bg-accent-cyan/10 text-surface-100'
-              : 'text-surface-500 hover:bg-surface-800 hover:text-surface-300'
-          "
-          @click="emit('select', child.id)"
-        >
-          <div class="flex items-center gap-1.5">
-            <!-- Subagent dot: busy pulse overrides the idle indigo dot -->
-            <span
-              v-if="isBusy(child.id)"
-              class="w-1.5 h-1.5 rounded-full bg-accent-emerald animate-pulse flex-shrink-0"
-            />
-            <span v-else class="w-1.5 h-1.5 rounded-full bg-accent-indigo/70 flex-shrink-0" />
-
-            <!-- Title -->
-            <span class="truncate flex-1 text-[13px]">
-              {{ child.title || child.id.slice(0, 8) }}
-            </span>
-
-            <!-- Time -->
-            <span
-              class="text-xs text-surface-600 opacity-0 group-hover:opacity-100 transition-opacity"
-            >
-              {{ formatTime(child.time.updated) }}
-            </span>
-
-            <!-- Abort button (only when busy) -->
-            <button
-              v-if="isBusy(child.id)"
-              class="opacity-0 group-hover:opacity-100 flex-shrink-0 p-0.5 rounded hover:bg-accent-rose/20 hover:text-accent-rose text-surface-500 transition-all"
-              :title="t('sidebar.abortSession')"
-              @click.stop="emit('abort', child.id)"
-            >
-              <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M6 18L18 6M6 6l12 12"
-                />
-              </svg>
-            </button>
-
-            <!-- Delete button -->
-            <button
-              class="opacity-0 group-hover:opacity-100 flex-shrink-0 p-0.5 rounded hover:bg-accent-rose/20 hover:text-accent-rose text-surface-500 transition-all"
-              :title="t('sidebar.deleteSession')"
-              @click.stop="emit('delete', child.id)"
-            >
-              <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M1 7h22M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3"
-                />
-              </svg>
-            </button>
-          </div>
-        </button>
       </div>
     </template>
 
-    <!-- Orphan sessions (parent not loaded) -->
-    <button
+    <div
       v-for="session in orphanSessions"
       :key="session.id"
-      class="w-full text-left px-2.5 py-2 rounded text-sm transition-colors group"
-      :class="
-        activeSessionId === session.id
-          ? 'bg-accent-cyan/10 text-surface-100'
-          : 'text-surface-400 hover:bg-surface-800 hover:text-surface-200'
-      "
+      role="button"
+      tabindex="0"
+      class="session-row"
+      :class="{ active: activeSessionId === session.id }"
       @click="emit('select', session.id)"
+      @keydown.enter.space.prevent="emit('select', session.id)"
     >
-      <div class="flex items-center gap-1.5">
-        <span
-          v-if="isBusy(session.id)"
-          class="w-1.5 h-1.5 rounded-full bg-accent-emerald animate-pulse flex-shrink-0"
-        />
-        <span
-          v-else-if="statusIcon(session)"
-          class="w-1.5 h-1.5 rounded-full flex-shrink-0"
-          :class="statusIcon(session) === 'pinned' ? 'bg-accent-amber' : 'bg-surface-600'"
-        />
-        <span v-else class="w-1.5 h-1.5 flex-shrink-0" />
-        <span class="truncate flex-1">
-          {{ session.title || session.id.slice(0, 8) }}
-        </span>
-        <span class="text-xs text-surface-600 opacity-0 group-hover:opacity-100 transition-opacity">
-          {{ formatTime(session.time.updated) }}
-        </span>
-        <button
-          v-if="isBusy(session.id)"
-          class="opacity-0 group-hover:opacity-100 flex-shrink-0 p-0.5 rounded hover:bg-accent-rose/20 hover:text-accent-rose text-surface-500 transition-all"
-          :title="t('sidebar.abortSession')"
-          @click.stop="emit('abort', session.id)"
-        >
-          <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M6 18L18 6M6 6l12 12"
-            />
-          </svg>
-        </button>
-        <button
-          class="opacity-0 group-hover:opacity-100 flex-shrink-0 p-0.5 rounded hover:bg-accent-rose/20 hover:text-accent-rose text-surface-500 transition-all"
-          :title="t('sidebar.deleteSession')"
-          @click.stop="emit('delete', session.id)"
-        >
-          <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M1 7h22M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3"
-            />
-          </svg>
-        </button>
-      </div>
-    </button>
+      <span
+        class="session-dot"
+        :class="{
+          busy: isBusy(session.id),
+          pinned: !isBusy(session.id) && statusIcon(session) === 'pinned',
+          archived: !isBusy(session.id) && statusIcon(session) === 'archived',
+        }"
+      />
+      <span class="session-title">{{ session.title || session.id.slice(0, 8) }}</span>
+      <span class="session-time">{{ formatTime(session.time.updated) }}</span>
+      <button
+        v-if="isBusy(session.id)"
+        type="button"
+        class="row-action danger"
+        :title="t('sidebar.abortSession')"
+        @click.stop="emit('abort', session.id)"
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+          <path d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      </button>
+      <button
+        type="button"
+        class="row-action danger"
+        :title="t('sidebar.deleteSession')"
+        @click.stop="emit('delete', session.id)"
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+          <path
+            d="M19 7l-.867 12.142A2 2 0 0 1 16.138 21H7.862a2 2 0 0 1-1.995-1.858L5 7m5 4v6m4-6v6M1 7h22M9 7V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v3"
+          />
+        </svg>
+      </button>
+    </div>
 
-    <div
-      v-if="rootSessions.length === 0 && orphanSessions.length === 0"
-      class="text-center py-8 text-surface-600 text-sm"
-    >
+    <div v-if="rootSessions.length === 0 && orphanSessions.length === 0" class="session-empty">
       {{ t("sidebar.noSessions") }}
     </div>
   </div>
 </template>
+
+<style scoped>
+.session-tree {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.session-row,
+.subthread-row {
+  position: relative;
+  width: 100%;
+  min-height: 42px;
+  display: grid;
+  grid-template-columns: 14px minmax(0, 1fr) auto auto auto;
+  align-items: center;
+  column-gap: 8px;
+  padding: 7px 8px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--color-surface-400, #94a3b8);
+  text-align: left;
+  cursor: pointer;
+  font-family: inherit;
+  transition:
+    background-color 0.12s ease,
+    border-color 0.12s ease,
+    color 0.12s ease;
+}
+
+.session-row:hover,
+.subthread-row:hover {
+  background: color-mix(in srgb, var(--color-surface-700, #334155) 22%, transparent);
+  color: var(--color-surface-100, #f1f5f9);
+}
+
+.session-row.active,
+.subthread-row.active {
+  background:
+    linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--color-accent-cyan, #06b6d4) 18%, transparent),
+      color-mix(in srgb, var(--color-accent-indigo, #6366f1) 8%, transparent)
+    ),
+    color-mix(in srgb, var(--color-accent-cyan, #06b6d4) 4%, transparent);
+  border-color: color-mix(in srgb, var(--color-accent-cyan, #06b6d4) 21%, transparent);
+  color: var(--color-surface-100, #f1f5f9);
+}
+
+.session-row.active::before,
+.subthread-row.active::before {
+  content: "";
+  position: absolute;
+  left: -1px;
+  top: 9px;
+  bottom: 9px;
+  width: 3px;
+  border-radius: 999px;
+  background: var(--color-accent-cyan, #06b6d4);
+  box-shadow: 0 0 14px color-mix(in srgb, var(--color-accent-cyan, #06b6d4) 58%, transparent);
+}
+
+.session-disclosure {
+  width: 14px;
+  height: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-surface-500, #64748b);
+  cursor: pointer;
+}
+
+.session-disclosure svg {
+  width: 12px;
+  height: 12px;
+  transition: transform 0.12s ease;
+}
+
+.session-disclosure.expanded svg {
+  transform: rotate(90deg);
+}
+
+.session-dot {
+  width: 7px;
+  height: 7px;
+  justify-self: center;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-surface-500, #64748b) 55%, transparent);
+}
+
+.session-dot.busy {
+  background: var(--color-accent-emerald, #10b981);
+  box-shadow: 0 0 11px color-mix(in srgb, var(--color-accent-emerald, #10b981) 70%, transparent);
+}
+
+.session-dot.pinned {
+  background: var(--color-accent-amber, #f59e0b);
+}
+
+.session-dot.archived {
+  background: var(--color-surface-600, #475569);
+}
+
+.session-dot.subagent {
+  background: color-mix(in srgb, var(--color-accent-indigo, #6366f1) 70%, transparent);
+}
+
+.session-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  line-height: 1.25;
+}
+
+.session-time {
+  color: var(--color-surface-600, #475569);
+  font-size: 11px;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+.session-row:hover .session-time,
+.subthread-row:hover .session-time,
+.session-row.active .session-time,
+.subthread-row.active .session-time {
+  opacity: 1;
+}
+
+.child-count {
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-accent-indigo, #6366f1) 15%, transparent);
+  color: color-mix(in srgb, var(--color-accent-indigo, #6366f1) 72%, var(--color-surface-100));
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.row-action {
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--color-surface-500, #64748b);
+  cursor: pointer;
+  opacity: 0;
+  transition:
+    opacity 0.12s ease,
+    background-color 0.12s ease,
+    color 0.12s ease;
+}
+
+.session-row:hover .row-action,
+.subthread-row:hover .row-action {
+  opacity: 1;
+}
+
+.row-action svg {
+  width: 12px;
+  height: 12px;
+  stroke-width: 2;
+}
+
+.row-action.danger:hover {
+  background: color-mix(in srgb, var(--color-accent-rose, #f43f5e) 17%, transparent);
+  color: var(--color-accent-rose, #f43f5e);
+}
+
+.subthread-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 1px 0 1px 22px;
+  padding-left: 8px;
+  border-left: 1px solid color-mix(in srgb, var(--color-surface-600, #475569) 28%, transparent);
+}
+
+.subthread-row {
+  min-height: 34px;
+  grid-template-columns: 7px minmax(0, 1fr) auto auto auto;
+  padding: 6px 8px;
+  border-radius: 0 10px 10px 0;
+  color: var(--color-surface-500, #64748b);
+}
+
+.subthread-row .session-title {
+  font-size: 12px;
+}
+
+.session-empty {
+  padding: 28px 8px;
+  text-align: center;
+  color: var(--color-surface-600, #475569);
+  font-size: 13px;
+}
+</style>
