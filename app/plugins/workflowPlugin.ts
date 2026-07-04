@@ -24,6 +24,11 @@ import { ref } from "vue";
 
 const workflowState = ref<WorkflowState>(createDefaultWorkflowState());
 const workflowEnabled = ref(false);
+/** 由外部(如 TierPickerDialog)请求创建新探索;WorkflowStudio 监听后执行 pick */
+const pendingNewDraftTier = ref<WorkflowTier | null>(null);
+function requestNewDraft(tier: WorkflowTier) {
+  pendingNewDraftTier.value = tier;
+}
 
 function ensureStep(step: StepName): StepState {
   const steps = workflowState.value.steps;
@@ -110,6 +115,8 @@ export const workflowPlugin: OpenSpecPlugin = {
     app.config.globalProperties.$workflow = {
       state: workflowState,
       enabled: workflowEnabled,
+      pendingNewDraftTier,
+      requestNewDraft,
       setActiveStep,
       setStepPhase,
       setTier,
@@ -129,6 +136,8 @@ export function useWorkflow() {
   return {
     state: workflowState,
     enabled: workflowEnabled,
+    pendingNewDraftTier,
+    requestNewDraft,
     setActiveStep,
     setStepPhase,
     setTier,

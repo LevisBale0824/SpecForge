@@ -50,6 +50,7 @@ const emit = defineEmits<{
   "open-chat": [];
   "open-workflow": [changeId?: string];
   "open-spec-detail": [target: SpecTarget];
+  "open-tier-picker": [];
   "refresh-files": [];
 }>();
 
@@ -88,6 +89,10 @@ const rootSessionCount = computed(
 
 function openWorkflow(changeId?: string) {
   emit("open-workflow", changeId);
+}
+
+function openTierPicker() {
+  emit("open-tier-picker");
 }
 
 // spec 详情请求:点击 capability / archived 时通知父组件打开详情窗口
@@ -262,7 +267,7 @@ function handleOpenDiff(diff: MessageDiffEntry) {
                   type="button"
                   class="header-icon-button accent-violet"
                   title="新建探索"
-                  @click="openWorkflow()"
+                  @click="openTierPicker"
                 >
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
                     <path d="M12 5v14M5 12h14" />
@@ -278,7 +283,7 @@ function handleOpenDiff(diff: MessageDiffEntry) {
                 class="spec-section"
               >
                 <div class="spec-group-label"><span>探索中</span></div>
-                <div class="spec-item ongoing" @click="openWorkflow()">
+                <div class="spec-item ongoing" @click="openTierPicker">
                   <span class="spec-marker violet">◆</span>
                   <span class="spec-id">{{ displayWorkflowTitle }}</span>
                 </div>
@@ -354,7 +359,7 @@ function handleOpenDiff(diff: MessageDiffEntry) {
                 "
                 class="spec-empty"
               >
-                <button type="button" class="spec-empty-cta" @click="openWorkflow()">
+                <button type="button" class="spec-empty-cta" @click="openTierPicker">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
                     <path d="M12 5v14M5 12h14" />
                   </svg>

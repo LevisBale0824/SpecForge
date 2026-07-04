@@ -10,6 +10,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   close: [];
+  navigate: [target: SpecTarget];
 }>();
 
 const openspec = useOpenSpec();
@@ -38,6 +39,27 @@ const purposeHtml = computed(() => {
 
 function reqTextHtml(text: string): string {
   return text ? renderMarkdown(text) : "";
+}
+
+// capability 反查:哪些 change(活跃 + 归档)引用了此 capability
+const referencingChanges = computed(() => {
+  const t = props.target;
+  if (t.kind !== "capability") return [];
+  const name = t.name;
+  const active = openspec.state.activeChanges
+    .filter((c) => c.deltaSpecs?.some((d) => d.capability === name))
+    .map((c) => ({ id: c.id, archived: false, archivedAt: undefined as string | undefined }));
+  const archived = openspec.state.archivedChanges
+    .filter((c) => c.deltaSpecs?.some((d) => d.capability === name))
+    .map((c) => ({ id: c.id, archived: true, archivedAt: c.archivedAt }));
+  return [...active, ...archived];
+});
+
+function gotoCapability(name: string) {
+  emit("navigate", { kind: "capability", name });
+}
+function gotoArchived(id: string) {
+  emit("navigate", { kind: "archived", id });
 }
 </script>
 
@@ -109,6 +131,32 @@ function reqTextHtml(text: string): string {
           </ul>
         </section>
         <div v-if="!capability.hasSpec" class="empty-state">spec.md 缺失</div>
+
+        <!-- 反查:哪些 change 引用了此 capability -->
+        <section v-if="referencingChanges.length" class="md-block">
+          <div class="md-block-title">
+            Referenced by
+            <span class="count-pill">{{ referencingChanges.length }}</span>
+          </div>
+          <ul class="cap-list">
+            <li
+              v-for="ref in referencingChanges"
+              :key="ref.id"
+              class="clickable"
+              @click="ref.archived ? gotoArchived(ref.id) : null"
+              :class="{ disabled: !ref.archived }"
+              :title="ref.archived ? '查看归档详情' : '活跃 change,进工作流查看'"
+            >
+              <span class="delta-op" :class="{ amber: ref.archived, emerald: !ref.archived }">
+                {{ ref.archived ? "✓" : "●" }}
+              </span>
+              <span class="cap-name">{{ ref.id }}</span>
+              <span v-if="ref.archivedAt" class="cap-meta">{{ ref.archivedAt }}</span>
+              <span v-else class="cap-meta">active</span>
+              <span v-if="ref.archived" class="nav-arrow">→</span>
+            </li>
+          </ul>
+        </section>
       </template>
 
       <!-- ═══ Archived 详情 ═══ -->
@@ -135,12 +183,18 @@ function reqTextHtml(text: string): string {
         <section v-if="archived.deltaSpecs?.length" class="md-block">
           <div class="md-block-title">Affected capabilities</div>
           <ul class="cap-list">
-            <li v-for="d in archived.deltaSpecs" :key="d.capability">
+            <li
+              v-for="d in archived.deltaSpecs"
+              :key="d.capability"
+              class="clickable"
+              @click="gotoCapability(d.capability)"
+            >
               <span class="delta-op">∆</span>
               <span class="cap-name">{{ d.capability }}</span>
               <span v-if="d.requirements?.length" class="cap-meta">
                 {{ d.requirements.length }} reqs
               </span>
+              <span class="nav-arrow">→</span>
             </li>
           </ul>
         </section>
@@ -553,6 +607,58 @@ function reqTextHtml(text: string): string {
   border-radius: 9px;
   background: color-mix(in srgb, var(--color-surface-800, #1e293b) 40%, transparent);
   border: 1px solid color-mix(in srgb, var(--color-surface-700, #334155) 22%, transparent);
+}
+
+.cap-list li.clickable {
+  cursor: pointer;
+  transition:
+    border-color 0.12s ease,
+    background 0.12s ease,
+    transform 0.12s ease;
+}
+
+.cap-list li.clickable:hover {
+  background: color-mix(in srgb, var(--color-accent-violet, #a78bfa) 12%, transparent);
+  border-color: color-mix(in srgb, var(--color-accent-violet, #a78bfa) 32%, transparent);
+}
+
+.cap-list li.clickable:hover .nav-arrow {
+  transform: translateX(3px);
+  color: var(--color-accent-violet, #a78bfa);
+}
+
+.cap-list li.disabled {
+  cursor: default;
+}
+
+.cap-list li.disabled:hover {
+  background: color-mix(in srgb, var(--color-surface-800, #1e293b) 40%, transparent);
+  border-color: color-mix(in srgb, var(--color-surface-700, #334155) 22%, transparent);
+}
+
+.cap-list li.disabled .nav-arrow {
+  display: none;
+}
+
+.nav-arrow {
+  flex: 0 0 auto;
+  margin-left: auto;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--color-surface-500, #64748b);
+  transition:
+    transform 0.12s ease,
+    color 0.12s ease;
+}
+
+.delta-op.emerald {
+  background: color-mix(in srgb, var(--color-accent-emerald, #34d399) 18%, transparent);
+  color: var(--color-accent-emerald, #34d399);
+}
+
+.delta-op.amber {
+  background: color-mix(in srgb, var(--color-accent-amber, #f59e0b) 18%, transparent);
+  color: var(--color-accent-amber, #f59e0b);
 }
 
 .cap-name {

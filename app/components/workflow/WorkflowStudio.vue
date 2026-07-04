@@ -47,19 +47,7 @@ const HINTS: Record<StepName, string> = {
   review: "只读审查 spec 合规与质量",
   archive: "归档前 evidence gate 检查",
 };
-const TIERS: Array<{ id: WorkflowTier; name: string; steps: string; fit: string; skip: string }> = [
-  {
-    id: "quick",
-    name: "Quick",
-    steps: "4 步",
-    fit: "小需求",
-    skip: "跳过 Explore · Plan · Review",
-  },
-  { id: "standard", name: "Standard", steps: "5 步", fit: "单模块", skip: "跳过 Plan · Review" },
-  { id: "full", name: "Full", steps: "7 步", fit: "跨模块", skip: "不跳过任何阶段" },
-];
 
-const view = ref<"select" | "wf">(wf.enabled.value ? "wf" : "select");
 const need = ref("");
 const gating = ref(false);
 const archiving = ref(false);
@@ -100,13 +88,6 @@ const stageInteracted = computed(
   () => messages.value.length > 0 || injected.value[cur.value] === true,
 );
 const canAdvance = computed(() => !isLast.value && stageInteracted.value);
-const hasStartedWorkflow = computed(
-  () =>
-    Boolean(wf.state.value.label?.trim()) ||
-    messages.value.length > 0 ||
-    Object.values(injected.value).some(Boolean) ||
-    Boolean(changeId.value),
-);
 const displayTitle = computed(() => {
   if (changeId.value) return changeId.value;
   if (need.value.trim()) return need.value.slice(0, 30);
@@ -177,14 +158,8 @@ function tierForChange(stage: StepName): WorkflowTier {
 }
 
 function openSelectedChange() {
-  if (!requestedChangeId.value) {
-    if (wf.enabled.value) view.value = "wf";
-    return;
-  }
-  if (!changeId.value) {
-    if (wf.enabled.value) view.value = "wf";
-    return;
-  }
+  if (!requestedChangeId.value) return;
+  if (!changeId.value) return;
   wf.enable();
   const inferredStage = stageForChange();
   const nextTier = tierForChange(inferredStage);
@@ -192,12 +167,22 @@ function openSelectedChange() {
   wf.setTier(nextTier);
   wf.setActiveStep(nextStages.includes(inferredStage) ? inferredStage : nextStages[0]);
   wf.state.value.label = changeId.value;
-  view.value = "wf";
   creatingDraftChange.value = false;
 }
 
 onMounted(openSelectedChange);
 onActivated(openSelectedChange);
+// 外部请求新建草稿(TierPickerDialog 触发)→ 执行 pick 并消费标记
+watch(
+  () => wf.pendingNewDraftTier.value,
+  (tier) => {
+    if (tier) {
+      pick(tier);
+      wf.pendingNewDraftTier.value = null;
+    }
+  },
+  { immediate: true },
+);
 watch(
   () => [
     requestedChangeId.value,
@@ -254,14 +239,6 @@ function stageState(i: number): "done" | "current" | "locked" {
 function canOpenStage(i: number): boolean {
   return i <= activeIdx.value;
 }
-function tierDots(t: WorkflowTier): number {
-  return stagesForTier(t).length;
-}
-function tierFlow(t: WorkflowTier): string {
-  return stagesForTier(t)
-    .map((s) => LABELS[s])
-    .join(" → ");
-}
 
 function pick(t: WorkflowTier) {
   if (route.query.change) {
@@ -271,24 +248,11 @@ function pick(t: WorkflowTier) {
   creatingDraftChange.value = true;
   wf.setTier(t);
   wf.enable();
-  view.value = "wf";
   injected.value = {};
   wf.state.value.label = "";
   need.value = "";
   draftMsg.value = "";
   contract.value = undefined;
-}
-function backToSelect() {
-  if (!hasStartedWorkflow.value) {
-    wf.disable();
-    injected.value = {};
-    need.value = "";
-    draftMsg.value = "";
-  }
-  view.value = "select";
-  if (route.query.change) {
-    router.replace({ name: "workflow" });
-  }
 }
 function gotoStage(s: StepName) {
   const idx = stages.value.indexOf(s);
@@ -411,32 +375,8 @@ function verdictColor(v: string): string {
 
 <template>
   <div class="wf-page">
-    <!-- 选档屏 -->
-    <div v-if="view === 'select'" class="select-pane">
-      <h2>这次改动有多大？</h2>
-      <p>不同档位走不同流程长度 — 展开看清区别再选</p>
-      <div class="sel-cards">
-        <button
-          v-for="t in TIERS"
-          :key="t.id"
-          class="sel-card"
-          :data-tier="t.id"
-          @click="pick(t.id)"
-        >
-          <div class="sel-row1">
-            <span class="sel-name">{{ t.name }}</span>
-            <span class="sel-steps">{{ t.steps }}</span>
-            <span class="sel-fit-tag">{{ t.fit }}</span>
-          </div>
-          <div class="sel-dots"><i v-for="n in tierDots(t.id)" :key="n" class="sel-pt" /></div>
-          <div class="sel-flow">{{ tierFlow(t.id) }}</div>
-          <div class="sel-skip">{{ t.skip }}</div>
-        </button>
-      </div>
-    </div>
-
     <!-- 工作流 -->
-    <div v-else class="wf-pane">
+    <div class="wf-pane">
       <!-- 左轨道(均匀填满高度) -->
       <aside class="track">
         <div class="ckicker">流程 · {{ TIER_LABELS[wf.state.value.tier] }}</div>
@@ -466,12 +406,6 @@ function verdictColor(v: string): string {
       <!-- 右侧 -->
       <div class="conv">
         <div class="header">
-          <button type="button" class="back" @click="backToSelect">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
-              <path d="M15 18l-6-6 6-6" />
-            </svg>
-            <span>返回</span>
-          </button>
           <div class="h-title">
             <span class="h-main">{{ displayTitle }}</span>
             <span class="h-sub">Spec 探索</span>
@@ -684,118 +618,6 @@ function verdictColor(v: string): string {
     radial-gradient(circle at 86% 100%, rgba(34, 211, 238, 0.04), transparent 42%);
 }
 
-/* 选档 */
-.select-pane {
-  flex: 1;
-  overflow-y: auto;
-  padding: 40px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-}
-.select-pane h2 {
-  font-size: 26px;
-  font-weight: 800;
-  letter-spacing: -0.02em;
-  color: var(--color-surface-100, #f1f5f9);
-}
-.select-pane > p {
-  font-size: 14px;
-  color: var(--color-surface-400, #94a3b8);
-  margin-top: 8px;
-  text-align: center;
-}
-.sel-cards {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  margin-top: 28px;
-  width: 100%;
-  max-width: 580px;
-}
-.sel-card {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 18px 20px;
-  background: color-mix(in srgb, var(--color-surface-900, #0f172a) 70%, transparent);
-  border: 1px solid var(--color-surface-800, #1e293b);
-  border-left: 3px solid var(--color-surface-700, #334155);
-  border-radius: 10px;
-  cursor: pointer;
-  text-align: left;
-  color: inherit;
-  font-family: inherit;
-  transition: all 0.18s;
-}
-.sel-card:hover {
-  transform: translateX(3px);
-  background: color-mix(in srgb, var(--color-surface-900, #0f172a) 55%, #fff 5%);
-}
-.sel-card[data-tier="quick"]:hover {
-  border-left-color: var(--color-accent-emerald, #34d399);
-}
-.sel-card[data-tier="standard"]:hover {
-  border-left-color: var(--color-accent-violet, #a78bfa);
-}
-.sel-card[data-tier="full"]:hover {
-  border-left-color: var(--color-accent-amber, #fbbf24);
-}
-.sel-row1 {
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-}
-.sel-name {
-  font-size: 16px;
-  font-weight: 700;
-}
-.sel-steps {
-  font-family: var(--font-mono, monospace);
-  font-size: 12px;
-  color: var(--color-surface-500, #64748b);
-}
-.sel-fit-tag {
-  margin-left: auto;
-  font-size: 11px;
-  color: var(--color-surface-500, #64748b);
-}
-.sel-dots {
-  display: flex;
-  gap: 6px;
-}
-.sel-pt {
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-}
-.sel-card[data-tier="quick"] .sel-pt {
-  background: var(--color-accent-emerald, #34d399);
-  opacity: 0.7;
-}
-.sel-card[data-tier="standard"] .sel-pt {
-  background: var(--color-accent-violet, #a78bfa);
-  opacity: 0.7;
-}
-.sel-card[data-tier="full"] .sel-pt {
-  background: var(--color-accent-amber, #fbbf24);
-  opacity: 0.7;
-}
-.sel-card:hover .sel-pt {
-  opacity: 1;
-}
-.sel-flow {
-  font-family: var(--font-mono, monospace);
-  font-size: 12px;
-  color: var(--color-surface-400, #94a3b8);
-}
-.sel-skip {
-  font-size: 12px;
-  color: var(--color-surface-500, #64748b);
-  font-family: var(--font-mono, monospace);
-}
-
 /* 工作流 */
 .wf-pane {
   flex: 1;
@@ -935,30 +757,6 @@ function verdictColor(v: string): string {
   padding: 10px 18px;
   border-bottom: 1px solid var(--color-surface-800, #1e293b);
   flex-shrink: 0;
-}
-.back {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  height: 28px;
-  padding: 0 10px 0 8px;
-  border: 1px solid color-mix(in srgb, var(--color-surface-700, #334155) 70%, transparent);
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--color-surface-900, #0f172a) 55%, transparent);
-  color: var(--color-surface-500, #64748b);
-  font-size: 12px;
-  cursor: pointer;
-  font-family: inherit;
-}
-.back:hover {
-  color: var(--color-surface-100, #f1f5f9);
-  border-color: color-mix(in srgb, var(--color-accent-violet, #a78bfa) 34%, transparent);
-  background: color-mix(in srgb, var(--color-accent-violet, #a78bfa) 9%, transparent);
-}
-.back svg {
-  width: 14px;
-  height: 14px;
-  stroke-width: 2;
 }
 .h-title {
   min-width: 0;

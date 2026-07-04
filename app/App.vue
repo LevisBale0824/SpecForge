@@ -12,6 +12,7 @@ import DiffViewer from "./components/DiffViewer.vue";
 import FileViewer from "./components/FileViewer.vue";
 import OpenSpecPanel from "./components/openspec/OpenSpecPanel.vue";
 import SpecDetailView from "./components/openspec/SpecDetailView.vue";
+import TierPickerDialog from "./components/workflow/TierPickerDialog.vue";
 import UpdateToast from "./components/UpdateToast.vue";
 import UpdateDialog from "./components/UpdateDialog.vue";
 import { useRoute, useRouter } from "vue-router";
@@ -19,10 +20,12 @@ import { useFloatingWindows } from "./composables/useFloatingWindows";
 import { useProject } from "./composables/useProject";
 import { useBackend } from "./composables/useBackend";
 import { useOpenSpec } from "./composables/useOpenSpec";
+import { useWorkflow } from "./plugins/workflowPlugin";
 import { useResizable } from "./composables/useResizable";
 import { isElectron, onOpenFolder, selectDirectory } from "./utils/electronBridge";
 import type { MessageDiffEntry } from "./types/message";
 import type { SpecTarget } from "./types/openspec";
+import type { WorkflowTier } from "./types/workflow";
 
 const route = useRoute();
 const router = useRouter();
@@ -43,6 +46,7 @@ const showHelp = ref(false);
 const showConsole = ref(false);
 const showOpenSpecDialog = ref(false);
 const specDetailTarget = ref<SpecTarget | null>(null);
+const showTierPicker = ref(false);
 const consoleHeight = ref(220);
 const consolePanelEl = ref<InstanceType<typeof ConsolePanel> | null>(null);
 const backend = useBackend();
@@ -86,6 +90,7 @@ watch(
 
 const project = useProject();
 const openspec = useOpenSpec();
+const wf = useWorkflow();
 let unsubOpenFolder: (() => void) | null = null;
 
 // On window focus / tab visibility: assume the user might have modified files
@@ -188,6 +193,15 @@ function onOpenWorkflow(changeId?: string) {
 
 function onOpenSpecDetail(target: SpecTarget) {
   specDetailTarget.value = target;
+}
+
+function onPickTier(tier: WorkflowTier) {
+  showTierPicker.value = false;
+  specDetailTarget.value = null;
+  activeDiff.value = null;
+  activeFilePath.value = null;
+  wf.requestNewDraft(tier);
+  router.push({ name: "workflow" });
 }
 
 function onOpenDiff(diff: MessageDiffEntry) {
@@ -305,6 +319,7 @@ function submitManualPath() {
         @open-folder="handleOpenFolder"
         @open-workflow="onOpenWorkflow"
         @open-spec-detail="onOpenSpecDetail"
+        @open-tier-picker="showTierPicker = true"
         @refresh-files="onRefreshFiles"
       />
       <!-- Sidebar drag handle -->
@@ -320,7 +335,11 @@ function submitManualPath() {
       <!-- Center Content: chat OR diff comparison (mutually exclusive) -->
       <main class="flex-1 flex flex-col overflow-hidden min-w-0">
         <template v-if="specDetailTarget">
-          <SpecDetailView :target="specDetailTarget" @close="specDetailTarget = null" />
+          <SpecDetailView
+            :target="specDetailTarget"
+            @close="specDetailTarget = null"
+            @navigate="onOpenSpecDetail"
+          />
         </template>
         <template v-else-if="activeDiff">
           <div class="diff-toolbar">
@@ -440,6 +459,8 @@ function submitManualPath() {
     <UpdateToast />
     <!-- Auto-updater prompt dialog (available/progress/downloaded) -->
     <UpdateDialog />
+    <!-- 新建探索:档位选择对话框 -->
+    <TierPickerDialog :open="showTierPicker" @pick="onPickTier" @close="showTierPicker = false" />
     <!-- OpenSpec Dialog -->
     <Teleport to="body">
       <div v-if="showOpenSpecDialog" class="openspec-dialog-layer">
