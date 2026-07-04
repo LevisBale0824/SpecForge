@@ -12,6 +12,7 @@ import { useProject } from "../composables/useProject";
 import { useWorkflow } from "../plugins/workflowPlugin";
 import type { MessageDiffEntry } from "../types/message";
 import type { FileDiff, SessionInfo, SessionStatusInfo } from "../types/sse";
+import type { SpecTarget } from "../types/openspec";
 
 const { t } = useI18n();
 const { state: projectState } = useProject();
@@ -48,7 +49,7 @@ const emit = defineEmits<{
   "open-folder": [];
   "open-chat": [];
   "open-workflow": [changeId?: string];
-  "open-openspec-dialog": [changeId?: string];
+  "open-spec-detail": [target: SpecTarget];
   "refresh-files": [];
 }>();
 
@@ -88,6 +89,18 @@ const rootSessionCount = computed(
 function openWorkflow(changeId?: string) {
   emit("open-workflow", changeId);
 }
+
+// spec 详情请求:点击 capability / archived 时通知父组件打开详情窗口
+function showSpecDetail(target: SpecTarget) {
+  emit("open-spec-detail", target);
+}
+
+function short(s: string | undefined, n = 220): string {
+  if (!s) return "";
+  const flat = s.replace(/\s+/g, " ").trim();
+  return flat.length > n ? `${flat.slice(0, n)}…` : flat;
+}
+void short;
 
 function onSearchFocus() {
   if (projectState.directoryPath) {
@@ -247,50 +260,106 @@ function handleOpenDiff(diff: MessageDiffEntry) {
               <div class="pane-actions">
                 <button
                   type="button"
-                  class="header-icon-button"
-                  :title="t('openspec.openInDialog', 'Open in OpenSpec dialog')"
-                  @click="emit('open-openspec-dialog')"
+                  class="header-icon-button accent-violet"
+                  title="新建探索"
+                  @click="openWorkflow()"
                 >
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                    <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" />
+                    <path d="M12 5v14M5 12h14" />
                   </svg>
                 </button>
               </div>
             </div>
 
             <div class="pane-body spec-pane">
+              <!-- 探索中草稿 -->
               <div
                 v-if="wf.enabled.value && !openspec.state.activeChanges.length && hasWorkflowDraft"
-                class="spec-item ongoing"
-                @click="openWorkflow(openspec.state.activeChanges[0]?.id)"
+                class="spec-section"
               >
-                <span class="spec-dot violet"></span>
-                <span class="spec-id">{{ displayWorkflowTitle }}</span>
+                <div class="spec-group-label"><span>探索中</span></div>
+                <div class="spec-item ongoing" @click="openWorkflow()">
+                  <span class="spec-marker violet">◆</span>
+                  <span class="spec-id">{{ displayWorkflowTitle }}</span>
+                </div>
               </div>
-              <div
-                v-for="change in openspec.state.activeChanges"
-                :key="change.id"
-                class="spec-item"
-                @click="openWorkflow(change.id)"
-              >
-                <span class="spec-dot"></span>
-                <span class="spec-id">{{ change.id }}</span>
-                <button
-                  type="button"
-                  class="spec-expand-btn"
-                  :title="t('openspec.openInDialog', 'Open in OpenSpec dialog')"
-                  @click.stop="emit('open-openspec-dialog', change.id)"
+
+              <!-- 活跃探索 -->
+              <div v-if="openspec.state.activeChanges.length" class="spec-section">
+                <div class="spec-group-label">
+                  <span>活跃探索</span>
+                  <span class="spec-group-count">{{ openspec.state.activeChanges.length }}</span>
+                </div>
+                <div
+                  v-for="change in openspec.state.activeChanges"
+                  :key="change.id"
+                  class="spec-item active"
+                  @click="openWorkflow(change.id)"
                 >
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                    <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" />
-                  </svg>
-                </button>
+                  <span class="spec-marker emerald"></span>
+                  <span class="spec-id">{{ change.id }}</span>
+                  <span v-if="change.taskStats?.total" class="spec-progress">
+                    {{ change.taskStats.completed }}/{{ change.taskStats.total }}
+                  </span>
+                </div>
               </div>
+
+              <!-- 已有能力 -->
+              <div v-if="openspec.state.capabilities.length" class="spec-section">
+                <div class="spec-group-label">
+                  <span>已有能力</span>
+                  <span class="spec-group-count">{{ openspec.state.capabilities.length }}</span>
+                </div>
+                <div
+                  v-for="cap in openspec.state.capabilities"
+                  :key="cap.name"
+                  class="spec-item cap"
+                  @click="showSpecDetail({ kind: 'capability', name: cap.name })"
+                >
+                  <span class="spec-marker violet">◆</span>
+                  <span class="spec-id">{{ cap.name }}</span>
+                  <span v-if="cap.requirements?.length" class="spec-progress">
+                    {{ cap.requirements.length }} reqs
+                  </span>
+                </div>
+              </div>
+
+              <!-- 已归档 -->
+              <div v-if="openspec.state.archivedChanges.length" class="spec-section">
+                <div class="spec-group-label">
+                  <span>已归档</span>
+                  <span class="spec-group-count">{{ openspec.state.archivedChanges.length }}</span>
+                </div>
+                <div
+                  v-for="change in openspec.state.archivedChanges"
+                  :key="`archived-${change.id}`"
+                  class="spec-item archived"
+                  @click="showSpecDetail({ kind: 'archived', id: change.id })"
+                >
+                  <span class="spec-marker amber">✓</span>
+                  <span class="spec-id">{{ change.id }}</span>
+                  <span v-if="change.archivedAt" class="spec-progress">{{
+                    change.archivedAt
+                  }}</span>
+                </div>
+              </div>
+
+              <!-- 全空 -->
               <div
-                v-if="!openspec.state.activeChanges.length && !hasWorkflowDraft"
+                v-if="
+                  !openspec.state.activeChanges.length &&
+                  !openspec.state.archivedChanges.length &&
+                  !openspec.state.capabilities.length &&
+                  !hasWorkflowDraft
+                "
                 class="spec-empty"
               >
-                选择 Quick / Standard / Full 开始一次新的探索
+                <button type="button" class="spec-empty-cta" @click="openWorkflow()">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                    <path d="M12 5v14M5 12h14" />
+                  </svg>
+                  <span>开始第一次探索</span>
+                </button>
               </div>
             </div>
           </div>
@@ -766,23 +835,127 @@ function handleOpenDiff(diff: MessageDiffEntry) {
 
 .spec-pane {
   padding-top: 2px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.spec-section {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.spec-group-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 9px 6px 3px;
+  padding-top: 7px;
+  border-top: 1px solid color-mix(in srgb, var(--color-surface-700, #334155) 22%, transparent);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: var(--color-surface-500, #64748b);
+  text-transform: uppercase;
+}
+
+.spec-section:first-child .spec-group-label {
+  margin-top: 2px;
+  padding-top: 0;
+  border-top: 0;
+}
+
+.spec-group-count {
+  min-width: 18px;
+  height: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-surface-600, #475569) 22%, transparent);
+  color: var(--color-surface-400, #94a3b8);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0;
 }
 
 .spec-item {
   display: flex;
   align-items: center;
-  gap: 7px;
-  padding: 7px 8px;
-  border-radius: 10px;
+  gap: 8px;
+  padding: 7px 9px;
+  border-radius: 9px;
   font-size: 12px;
-  color: var(--color-surface-400, #94a3b8);
+  color: var(--color-surface-300, #cbd5e1);
   cursor: pointer;
   font-family: var(--font-mono, monospace);
+  flex-wrap: wrap;
+  border: 1px solid transparent;
+  transition:
+    background 0.12s,
+    border-color 0.12s,
+    color 0.12s;
 }
 
 .spec-item:hover {
   background: color-mix(in srgb, var(--color-surface-700, #334155) 22%, transparent);
   color: var(--color-surface-100, #f1f5f9);
+}
+
+.spec-item.active:hover {
+  border-color: color-mix(in srgb, var(--color-accent-emerald, #34d399) 24%, transparent);
+}
+
+.spec-item.cap:hover {
+  border-color: color-mix(in srgb, var(--color-accent-violet, #a78bfa) 24%, transparent);
+}
+
+.spec-item.archived:hover {
+  border-color: color-mix(in srgb, var(--color-accent-amber, #f59e0b) 24%, transparent);
+}
+
+.spec-item.expanded {
+  background: color-mix(in srgb, var(--color-surface-800, #1e293b) 50%, transparent);
+}
+
+.spec-item.ongoing {
+  color: var(--color-accent-violet, #a78bfa);
+  background: color-mix(in srgb, var(--color-accent-violet, #a78bfa) 10%, transparent);
+}
+
+.spec-marker {
+  flex: 0 0 auto;
+  width: 14px;
+  height: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 800;
+  font-family: inherit;
+  border-radius: 4px;
+  line-height: 1;
+}
+
+.spec-marker.emerald {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-accent-emerald, #34d399);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--color-accent-emerald, #34d399) 60%, transparent);
+}
+
+.spec-marker.violet {
+  color: var(--color-accent-violet, #a78bfa);
+  background: color-mix(in srgb, var(--color-accent-violet, #a78bfa) 14%, transparent);
+}
+
+.spec-marker.amber {
+  color: var(--color-accent-amber, #f59e0b);
+  background: color-mix(in srgb, var(--color-accent-amber, #f59e0b) 16%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-accent-amber, #f59e0b) 32%, transparent);
 }
 
 .spec-id {
@@ -793,52 +966,47 @@ function handleOpenDiff(diff: MessageDiffEntry) {
   white-space: nowrap;
 }
 
-.spec-expand-btn {
+.spec-progress {
   flex: 0 0 auto;
-  width: 20px;
-  height: 20px;
+  font-size: 10px;
+  color: var(--color-surface-500, #64748b);
+  font-family: var(--font-sans, inherit);
+}
+
+.header-icon-button.accent-violet {
+  color: var(--color-accent-violet, #a78bfa);
+}
+
+.header-icon-button.accent-violet:hover {
+  background: color-mix(in srgb, var(--color-accent-violet, #a78bfa) 14%, transparent);
+  color: var(--color-accent-violet, #a78bfa);
+}
+
+/* ── Detail styles已移至 SpecDetailDialog.vue ─────────────────── */
+
+.spec-empty-cta {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  padding: 0;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--color-surface-500, #64748b);
-  cursor: pointer;
-  opacity: 0.4;
-  transition:
-    opacity 0.12s,
-    color 0.12s,
-    background 0.12s;
-}
-
-.spec-item:hover .spec-expand-btn {
-  opacity: 0.9;
-}
-
-.spec-expand-btn:hover {
-  opacity: 1;
+  gap: 7px;
+  padding: 8px 14px;
+  border-radius: 9px;
+  border: 1px solid color-mix(in srgb, var(--color-accent-violet, #a78bfa) 32%, transparent);
+  background: color-mix(in srgb, var(--color-accent-violet, #a78bfa) 12%, transparent);
   color: var(--color-accent-violet, #a78bfa);
-  background: color-mix(in srgb, var(--color-accent-violet, #a78bfa) 14%, transparent);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: inherit;
 }
 
-.spec-expand-btn svg {
-  width: 12px;
-  height: 12px;
-  stroke-width: 2;
+.spec-empty-cta svg {
+  width: 13px;
+  height: 13px;
+  stroke-width: 2.4;
 }
 
-.spec-dot {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: var(--color-accent-emerald, #34d399);
-  flex-shrink: 0;
-}
-
-.spec-dot.violet {
-  background: var(--color-accent-violet, #a78bfa);
+.spec-empty-cta:hover {
+  background: color-mix(in srgb, var(--color-accent-violet, #a78bfa) 20%, transparent);
 }
 
 .spec-item.ongoing {

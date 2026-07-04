@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
+import { ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { useOpenSpec } from "../../composables/useOpenSpec";
 import { useProject } from "../../composables/useProject";
@@ -27,32 +27,6 @@ const toggling = ref<Record<string, boolean>>({});
 const validating = ref<Record<string, boolean>>({});
 const enabling = ref(false);
 const enableMessage = ref<{ kind: "success" | "error"; text: string } | null>(null);
-
-// ─── Dialog variant: 双栏选中状态 ───
-const selectedId = ref<string>("");
-
-const currentList = computed(() => {
-  if (activeTab.value === "active") return state.activeChanges;
-  if (activeTab.value === "archived") return state.archivedChanges;
-  return [];
-});
-
-const selectedChange = computed(() => currentList.value.find((c) => c.id === selectedId.value));
-
-function selectChange(id: string) {
-  selectedId.value = id;
-}
-
-// selectedId 失效或为空时，自动指向列表第一项
-watch(
-  () => [activeTab.value, currentList.value] as const,
-  ([, list]) => {
-    if (!selectedId.value || !list.some((c) => c.id === selectedId.value)) {
-      selectedId.value = list[0]?.id ?? "";
-    }
-  },
-  { immediate: true },
-);
 
 function toggleExpand(id: string) {
   expanded.value[id] = !expanded.value[id];
@@ -227,50 +201,6 @@ function progressPct(stats: { progress: number }): number {
         <div v-if="!state.activeChanges.length" class="state-line empty">
           {{ t("openspec.noActiveChanges") }}
         </div>
-        <!-- dialog variant: 双栏布局 -->
-        <div v-else-if="props.variant === 'dialog'" class="dialog-split">
-          <div class="dialog-list-col">
-            <div
-              v-for="change in state.activeChanges"
-              :key="change.id"
-              class="dialog-list-item"
-              :class="{ active: selectedId === change.id }"
-              @click="selectChange(change.id)"
-            >
-              <span class="dialog-dot"></span>
-              <span class="change-id">{{ change.id }}</span>
-              <span class="mini-progress-text"
-                >{{ change.taskStats.completed }}/{{ change.taskStats.total }}</span
-              >
-              <span
-                v-if="state.validation[change.id]"
-                class="validation-mark"
-                :class="state.validation[change.id].passed ? 'is-passed' : 'is-failed'"
-              >
-                {{ state.validation[change.id].passed ? "OK" : "ERR" }}
-              </span>
-            </div>
-          </div>
-          <div class="dialog-detail-col">
-            <template v-if="selectedChange">
-              <OpenSpecChangeDetail
-                :change="selectedChange"
-                :validation="state.validation[selectedChange.id]"
-                :cli-unavailable="!state.cliAvailable"
-                :toggling="toggling[selectedChange.id]"
-                @toggle-task="(taskId, done) => handleToggleTask(selectedChange!.id, taskId, done)"
-                @validate="handleValidate(selectedChange!.id)"
-              />
-              <div v-if="validating[selectedChange!.id]" class="validating-hint">
-                {{ t("openspec.validating") }}
-              </div>
-            </template>
-            <div v-else class="state-line empty">
-              {{ t("openspec.selectChange") }}
-            </div>
-          </div>
-        </div>
-        <!-- compact variant: 原始列表 -->
         <div v-else class="change-list">
           <div v-for="change in state.activeChanges" :key="change.id" class="change-item">
             <!-- Collapse header -->
@@ -296,7 +226,10 @@ function progressPct(stats: { progress: number }): number {
             </button>
 
             <!-- Expanded detail -->
-            <div v-if="expanded[change.id]" class="change-detail-wrap">
+            <div
+              v-if="props.variant === 'dialog' || expanded[change.id]"
+              class="change-detail-wrap"
+            >
               <OpenSpecChangeDetail
                 :change="change"
                 :validation="state.validation[change.id]"
@@ -318,34 +251,31 @@ function progressPct(stats: { progress: number }): number {
         <div v-if="!state.archivedChanges.length" class="state-line empty">
           {{ t("openspec.noArchivedChanges") }}
         </div>
-        <!-- dialog variant: 双栏布局 -->
-        <div v-else-if="props.variant === 'dialog'" class="dialog-split">
-          <div class="dialog-list-col">
-            <div
-              v-for="change in state.archivedChanges"
-              :key="change.id"
-              class="dialog-list-item"
-              :class="{ active: selectedId === change.id }"
-              @click="selectChange(change.id)"
-            >
-              <span class="dialog-dot archived"></span>
+        <div v-else class="change-list">
+          <div v-for="change in state.archivedChanges" :key="change.id" class="change-item">
+            <button class="change-head" @click="toggleArchivedExpand(change.id)">
+              <span class="caret">{{ archivedExpanded[change.id] ? "v" : ">" }}</span>
               <span class="change-id">{{ change.id }}</span>
+              <span v-if="change.archivedAt" class="archived-date">
+                {{ t("openspec.archivedOn", { date: change.archivedAt }) }}
+              </span>
+              <div
+                class="mini-progress"
+                :title="`${change.taskStats.completed}/${change.taskStats.total}`"
+              >
+                <div class="mini-fill" :style="{ width: `${progressPct(change.taskStats)}%` }" />
+              </div>
               <span class="mini-progress-text"
                 >{{ change.taskStats.completed }}/{{ change.taskStats.total }}</span
               >
               <span class="archived-mark">{{ t("openspec.archivedBadge") }}</span>
-            </div>
-          </div>
-          <div class="dialog-detail-col">
-            <template v-if="selectedChange">
-              <OpenSpecChangeDetail :change="selectedChange" read-only />
-            </template>
-            <div v-else class="state-line empty">
-              {{ t("openspec.selectChange") }}
+            </button>
+
+            <div v-if="archivedExpanded[change.id]" class="change-detail-wrap">
+              <OpenSpecChangeDetail :change="change" read-only />
             </div>
           </div>
         </div>
-        <!-- compact variant: 不渲染（archived 仅 dialog 可见） -->
       </div>
 
       <!-- Capabilities list (dialog only, expandable per-cap) -->
@@ -868,88 +798,7 @@ function progressPct(stats: { progress: number }): number {
   padding-bottom: 24px;
 }
 
-/* ─── Dialog variant: 双栏布局 ─── */
-.dialog-split {
-  display: grid;
-  grid-template-columns: 240px minmax(0, 1fr);
-  gap: 12px;
-  min-height: 0;
-  align-items: start;
-}
-
-.dialog-list-col {
-  border: 1px solid color-mix(in srgb, var(--color-surface-800, #1e293b) 70%, transparent);
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--color-surface-950, #020617) 50%, transparent);
-  max-height: 60vh;
-  overflow-y: auto;
-  padding: 4px;
-}
-
-.dialog-list-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 10px;
-  border-radius: 6px;
-  cursor: pointer;
-  border-left: 2px solid transparent;
-  transition:
-    background 0.12s,
-    border-color 0.12s;
-}
-
-.dialog-list-item + .dialog-list-item {
-  margin-top: 2px;
-}
-
-.dialog-list-item:hover {
-  background: color-mix(in srgb, var(--color-surface-800, #1e293b) 50%, transparent);
-}
-
-.dialog-list-item.active {
-  background: color-mix(in srgb, var(--color-accent-violet, #a78bfa) 12%, transparent);
-  border-left-color: var(--color-accent-violet, #a78bfa);
-}
-
-.dialog-list-item .change-id {
-  flex: 1;
-  min-width: 0;
-  font-size: 12px;
-}
-
-.dialog-list-item.active .change-id {
-  color: var(--color-accent-violet, #a78bfa);
-}
-
-.dialog-list-item .mini-progress-text {
-  font-size: 10px;
-  color: var(--color-surface-500, #64748b);
-}
-
-.dialog-dot {
-  flex-shrink: 0;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--color-accent-emerald, #34d399);
-  box-shadow: 0 0 6px var(--color-accent-emerald, #34d399);
-}
-
-.dialog-dot.archived {
-  background: var(--color-surface-500, #64748b);
-  box-shadow: none;
-}
-
-.dialog-detail-col {
-  border: 1px solid color-mix(in srgb, var(--color-surface-800, #1e293b) 70%, transparent);
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--color-surface-950, #020617) 50%, transparent);
-  padding: 12px 14px;
-  min-height: 200px;
-  max-height: 60vh;
-  overflow-y: auto;
-}
+/* (dialog-split 双栏样式已移除,改回单栏) */
 
 .change-item {
   border-radius: 4px;

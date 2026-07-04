@@ -271,3 +271,6 @@ export interface ScopeBoundary {
   api?: string[];
   modules?: string[];
 }
+
+// SidePanel → 详情窗口的导航目标
+export type SpecTarget = { kind: "capability"; name: string } | { kind: "archived"; id: string };

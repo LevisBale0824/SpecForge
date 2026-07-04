@@ -11,6 +11,7 @@ import ConsolePanel from "./components/ConsolePanel.vue";
 import DiffViewer from "./components/DiffViewer.vue";
 import FileViewer from "./components/FileViewer.vue";
 import OpenSpecPanel from "./components/openspec/OpenSpecPanel.vue";
+import SpecDetailView from "./components/openspec/SpecDetailView.vue";
 import UpdateToast from "./components/UpdateToast.vue";
 import UpdateDialog from "./components/UpdateDialog.vue";
 import { useRoute, useRouter } from "vue-router";
@@ -21,6 +22,7 @@ import { useOpenSpec } from "./composables/useOpenSpec";
 import { useResizable } from "./composables/useResizable";
 import { isElectron, onOpenFolder, selectDirectory } from "./utils/electronBridge";
 import type { MessageDiffEntry } from "./types/message";
+import type { SpecTarget } from "./types/openspec";
 
 const route = useRoute();
 const router = useRouter();
@@ -40,6 +42,7 @@ const showSettings = ref(false);
 const showHelp = ref(false);
 const showConsole = ref(false);
 const showOpenSpecDialog = ref(false);
+const specDetailTarget = ref<SpecTarget | null>(null);
 const consoleHeight = ref(220);
 const consolePanelEl = ref<InstanceType<typeof ConsolePanel> | null>(null);
 const backend = useBackend();
@@ -134,6 +137,7 @@ function onSelectSession(sessionId: string) {
   activeDiff.value = null;
   activeFilePath.value = null;
   showOpenSpecDialog.value = false;
+  specDetailTarget.value = null;
   backend.selectSession(sessionId);
   router.push({ name: "chat" });
 }
@@ -161,6 +165,7 @@ function onNewSession() {
   activeDiff.value = null;
   activeFilePath.value = null;
   showOpenSpecDialog.value = false;
+  specDetailTarget.value = null;
   backend.startNewSession();
   router.push({ name: "chat" });
 }
@@ -169,6 +174,7 @@ function onOpenChat() {
   activeDiff.value = null;
   activeFilePath.value = null;
   showOpenSpecDialog.value = false;
+  specDetailTarget.value = null;
   router.push({ name: "chat" });
 }
 
@@ -176,20 +182,23 @@ function onOpenWorkflow(changeId?: string) {
   activeDiff.value = null;
   activeFilePath.value = null;
   showOpenSpecDialog.value = false;
+  specDetailTarget.value = null;
   router.push({ name: "workflow", query: changeId ? { change: changeId } : {} });
 }
 
-function onOpenOpenSpecDialog(_changeId?: string) {
-  showOpenSpecDialog.value = true;
+function onOpenSpecDetail(target: SpecTarget) {
+  specDetailTarget.value = target;
 }
 
 function onOpenDiff(diff: MessageDiffEntry) {
   showOpenSpecDialog.value = false;
+  specDetailTarget.value = null;
   activeDiff.value = diff;
 }
 
 function onOpenFile(path: string) {
   showOpenSpecDialog.value = false;
+  specDetailTarget.value = null;
   // Tab behavior: dedupe by path, push if new, always activate. Mirrors
   // VSCode-style behavior: clicking a file in the explorer opens or focuses a tab.
   if (!openFiles.value.includes(path)) {
@@ -295,7 +304,7 @@ function submitManualPath() {
         @open-file="onOpenFile"
         @open-folder="handleOpenFolder"
         @open-workflow="onOpenWorkflow"
-        @open-openspec-dialog="onOpenOpenSpecDialog"
+        @open-spec-detail="onOpenSpecDetail"
         @refresh-files="onRefreshFiles"
       />
       <!-- Sidebar drag handle -->
@@ -310,7 +319,10 @@ function submitManualPath() {
 
       <!-- Center Content: chat OR diff comparison (mutually exclusive) -->
       <main class="flex-1 flex flex-col overflow-hidden min-w-0">
-        <template v-if="activeDiff">
+        <template v-if="specDetailTarget">
+          <SpecDetailView :target="specDetailTarget" @close="specDetailTarget = null" />
+        </template>
+        <template v-else-if="activeDiff">
           <div class="diff-toolbar">
             <span class="diff-toolbar-title" :title="activeDiff.file">
               {{ activeDiff.file }}
