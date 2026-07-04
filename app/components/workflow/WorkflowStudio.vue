@@ -260,6 +260,13 @@ function pick(t: WorkflowTier) {
   // 清空上一轮会话消息，避免新探索的结果区残留旧内容
   backend.startNewSession();
 }
+function backToIntro() {
+  if (route.query.change) {
+    router.replace({ name: "workflow" });
+  }
+  creatingDraftChange.value = false;
+  wf.disable();
+}
 function gotoStage(s: StepName) {
   const idx = stages.value.indexOf(s);
   if (idx > activeIdx.value) return;
@@ -434,12 +441,7 @@ function verdictColor(v: string): string {
       <!-- 右侧 -->
       <div class="conv">
         <div class="header">
-          <button
-            type="button"
-            class="back-btn"
-            title="返回选择档位"
-            @click="wf.requestOpenPicker()"
-          >
+          <button type="button" class="back-btn" title="返回工作流介绍页" @click="backToIntro">
             <svg
               width="14"
               height="14"
