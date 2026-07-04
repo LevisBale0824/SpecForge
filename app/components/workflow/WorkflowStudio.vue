@@ -257,6 +257,8 @@ function pick(t: WorkflowTier) {
   need.value = "";
   draftMsg.value = "";
   contract.value = undefined;
+  // 清空上一轮会话消息，避免新探索的结果区残留旧内容
+  backend.startNewSession();
 }
 function gotoStage(s: StepName) {
   const idx = stages.value.indexOf(s);
