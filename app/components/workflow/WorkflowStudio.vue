@@ -333,7 +333,7 @@ async function draft(stage: DraftStage) {
         tier: wf.state.value.tier,
         changeId: changeId.value,
         need: need.value,
-        brainstorm: change?.proposal?.raw ?? need.value,
+        brainstorm: change?.brainstorm ?? need.value,
         proposal: change?.proposal?.raw ?? "",
       })
     : need.value;

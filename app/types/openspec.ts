@@ -150,6 +150,8 @@ export interface OpenSpecChange {
   /** 归档日期 ISO,仅 archived=true 时有 */
   archivedAt?: string;
   proposal?: OpenSpecProposal;
+  /** Explore 阶段产出的 brainstorm.md 原文;lean 档无此阶段故为 undefined */
+  brainstorm?: string;
   tasks: OpenSpecTask[];
   taskStats: OpenSpecTaskStats;
   deltaSpecs: OpenSpecDeltaSpec[];

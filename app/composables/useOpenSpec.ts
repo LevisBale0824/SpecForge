@@ -234,6 +234,7 @@ async function readChangeViaFsa(
 
   const proposalMd = await readTextViaHandle(dir, "proposal.md");
   const tasksMd = await readTextViaHandle(dir, "tasks.md");
+  const brainstormMd = await readTextViaHandle(dir, "brainstorm.md");
   let hasDesign = false;
   try {
     await dir.getFileHandle("design.md");
@@ -269,6 +270,7 @@ async function readChangeViaFsa(
     archived,
     archivedAt,
     proposal,
+    brainstorm: brainstormMd ?? undefined,
     tasks: parsedTasks ? parsedTasks.groups.flatMap((g) => g.tasks) : [],
     taskStats: parsedTasks
       ? parsedTasks.stats

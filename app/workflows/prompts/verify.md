@@ -9,9 +9,8 @@
 ## 任务
 
 应用层会真实执行下列命令并捕获退出码(非你自述):
-
-- `openspec validate {{changeId}} --strict`
-- `npm run lint` / `npm test` / `npm run build`
+{{#if thorough}}- `openspec validate {{changeId}} --strict`
+{{/if}}- `npm run lint` / `npm test` / `npm run build`
 
 你的职责:
 

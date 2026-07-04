@@ -355,6 +355,7 @@ type GuiChange = {
   archived: boolean;
   archivedAt?: string;
   proposal?: GuiProposal;
+  brainstorm?: string;
   tasks: GuiTask[];
   taskStats: GuiTaskStats;
   deltaSpecs: GuiDeltaSpec[];
@@ -462,10 +463,12 @@ function readChangeDir(rootPath: string, relDir: string, archived: boolean): Gui
   const relUnderOpenspec = `${relDir.split(path.sep).join("/")}`;
   const proposalRel = `openspec/${relUnderOpenspec}/proposal.md`;
   const tasksRel = `openspec/${relUnderOpenspec}/tasks.md`;
+  const brainstormRel = `openspec/${relUnderOpenspec}/brainstorm.md`;
   const designAbs = path.join(absDir, "design.md");
 
   const proposalMd = readTextFile(rootPath, proposalRel);
   const tasksMd = readTextFile(rootPath, tasksRel);
+  const brainstormMd = readTextFile(rootPath, brainstormRel);
 
   const proposal = proposalMd ? parseProposalShim(proposalMd) : undefined;
   const parsedTasks = tasksMd
@@ -492,6 +495,7 @@ function readChangeDir(rootPath: string, relDir: string, archived: boolean): Gui
     archived,
     archivedAt,
     proposal,
+    brainstorm: brainstormMd || undefined,
     tasks: parsedTasks.tasks,
     taskStats: parsedTasks.stats,
     deltaSpecs,

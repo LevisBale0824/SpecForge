@@ -1,6 +1,6 @@
 # Plan — 任务拆解
 
-你处于 Plan 阶段。由 brainstorm + proposal 拆解出可执行、可验收的任务。
+你处于 Plan 阶段。由 proposal 拆解出可执行、可验收的任务。
 
 ## 上下文
 
