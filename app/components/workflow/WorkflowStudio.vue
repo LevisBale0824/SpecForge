@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, onActivated, onMounted, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
+import { useI18n } from "vue-i18n";
 import { useWorkflow } from "../../plugins/workflowPlugin";
 import { useOpenSpec } from "../../composables/useOpenSpec";
 import { useBackend } from "../../composables/useBackend";
@@ -13,6 +14,7 @@ import type { ExecutionContract } from "../../types/openspec";
 
 const route = useRoute();
 const router = useRouter();
+const { t } = useI18n();
 const wf = useWorkflow();
 const openspec = useOpenSpec();
 const backend = useBackend();
@@ -47,6 +49,8 @@ const HINTS: Record<StepName, string> = {
   review: "只读审查 spec 合规与质量",
   archive: "归档前 evidence gate 检查",
 };
+
+const TIER_KEYS = ["lean", "standard", "thorough"] as const;
 
 const need = ref("");
 const gating = ref(false);
@@ -377,18 +381,24 @@ function verdictColor(v: string): string {
   <div class="wf-page">
     <!-- 未启用工作流:模块介绍 -->
     <div v-if="!wf.enabled.value" class="wf-intro">
-      <div class="wf-intro-kicker">Spec 探索</div>
-      <h2 class="wf-intro-title">从需求到上线的结构化工作流</h2>
-      <p class="wf-intro-sub">
-        按改动规模选择档位 — 轻量 / 标准 / 完整 — 依次走过
-        Explore、Propose、Plan、Apply、Verify、Review、Archive, 每个阶段都有明确的产物与 Gate。
-      </p>
+      <div class="wf-intro-kicker">{{ t("workflow.intro.kicker") }}</div>
+      <h2 class="wf-intro-title">{{ t("workflow.intro.title") }}</h2>
+      <p class="wf-intro-sub">{{ t("workflow.intro.sub") }}</p>
       <div class="wf-intro-flow">
         <span>Explore</span><i>→</i> <span>Propose</span><i>→</i> <span>Plan</span><i>→</i>
         <span>Apply</span><i>→</i> <span>Verify</span><i>→</i> <span>Review</span><i>→</i>
         <span>Archive</span>
       </div>
-      <div class="wf-intro-cta">从左侧 Spec 探索 点 <strong>+</strong> 开始一次新探索</div>
+      <div class="wf-intro-tiers">
+        <span v-for="tk in TIER_KEYS" :key="tk" class="wf-tier" :data-tier="tk">
+          <i class="wf-tier-dot" />{{ t(`workflow.intro.tiers.${tk}.name`)
+          }}<em>{{ t(`workflow.intro.tiers.${tk}.steps`) }}</em
+          >{{ t(`workflow.intro.tiers.${tk}.fit`) }}
+        </span>
+      </div>
+      <div class="wf-intro-cta">
+        {{ t("workflow.intro.ctaPre") }} <strong>+</strong> {{ t("workflow.intro.ctaPost") }}
+      </div>
     </div>
 
     <!-- 工作流 -->
@@ -491,24 +501,24 @@ function verdictColor(v: string): string {
                 changeId ? "点上方「运行全部待办」或先检查 tasks.md" : "先创建一个 change"
               }}
             </div>
-            <div v-for="t in taskRunner.tasks.value" :key="t.taskId" class="sdd-row">
-              <span class="sdd-status" :class="t.status">
+            <div v-for="task in taskRunner.tasks.value" :key="task.taskId" class="sdd-row">
+              <span class="sdd-status" :class="task.status">
                 {{
-                  t.status === "pending"
+                  task.status === "pending"
                     ? "○"
-                    : t.status === "running"
+                    : task.status === "running"
                       ? "◐"
-                      : t.status === "done"
+                      : task.status === "done"
                         ? "✓"
                         : "✗"
                 }}
               </span>
-              <span class="sdd-id">{{ t.taskId }}</span>
-              <span class="sdd-label">{{ t.title }}</span>
-              <span v-if="t.status === 'running'" class="sdd-spin">⋯</span>
-              <span v-else-if="t.status === 'done'" class="sdd-exit pass">exit 0</span>
-              <span v-else-if="t.status === 'failed'" class="sdd-exit fail"
-                >exit {{ t.exitCode ?? "?" }}</span
+              <span class="sdd-id">{{ task.taskId }}</span>
+              <span class="sdd-label">{{ task.title }}</span>
+              <span v-if="task.status === 'running'" class="sdd-spin">⋯</span>
+              <span v-else-if="task.status === 'done'" class="sdd-exit pass">exit 0</span>
+              <span v-else-if="task.status === 'failed'" class="sdd-exit fail"
+                >exit {{ task.exitCode ?? "?" }}</span
               >
             </div>
           </div>
@@ -686,6 +696,43 @@ function verdictColor(v: string): string {
 .wf-intro-flow i {
   font-style: normal;
   color: var(--color-surface-600, #475569);
+}
+.wf-intro-tiers {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 6px 14px;
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--color-surface-400, #94a3b8);
+}
+.wf-tier {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.wf-tier-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+}
+.wf-tier em {
+  font-style: normal;
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+  color: var(--color-surface-500, #64748b);
+  margin: 0 2px;
+}
+.wf-tier[data-tier="lean"] .wf-tier-dot {
+  background: var(--color-accent-emerald, #34d399);
+}
+.wf-tier[data-tier="standard"] .wf-tier-dot {
+  background: var(--color-accent-violet, #a78bfa);
+}
+.wf-tier[data-tier="thorough"] .wf-tier-dot {
+  background: var(--color-accent-amber, #fbbf24);
 }
 .wf-intro-cta {
   margin-top: 10px;

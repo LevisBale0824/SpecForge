@@ -194,6 +194,32 @@ specforge/
 - 窗口拖拽和层级控制
 - 多窗口支持
 
+## Spec 探索
+
+从需求到上线的结构化工作流。核心理念:**只挑这次改动需要的阶段** —— 小改走捷径,跨模块大改才上完整流程,避免一刀切的流程开销。
+
+新建探索时先选**档位**,不同档位启用不同阶段子集:
+
+| 档位    | 步数 | 适用            | 跳过                    | 流程                                                         |
+| ------- | ---- | --------------- | ----------------------- | ------------------------------------------------------------ |
+| 🟢 轻量 | 4    | 单文件小改      | Explore · Plan · Review | Propose → Apply → Verify → Archive                           |
+| 🟣 标准 | 5    | 模块内功能      | Plan · Review           | Explore → Propose → Apply → Verify → Archive                 |
+| 🟡 完整 | 7    | 跨模块 / 架构级 | 不跳阶段                | Explore → Propose → Plan → Apply → Verify → Review → Archive |
+
+> 默认走**标准**档,在新建探索的弹窗里可切换。
+
+### 各阶段产物
+
+| 阶段    | 做什么                                               | 产物 / Gate                                                                      |
+| ------- | ---------------------------------------------------- | -------------------------------------------------------------------------------- |
+| Explore | 需求澄清,逐个问清边界与硬约束                        | `brainstorm.md`                                                                  |
+| Propose | 固化为可验收的 OpenSpec 契约                         | `proposal.md`(thorough 额外 spec delta + `design.md`)                            |
+| Plan    | 拆解成带验证命令、可并行的任务 DAG                   | `tasks.md`                                                                       |
+| Apply   | TDD 实现单个任务,先红后绿                            | `tasks.md` 勾选 + evidence                                                       |
+| Verify  | 只认命令退出码的真实验证 Gate                        | `openspec validate --strict` + lint/test/build → READY / CONDITIONAL / NOT_READY |
+| Review  | 只读审查:spec 合规 / 质量 / scope creep / 非功能风险 | verdict: pass / concerns / fail                                                  |
+| Archive | 收尾归档                                             | change 移入 `openspec/changes/archive/`                                          |
+
 ## 开发指南
 
 ### 添加新组件

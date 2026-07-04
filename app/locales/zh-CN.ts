@@ -43,7 +43,7 @@ export default {
       sub: "把对话、Spec 工作流、文件浏览与 diff 统一在一个桌面应用 — 从需求到落地全程可观察、可回溯。",
       capabilities: {
         chat: { title: "对话", desc: "与 Agent 自由协作,上下文持续累积" },
-        workflow: { title: "Spec 工作流", desc: "Explore → Propose → Apply → Archive" },
+        workflow: { title: "Spec 工作流", desc: "按改动规模走 4–7 步探索流程" },
       },
       steps: {
         title: "如何开始",
@@ -105,7 +105,7 @@ export default {
     zero: "Zero 服务器",
     cliBridge: "CLI Bridge",
     workflow: "OpenSpec 工作流",
-    enableWorkflow: "启用四步工作流",
+    enableWorkflow: "启用 Spec 探索工作流",
     restartAgent: "重启 Agent",
     restarting: "重启中...",
     stopAgent: "停止 Agent",
@@ -173,11 +173,26 @@ export default {
   workflow: {
     explore: "需求探索",
     propose: "方案设计",
+    plan: "任务拆解",
     apply: "方案实施",
+    verify: "验证 Gate",
+    review: "只读审查",
     archive: "归档总结",
     start: "开始",
     retry: "重试",
     next: "下一步",
+    intro: {
+      kicker: "Spec 探索",
+      title: "从需求到上线的结构化工作流",
+      sub: "按改动规模选择档位 — 轻量 / 标准 / 完整 — 不同档位启用不同阶段子集,小改走捷径、大改才上完整流程;每个阶段都有明确的产物与 Gate。",
+      ctaPre: "从左侧 Spec 探索 点",
+      ctaPost: "开始一次新探索",
+      tiers: {
+        lean: { name: "轻量", steps: "4 步", fit: "单文件小改" },
+        standard: { name: "标准", steps: "5 步", fit: "模块内功能" },
+        thorough: { name: "完整", steps: "7 步", fit: "跨模块 / 架构级" },
+      },
+    },
   },
   topbar: {
     backend: "后端",
@@ -217,8 +232,12 @@ export default {
     },
     openspec: {
       title: "5 · OpenSpec 工作流",
-      body: "启用 OpenSpec 后，提案 / 任务 / Spec 增量 / 校验四步帮你做精细化变更。",
-      bullets: ["探索：厘清需求", "设计：明确方案", "实施：按任务推进", "归档：总结验收"],
+      body: "启用 OpenSpec 后，按改动规模选档,走过 Explore → Propose → Plan → Apply → Verify → Review → Archive,每阶段都有产物与 Gate。",
+      bullets: [
+        "按改动规模选档:轻量 / 标准 / 完整",
+        "阶段:Explore → Propose → Plan → Apply → Verify → Review → Archive",
+        "每阶段都有产物与 Gate",
+      ],
     },
     files: {
       title: "6 · 文件浏览",

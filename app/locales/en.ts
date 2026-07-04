@@ -46,7 +46,7 @@ export default {
           title: "Chat",
           desc: "Freeform collaboration with the Agent, context carries forward",
         },
-        workflow: { title: "Spec Workflow", desc: "Explore → Propose → Apply → Archive" },
+        workflow: { title: "Spec Workflow", desc: "A 4–7 step explore flow scaled to change size" },
       },
       steps: {
         title: "How to start",
@@ -108,7 +108,7 @@ export default {
     zero: "Zero Server",
     cliBridge: "CLI Bridge",
     workflow: "OpenSpec Workflow",
-    enableWorkflow: "Enable 4-step workflow",
+    enableWorkflow: "Enable Spec Explore workflow",
     restartAgent: "Restart Agent",
     restarting: "Restarting...",
     stopAgent: "Stop Agent",
@@ -178,11 +178,26 @@ export default {
   workflow: {
     explore: "Explore",
     propose: "Propose",
+    plan: "Plan",
     apply: "Apply",
+    verify: "Verify",
+    review: "Review",
     archive: "Archive",
     start: "Start",
     retry: "Retry",
     next: "Next Step",
+    intro: {
+      kicker: "Spec Explore",
+      title: "A structured workflow from idea to ship",
+      sub: "Pick a tier by change size — lean / standard / thorough — each tier enables a different subset of stages. Small changes take shortcuts; large ones run the full flow. Every stage has a concrete artifact and gate.",
+      ctaPre: "Click",
+      ctaPost: "in the Spec Explore sidebar to start a new exploration",
+      tiers: {
+        lean: { name: "Lean", steps: "4 steps", fit: "Single-file tweak" },
+        standard: { name: "Standard", steps: "5 steps", fit: "In-module feature" },
+        thorough: { name: "Thorough", steps: "7 steps", fit: "Cross-module / architectural" },
+      },
+    },
   },
   topbar: {
     backend: "Backend",
@@ -226,12 +241,11 @@ export default {
     },
     openspec: {
       title: "5 · OpenSpec Workflow",
-      body: "With OpenSpec enabled, Proposal / Tasks / Spec Deltas / Validation guide focused changes.",
+      body: "With OpenSpec enabled, pick a tier by change size and walk Explore → Propose → Plan → Apply → Verify → Review → Archive. Every stage has a concrete artifact and gate.",
       bullets: [
-        "Explore: clarify requirements",
-        "Propose: define the design",
-        "Apply: drive tasks forward",
-        "Archive: review and accept",
+        "Pick a tier by change size: lean / standard / thorough",
+        "Stages: Explore → Propose → Plan → Apply → Verify → Review → Archive",
+        "Every stage has a concrete artifact and gate",
       ],
     },
     files: {

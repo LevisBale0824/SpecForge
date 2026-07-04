@@ -41,12 +41,7 @@ const slides: Slide[] = [
     icon: "lucide:workflow",
     titleKey: "help.openspec.title",
     bodyKey: "help.openspec.body",
-    bullets: [
-      "help.openspec.bullets[0]",
-      "help.openspec.bullets[1]",
-      "help.openspec.bullets[2]",
-      "help.openspec.bullets[3]",
-    ],
+    bullets: ["help.openspec.bullets[0]", "help.openspec.bullets[1]", "help.openspec.bullets[2]"],
   },
   { icon: "lucide:folder-tree", titleKey: "help.files.title", bodyKey: "help.files.body" },
   { icon: "lucide:palette", titleKey: "help.appearance.title", bodyKey: "help.appearance.body" },

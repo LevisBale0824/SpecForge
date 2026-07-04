@@ -183,7 +183,7 @@ async function copyMessage(msgId: string) {
   <div class="relative flex min-h-0 flex-1">
     <div
       ref="containerEl"
-      class="min-h-0 flex-1 overflow-y-auto px-5 py-5 md:px-10 lg:px-14 [overscroll-behavior:contain] [overflow-anchor:none]"
+      class="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-5 py-5 md:px-10 lg:px-14 [overscroll-behavior:contain] [overflow-anchor:none]"
     >
       <!-- Empty state -->
       <div
