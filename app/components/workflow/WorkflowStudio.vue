@@ -407,15 +407,7 @@ function verdictColor(v: string): string {
     <div v-else class="wf-pane">
       <!-- 左轨道(均匀填满高度) -->
       <aside class="track">
-        <button
-          type="button"
-          class="ckicker tier-switch"
-          :title="`当前档位: ${TIER_LABELS[wf.state.value.tier]} — 点击重新选择`"
-          @click="wf.requestOpenPicker()"
-        >
-          <span class="tier-switch-label">流程 · {{ TIER_LABELS[wf.state.value.tier] }}</span>
-          <span class="tier-switch-hint">更换</span>
-        </button>
+        <div class="ckicker">流程 · {{ TIER_LABELS[wf.state.value.tier] }}</div>
         <div class="track-nodes">
           <template v-for="(s, i) in stages" :key="s">
             <button
@@ -442,6 +434,26 @@ function verdictColor(v: string): string {
       <!-- 右侧 -->
       <div class="conv">
         <div class="header">
+          <button
+            type="button"
+            class="back-btn"
+            title="返回选择档位"
+            @click="wf.requestOpenPicker()"
+          >
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <polyline points="15 18 9 12 15 6" />
+            </svg>
+            <span>返回</span>
+          </button>
           <div class="h-title">
             <span class="h-main">{{ displayTitle }}</span>
             <span class="h-sub">Spec 探索</span>
@@ -784,46 +796,6 @@ function verdictColor(v: string): string {
   font-family: var(--font-mono, monospace);
   flex-shrink: 0;
 }
-.tier-switch {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  width: 100%;
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: 6px;
-  padding: 4px 6px;
-  margin: -4px -6px 14px;
-  cursor: pointer;
-  font-family: inherit;
-  text-align: left;
-  text-transform: none;
-  transition:
-    border-color 0.15s ease,
-    background 0.15s ease;
-}
-.tier-switch:hover {
-  border-color: color-mix(in srgb, var(--color-accent-violet, #a78bfa) 35%, transparent);
-  background: color-mix(in srgb, var(--color-accent-violet, #a78bfa) 8%, transparent);
-}
-.tier-switch-label {
-  flex: 1;
-  min-width: 0;
-  font-family: var(--font-mono, monospace);
-}
-.tier-switch-hint {
-  flex-shrink: 0;
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  color: var(--color-accent-violet, #a78bfa);
-  opacity: 0;
-  transition: opacity 0.15s ease;
-}
-.tier-switch:hover .tier-switch-hint,
-.tier-switch:focus-visible .tier-switch-hint {
-  opacity: 1;
-}
 .track-nodes {
   flex: 1;
   display: flex;
@@ -938,6 +910,31 @@ function verdictColor(v: string): string {
   padding: 10px 18px;
   border-bottom: 1px solid var(--color-surface-800, #1e293b);
   flex-shrink: 0;
+}
+.back-btn {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 28px;
+  padding: 0 10px 0 8px;
+  border-radius: 8px;
+  border: 1px solid var(--color-surface-700, #334155);
+  background: color-mix(in srgb, var(--color-surface-800, #1e293b) 60%, transparent);
+  color: var(--color-surface-400, #94a3b8);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    color 0.15s ease,
+    border-color 0.15s ease,
+    background 0.15s ease;
+}
+.back-btn:hover {
+  color: var(--color-accent-violet, #a78bfa);
+  border-color: color-mix(in srgb, var(--color-accent-violet, #a78bfa) 40%, transparent);
+  background: color-mix(in srgb, var(--color-accent-violet, #a78bfa) 10%, transparent);
 }
 .h-title {
   min-width: 0;
