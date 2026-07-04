@@ -37,6 +37,23 @@ export default {
       opencode: "OpenCode",
       zero: "Zero",
     },
+    intro: {
+      kicker: "SpecForge",
+      title: "AI 驱动的编码助手可视化界面",
+      sub: "把对话、Spec 工作流、文件浏览与 diff 统一在一个桌面应用 — 从需求到落地全程可观察、可回溯。",
+      capabilities: {
+        chat: { title: "对话", desc: "与 Agent 自由协作,上下文持续累积" },
+        workflow: { title: "Spec 工作流", desc: "Explore → Propose → Apply → Archive" },
+      },
+      steps: {
+        title: "如何开始",
+        items: [
+          "选择 Code Agent(opencode 或 zero)",
+          "打开一个本地项目文件夹",
+          "新建会话提问,或从左侧 Spec 探索 进入工作流",
+        ],
+      },
+    },
   },
   chat: {
     placeholder: "输入消息...",

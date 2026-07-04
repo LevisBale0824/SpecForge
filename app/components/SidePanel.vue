@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, ref, watch } from "vue";
+import { useRoute } from "vue-router";
 import { useI18n } from "vue-i18n";
 import FileSearchResults from "./FileSearchResults.vue";
 import FileTree from "./FileTree.vue";
@@ -30,12 +31,14 @@ const props = withDefaults(
     activeSessionId?: string;
     workspaceDiffs?: readonly FileDiff[];
     statusOf?: (id: string) => SessionStatusInfo;
+    specDetailTarget?: SpecTarget | null;
   }>(),
   {
     sessions: () => [],
     activeSessionId: "",
     workspaceDiffs: () => [],
     statusOf: () => ({ type: "idle" }) as SessionStatusInfo,
+    specDetailTarget: null,
   },
 );
 
@@ -91,13 +94,37 @@ function openWorkflow(changeId?: string) {
   emit("open-workflow", changeId);
 }
 
-function openTierPicker() {
-  emit("open-tier-picker");
+const route = useRoute();
+const selectedChangeId = computed(() => (route.query.change as string | undefined) ?? "");
+
+// 已完成 / 现有能力 走详情 dialog,选中态以 App.vue 的 specDetailTarget 为单一来源
+const selectedDetail = computed<{ kind: "archived" | "capability"; key: string } | null>(() => {
+  const t = props.specDetailTarget;
+  if (!t) return null;
+  if (t.kind === "archived") return { kind: "archived", key: t.id };
+  if (t.kind === "capability") return { kind: "capability", key: t.name };
+  return null;
+});
+
+// 路由进入 workflow 且指定了 change 时,自动切到 Spec tab 让选中态可见
+watch(
+  () => [route.name, route.query.change] as const,
+  ([name, change]) => {
+    if (name === "workflow" && change) {
+      sideTab.value = "spec";
+    }
+  },
+  { immediate: true },
+);
+
+function showSpecDetail(
+  target: { kind: "archived"; id: string } | { kind: "capability"; name: string },
+) {
+  emit("open-spec-detail", target);
 }
 
-// spec 详情请求:点击 capability / archived 时通知父组件打开详情窗口
-function showSpecDetail(target: SpecTarget) {
-  emit("open-spec-detail", target);
+function openTierPicker() {
+  emit("open-tier-picker");
 }
 
 function short(s: string | undefined, n = 220): string {
@@ -262,21 +289,18 @@ function handleOpenDiff(diff: MessageDiffEntry) {
                   <span class="section-subtitle">需求、方案与任务</span>
                 </div>
               </div>
-              <div class="pane-actions">
-                <button
-                  type="button"
-                  class="header-icon-button accent-violet"
-                  title="新建探索"
-                  @click="openTierPicker"
-                >
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                    <path d="M12 5v14M5 12h14" />
-                  </svg>
-                </button>
-              </div>
             </div>
 
             <div class="pane-body spec-pane">
+              <button type="button" class="spec-new-btn" @click="openTierPicker">
+                <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                  <path
+                    d="M12 2.5l1.9 5.6a4 4 0 0 0 2 2l5.6 1.9-5.6 1.9a4 4 0 0 0-2 2L12 21.5l-1.9-5.6a4 4 0 0 0-2-2L2.5 12l5.6-1.9a4 4 0 0 0 2-2L12 2.5z"
+                  />
+                </svg>
+                <span>开始新的探索</span>
+              </button>
+
               <!-- 探索中草稿 -->
               <div
                 v-if="wf.enabled.value && !openspec.state.activeChanges.length && hasWorkflowDraft"
@@ -299,6 +323,7 @@ function handleOpenDiff(diff: MessageDiffEntry) {
                   v-for="change in openspec.state.activeChanges"
                   :key="change.id"
                   class="spec-item active"
+                  :class="{ selected: selectedChangeId === change.id }"
                   @click="openWorkflow(change.id)"
                 >
                   <span class="spec-marker emerald"></span>
@@ -309,36 +334,20 @@ function handleOpenDiff(diff: MessageDiffEntry) {
                 </div>
               </div>
 
-              <!-- 已有能力 -->
-              <div v-if="openspec.state.capabilities.length" class="spec-section">
-                <div class="spec-group-label">
-                  <span>已有能力</span>
-                  <span class="spec-group-count">{{ openspec.state.capabilities.length }}</span>
-                </div>
-                <div
-                  v-for="cap in openspec.state.capabilities"
-                  :key="cap.name"
-                  class="spec-item cap"
-                  @click="showSpecDetail({ kind: 'capability', name: cap.name })"
-                >
-                  <span class="spec-marker violet">◆</span>
-                  <span class="spec-id">{{ cap.name }}</span>
-                  <span v-if="cap.requirements?.length" class="spec-progress">
-                    {{ cap.requirements.length }} reqs
-                  </span>
-                </div>
-              </div>
-
-              <!-- 已归档 -->
+              <!-- 已完成（归档） -->
               <div v-if="openspec.state.archivedChanges.length" class="spec-section">
                 <div class="spec-group-label">
-                  <span>已归档</span>
+                  <span>已完成</span>
                   <span class="spec-group-count">{{ openspec.state.archivedChanges.length }}</span>
                 </div>
                 <div
                   v-for="change in openspec.state.archivedChanges"
                   :key="`archived-${change.id}`"
                   class="spec-item archived"
+                  :class="{
+                    selected:
+                      selectedDetail?.kind === 'archived' && selectedDetail.key === change.id,
+                  }"
                   @click="showSpecDetail({ kind: 'archived', id: change.id })"
                 >
                   <span class="spec-marker amber">✓</span>
@@ -346,6 +355,30 @@ function handleOpenDiff(diff: MessageDiffEntry) {
                   <span v-if="change.archivedAt" class="spec-progress">{{
                     change.archivedAt
                   }}</span>
+                </div>
+              </div>
+
+              <!-- 现有能力 -->
+              <div v-if="openspec.state.capabilities.length" class="spec-section">
+                <div class="spec-group-label">
+                  <span>现有能力</span>
+                  <span class="spec-group-count">{{ openspec.state.capabilities.length }}</span>
+                </div>
+                <div
+                  v-for="cap in openspec.state.capabilities"
+                  :key="cap.name"
+                  class="spec-item cap"
+                  :class="{
+                    selected:
+                      selectedDetail?.kind === 'capability' && selectedDetail.key === cap.name,
+                  }"
+                  @click="showSpecDetail({ kind: 'capability', name: cap.name })"
+                >
+                  <span class="spec-marker violet">◆</span>
+                  <span class="spec-id">{{ cap.name }}</span>
+                  <span v-if="cap.requirements?.length" class="spec-progress">
+                    {{ cap.requirements.length }} reqs
+                  </span>
                 </div>
               </div>
 
@@ -359,12 +392,7 @@ function handleOpenDiff(diff: MessageDiffEntry) {
                 "
                 class="spec-empty"
               >
-                <button type="button" class="spec-empty-cta" @click="openTierPicker">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                    <path d="M12 5v14M5 12h14" />
-                  </svg>
-                  <span>开始第一次探索</span>
-                </button>
+                <span>暂无探索记录,点击上方按钮开始</span>
               </div>
             </div>
           </div>
@@ -909,6 +937,13 @@ function handleOpenDiff(diff: MessageDiffEntry) {
   color: var(--color-surface-100, #f1f5f9);
 }
 
+.spec-item.selected {
+  background: color-mix(in srgb, var(--color-accent-violet, #a78bfa) 14%, transparent);
+  border-color: color-mix(in srgb, var(--color-accent-violet, #a78bfa) 50%, transparent);
+  color: var(--color-surface-100, #f1f5f9);
+  box-shadow: inset 2px 0 0 var(--color-accent-violet, #a78bfa);
+}
+
 .spec-item.active:hover {
   border-color: color-mix(in srgb, var(--color-accent-emerald, #34d399) 24%, transparent);
 }
@@ -989,34 +1024,33 @@ function handleOpenDiff(diff: MessageDiffEntry) {
 
 /* ── Detail styles已移至 SpecDetailDialog.vue ─────────────────── */
 
-.spec-empty-cta {
-  display: inline-flex;
+.spec-new-btn {
+  width: 100%;
+  display: flex;
   align-items: center;
-  gap: 7px;
-  padding: 8px 14px;
-  border-radius: 9px;
-  border: 1px solid color-mix(in srgb, var(--color-accent-violet, #a78bfa) 32%, transparent);
-  background: color-mix(in srgb, var(--color-accent-violet, #a78bfa) 12%, transparent);
+  justify-content: center;
+  gap: 6px;
+  padding: 9px 12px;
+  margin-bottom: 12px;
+  border-radius: 10px;
+  border: 1px dashed color-mix(in srgb, var(--color-accent-violet, #a78bfa) 45%, transparent);
+  background: transparent;
   color: var(--color-accent-violet, #a78bfa);
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
   cursor: pointer;
   font-family: inherit;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease;
 }
-
-.spec-empty-cta svg {
-  width: 13px;
-  height: 13px;
-  stroke-width: 2.4;
+.spec-new-btn svg {
+  width: 12px;
+  height: 12px;
 }
-
-.spec-empty-cta:hover {
-  background: color-mix(in srgb, var(--color-accent-violet, #a78bfa) 20%, transparent);
-}
-
-.spec-item.ongoing {
-  color: var(--color-accent-violet, #a78bfa);
+.spec-new-btn:hover {
   background: color-mix(in srgb, var(--color-accent-violet, #a78bfa) 10%, transparent);
+  border-color: color-mix(in srgb, var(--color-accent-violet, #a78bfa) 70%, transparent);
 }
 
 .spec-empty,

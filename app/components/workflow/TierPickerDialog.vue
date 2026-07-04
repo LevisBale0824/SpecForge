@@ -23,29 +23,29 @@ interface TierCard {
 
 const TIERS: TierCard[] = [
   {
-    id: "quick",
-    name: "Quick",
-    steps: "3 步",
-    fit: "小改动",
+    id: "lean",
+    name: "轻量",
+    steps: "4 步",
+    fit: "单文件小改",
     skip: "跳过 Explore · Plan · Review",
-    dots: 3,
+    dots: 4,
     flow: "Propose → Apply → Verify → Archive",
   },
   {
     id: "standard",
-    name: "Standard",
+    name: "标准",
     steps: "5 步",
-    fit: "单模块",
+    fit: "模块内功能",
     skip: "跳过 Plan · Review",
     dots: 5,
     flow: "Explore → Propose → Apply → Verify → Archive",
   },
   {
-    id: "full",
-    name: "Full",
+    id: "thorough",
+    name: "完整",
     steps: "7 步",
-    fit: "跨模块",
-    skip: "不跳过任何阶段",
+    fit: "跨模块 / 架构级",
+    skip: "完整流程,不跳阶段",
     dots: 7,
     flow: "Explore → Propose → Plan → Apply → Verify → Review → Archive",
   },
@@ -261,17 +261,17 @@ watch(
   background: color-mix(in srgb, var(--color-surface-700, #334155) 36%, transparent);
 }
 
-.tp-card[data-tier="quick"] {
+.tp-card[data-tier="lean"] {
   border-left-color: var(--color-accent-emerald, #34d399);
 }
 .tp-card[data-tier="standard"] {
   border-left-color: var(--color-accent-violet, #a78bfa);
 }
-.tp-card[data-tier="full"] {
+.tp-card[data-tier="thorough"] {
   border-left-color: var(--color-accent-amber, #fbbf24);
 }
 
-.tp-card[data-tier="quick"]:hover {
+.tp-card[data-tier="lean"]:hover {
   border-left-color: var(--color-accent-emerald, #34d399);
   box-shadow: 0 8px 24px -10px
     color-mix(in srgb, var(--color-accent-emerald, #34d399) 50%, transparent);
@@ -281,7 +281,7 @@ watch(
   box-shadow: 0 8px 24px -10px
     color-mix(in srgb, var(--color-accent-violet, #a78bfa) 50%, transparent);
 }
-.tp-card[data-tier="full"]:hover {
+.tp-card[data-tier="thorough"]:hover {
   border-left-color: var(--color-accent-amber, #fbbf24);
   box-shadow: 0 8px 24px -10px
     color-mix(in srgb, var(--color-accent-amber, #fbbf24) 50%, transparent);
@@ -327,13 +327,13 @@ watch(
   border-radius: 50%;
 }
 
-.tp-card[data-tier="quick"] .tp-dot {
+.tp-card[data-tier="lean"] .tp-dot {
   background: var(--color-accent-emerald, #34d399);
 }
 .tp-card[data-tier="standard"] .tp-dot {
   background: var(--color-accent-violet, #a78bfa);
 }
-.tp-card[data-tier="full"] .tp-dot {
+.tp-card[data-tier="thorough"] .tp-dot {
   background: var(--color-accent-amber, #fbbf24);
 }
 
@@ -359,13 +359,13 @@ watch(
   align-self: flex-start;
 }
 
-.tp-card[data-tier="quick"]:hover .tp-cta {
+.tp-card[data-tier="lean"]:hover .tp-cta {
   color: var(--color-accent-emerald, #34d399);
 }
 .tp-card[data-tier="standard"]:hover .tp-cta {
   color: var(--color-accent-violet, #a78bfa);
 }
-.tp-card[data-tier="full"]:hover .tp-cta {
+.tp-card[data-tier="thorough"]:hover .tp-cta {
   color: var(--color-accent-amber, #fbbf24);
 }
 </style>

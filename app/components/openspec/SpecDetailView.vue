@@ -11,6 +11,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   close: [];
   navigate: [target: SpecTarget];
+  "open-workflow": [changeId: string];
 }>();
 
 const openspec = useOpenSpec();
@@ -60,6 +61,9 @@ function gotoCapability(name: string) {
 }
 function gotoArchived(id: string) {
   emit("navigate", { kind: "archived", id });
+}
+function gotoActive(id: string) {
+  emit("open-workflow", id);
 }
 </script>
 
@@ -143,9 +147,8 @@ function gotoArchived(id: string) {
               v-for="ref in referencingChanges"
               :key="ref.id"
               class="clickable"
-              @click="ref.archived ? gotoArchived(ref.id) : null"
-              :class="{ disabled: !ref.archived }"
-              :title="ref.archived ? '查看归档详情' : '活跃 change,进工作流查看'"
+              @click="ref.archived ? gotoArchived(ref.id) : gotoActive(ref.id)"
+              :title="ref.archived ? '查看归档详情' : '进工作流查看活跃 change'"
             >
               <span class="delta-op" :class="{ amber: ref.archived, emerald: !ref.archived }">
                 {{ ref.archived ? "✓" : "●" }}
@@ -153,7 +156,7 @@ function gotoArchived(id: string) {
               <span class="cap-name">{{ ref.id }}</span>
               <span v-if="ref.archivedAt" class="cap-meta">{{ ref.archivedAt }}</span>
               <span v-else class="cap-meta">active</span>
-              <span v-if="ref.archived" class="nav-arrow">→</span>
+              <span class="nav-arrow">→</span>
             </li>
           </ul>
         </section>

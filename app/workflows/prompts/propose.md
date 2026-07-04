@@ -12,7 +12,13 @@
 ## 任务
 
 1. 生成 `proposal.md`:`## Why` / `## What Changes` / `## Capabilities` / `## Impact`
-2. 档位为 full 时,额外生成 spec delta + `design.md`(记录关键决策与权衡)
+2. 档位为 thorough 时,额外生成 spec delta + `design.md`(记录关键决策与权衡)
+
+## 档位差异(深度而非数量)
+
+- **lean**:需求边界清晰(已跳过 Explore),proposal 写得短而准,直击 What/Impact,避免过度设计
+- **standard**:补全 Why 与 Capabilities 锚点,确保 spec 可验收
+- **thorough**:`design.md` 必须列出至少 2 个备选方案 + 取舍理由;Impact 涵盖向后兼容、性能、迁移路径
 
 ## 格式铁律(否则 openspec validate --strict 失败)
 

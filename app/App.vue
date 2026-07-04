@@ -309,6 +309,7 @@ function submitManualPath() {
         :active-session-id="backend.selectedSessionId.value"
         :workspace-diffs="backend.workspaceDiffs.value"
         :status-of="backend.statusOf"
+        :spec-detail-target="specDetailTarget"
         @select-session="onSelectSession"
         @delete-session="onDeleteSession"
         @abort-session="onAbortSession"
@@ -339,6 +340,7 @@ function submitManualPath() {
             :target="specDetailTarget"
             @close="specDetailTarget = null"
             @navigate="onOpenSpecDetail"
+            @open-workflow="onOpenWorkflow"
           />
         </template>
         <template v-else-if="activeDiff">

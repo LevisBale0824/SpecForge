@@ -33,9 +33,9 @@ const steps = computed(() =>
 );
 
 const tiers: Array<{ id: WorkflowTier; label: string }> = [
-  { id: "quick", label: TIER_LABELS.quick },
+  { id: "lean", label: TIER_LABELS.lean },
   { id: "standard", label: TIER_LABELS.standard },
-  { id: "full", label: TIER_LABELS.full },
+  { id: "thorough", label: TIER_LABELS.thorough },
 ];
 </script>
 

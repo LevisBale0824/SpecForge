@@ -27,8 +27,8 @@ function loadTemplate(stage: StagePromptName): string {
 }
 
 function fillTemplate(tpl: string, ctx: StageContext): string {
-  let out = tpl.replace(/\{\{#if full\}\}([\s\S]*?)\{\{\/if\}\}/g, (_, body) =>
-    ctx.tier === "full" ? (body as string) : "",
+  let out = tpl.replace(/\{\{#if thorough\}\}([\s\S]*?)\{\{\/if\}\}/g, (_, body) =>
+    ctx.tier === "thorough" ? (body as string) : "",
   );
   out = out.replace(/\{\{(\w+)\}\}/g, (_, key: string) => {
     const v = (ctx as unknown as Record<string, unknown>)[key];

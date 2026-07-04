@@ -2,9 +2,9 @@
 // OpenSpec Workflow Plugin
 // ---------------------------------------------------------------------------
 // 风险自适应工作流:按 tier 启用不同阶段子集。
-// Quick: propose→apply→verify→archive
-// Standard: explore→propose→apply→verify→archive
-// Full: explore→propose→plan→apply→verify→review→archive
+// Lean:      propose→apply→verify→archive
+// Standard:  explore→propose→apply→verify→archive
+// Thorough:  explore→propose→plan→apply→verify→review→archive
 // ---------------------------------------------------------------------------
 
 import type { App } from "vue";
@@ -96,7 +96,7 @@ function nextStep(): boolean {
 
 /**
  * Step 3 — Archive gate:仅当 verify 阶段处于 done(证据已通过)才允许归档。
- * 确定性拦截,不依赖人记。Quick/Standard/Full 都含 verify,故统一适用。
+ * 确定性拦截,不依赖人记。Lean/Standard/Thorough 都含 verify,故统一适用。
  */
 function canArchive(): boolean {
   const v = workflowState.value.steps.verify;
@@ -105,7 +105,7 @@ function canArchive(): boolean {
 
 export const workflowPlugin: OpenSpecPlugin = {
   name: "openspec-workflow",
-  description: "Risk-adaptive workflow: Quick / Standard / Full",
+  description: "Risk-adaptive workflow: Lean / Standard / Thorough",
   enabled: false,
 
   install(app: App) {

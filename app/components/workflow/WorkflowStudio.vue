@@ -151,10 +151,10 @@ function tierForChange(stage: StepName): WorkflowTier {
   const remembered = changeTiers.value[changeId.value];
   if (remembered) return remembered;
   const sessions = stageSessions.value[changeId.value];
-  if (sessions?.plan || sessions?.review) return "full";
+  if (sessions?.plan || sessions?.review) return "thorough";
   if (sessions?.explore) return "standard";
   if (stage === "explore") return "standard";
-  return "quick";
+  return "lean";
 }
 
 function openSelectedChange() {
@@ -375,8 +375,24 @@ function verdictColor(v: string): string {
 
 <template>
   <div class="wf-page">
+    <!-- 未启用工作流:模块介绍 -->
+    <div v-if="!wf.enabled.value" class="wf-intro">
+      <div class="wf-intro-kicker">Spec 探索</div>
+      <h2 class="wf-intro-title">从需求到上线的结构化工作流</h2>
+      <p class="wf-intro-sub">
+        按改动规模选择档位 — 轻量 / 标准 / 完整 — 依次走过
+        Explore、Propose、Plan、Apply、Verify、Review、Archive, 每个阶段都有明确的产物与 Gate。
+      </p>
+      <div class="wf-intro-flow">
+        <span>Explore</span><i>→</i> <span>Propose</span><i>→</i> <span>Plan</span><i>→</i>
+        <span>Apply</span><i>→</i> <span>Verify</span><i>→</i> <span>Review</span><i>→</i>
+        <span>Archive</span>
+      </div>
+      <div class="wf-intro-cta">从左侧 Spec 探索 点 <strong>+</strong> 开始一次新探索</div>
+    </div>
+
     <!-- 工作流 -->
-    <div class="wf-pane">
+    <div v-else class="wf-pane">
       <!-- 左轨道(均匀填满高度) -->
       <aside class="track">
         <div class="ckicker">流程 · {{ TIER_LABELS[wf.state.value.tier] }}</div>
@@ -616,6 +632,74 @@ function verdictColor(v: string): string {
   background:
     radial-gradient(circle at 14% 0%, rgba(167, 139, 250, 0.05), transparent 42%),
     radial-gradient(circle at 86% 100%, rgba(34, 211, 238, 0.04), transparent 42%);
+}
+
+/* 未启用工作流的模块介绍 */
+.wf-intro {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 40px;
+  text-align: center;
+}
+.wf-intro-kicker {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--color-accent-violet, #a78bfa);
+}
+.wf-intro-title {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: var(--color-surface-100, #f1f5f9);
+}
+.wf-intro-sub {
+  margin: 0;
+  max-width: 520px;
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--color-surface-400, #94a3b8);
+}
+.wf-intro-flow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 6px 8px;
+  margin-top: 6px;
+  font-family: var(--font-mono, monospace);
+  font-size: 12px;
+}
+.wf-intro-flow span {
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--color-surface-700, #334155) 50%, transparent);
+  background: color-mix(in srgb, var(--color-surface-900, #0f172a) 60%, transparent);
+  color: var(--color-surface-300, #cbd5e1);
+}
+.wf-intro-flow i {
+  font-style: normal;
+  color: var(--color-surface-600, #475569);
+}
+.wf-intro-cta {
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--color-surface-500, #64748b);
+}
+.wf-intro-cta strong {
+  display: inline-block;
+  margin: 0 2px;
+  padding: 1px 7px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--color-accent-violet, #a78bfa) 18%, transparent);
+  color: var(--color-accent-violet, #a78bfa);
+  font-weight: 800;
 }
 
 /* 工作流 */
