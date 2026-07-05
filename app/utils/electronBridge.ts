@@ -228,6 +228,16 @@ export async function readChangeArtifact(
   return null;
 }
 
+export async function removeChangeDir(
+  rootPath: string,
+  changeId: string,
+): Promise<{ ok: boolean; reason?: string } | null> {
+  if (window.electronAPI) {
+    return window.electronAPI.removeChangeDir(rootPath, changeId);
+  }
+  return null;
+}
+
 // ── Frameless titlebar window controls ────────────────────────────────────
 
 export function windowMinimize(): void {

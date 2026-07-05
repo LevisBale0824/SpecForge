@@ -26,6 +26,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
   readOpenSpecState: (rootPath) => ipcRenderer.invoke("readOpenSpecState", rootPath),
   writeOpenSpecTasks: (rootPath, changeId, taskId, completed) =>
     ipcRenderer.invoke("writeOpenSpecTasks", rootPath, changeId, taskId, completed),
+  removeChangeDir: (rootPath, changeId) =>
+    ipcRenderer.invoke("removeChangeDir", rootPath, changeId),
   runOpenSpecValidate: (rootPath, changeId) =>
     ipcRenderer.invoke("runOpenSpecValidate", rootPath, changeId),
   initOpenSpec: (rootPath) => ipcRenderer.invoke("initOpenSpec", rootPath),

@@ -47,6 +47,7 @@ const emit = defineEmits<{
   "select-session": [sessionId: string];
   "delete-session": [sessionId: string];
   "delete-workflow-draft": [];
+  "delete-active-change": [changeId: string];
   "abort-session": [sessionId: string];
   "new-session": [];
   "open-file": [path: string];
@@ -60,9 +61,10 @@ const emit = defineEmits<{
 }>();
 
 const displayWorkflowTitle = computed(() => {
-  const ch = openspec.state.activeChanges[0];
-  if (ch) return ch.id;
-  return wf.state.value.label || "探索中...";
+  // Draft title is the user's need text (or placeholder). Must NOT fall back
+  // to activeChanges[0].id — that would show an active change's name as the
+  // draft title now that draft + active coexist in the panel.
+  return wf.state.value.label?.trim() || "探索中...";
 });
 const hasWorkflowDraft = computed(() => Boolean(wf.state.value.label?.trim()));
 
@@ -342,6 +344,16 @@ function handleOpenDiff(diff: MessageDiffEntry) {
                   <span v-if="change.taskStats?.total" class="spec-progress">
                     {{ change.taskStats.completed }}/{{ change.taskStats.total }}
                   </span>
+                  <button
+                    type="button"
+                    class="spec-item-action danger"
+                    :title="t('sidebar.deleteSession', 'Delete')"
+                    @click.stop="emit('delete-active-change', change.id)"
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                      <path d="M3 6h18M8 6V4h8v2M10 11v6M14 11v6M6 6l1 14h10l1-14" />
+                    </svg>
+                  </button>
                 </div>
               </div>
 

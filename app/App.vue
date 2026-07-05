@@ -13,6 +13,7 @@ import FileViewer from "./components/FileViewer.vue";
 import OpenSpecPanel from "./components/openspec/OpenSpecPanel.vue";
 import SpecDetailView from "./components/openspec/SpecDetailView.vue";
 import TierPickerDialog from "./components/workflow/TierPickerDialog.vue";
+import ConfirmDialog from "./components/ConfirmDialog.vue";
 import UpdateToast from "./components/UpdateToast.vue";
 import UpdateDialog from "./components/UpdateDialog.vue";
 import { useRoute, useRouter } from "vue-router";
@@ -48,6 +49,7 @@ const showConsole = ref(false);
 const showOpenSpecDialog = ref(false);
 const specDetailTarget = ref<SpecTarget | null>(null);
 const showTierPicker = ref(false);
+const confirmDialog = ref<InstanceType<typeof ConfirmDialog> | null>(null);
 const consoleHeight = ref(220);
 const consolePanelEl = ref<InstanceType<typeof ConsolePanel> | null>(null);
 const backend = useBackend();
@@ -184,6 +186,30 @@ async function onDeleteWorkflowDraft() {
   stageSessions.clearStageSessions("__draft__");
   wf.disable();
   router.replace({ name: "workflow", query: { intro: "1" } });
+}
+
+async function onDeleteActiveChange(changeId: string) {
+  if (!changeId) return;
+  const confirmed = await confirmDialog.value?.confirm({
+    title: `删除活跃探索 "${changeId}"?`,
+    message:
+      "将移除 openspec/changes/ 下该 change 的整个目录（proposal / tasks / design / specs 等）以及绑定的会话。此操作不可撤销。",
+    confirmText: "删除",
+    cancelText: "取消",
+    danger: true,
+  });
+  if (!confirmed) return;
+  // If we're currently viewing this change, bounce back to draft/intro so the
+  // UI doesn't keep showing a stale contract/tasks view after the dir is gone.
+  if (route.query.change === changeId) {
+    router.replace({ name: "workflow", query: { intro: "1" } });
+  }
+  await openspec.deleteChange(changeId, {
+    onBoundSession: (sid) =>
+      backend.deleteSession(sid).catch((e) => {
+        console.warn(`[App] deleteSession(${sid}) failed during change cleanup:`, e);
+      }),
+  });
 }
 
 function onNewSession() {
@@ -346,6 +372,7 @@ function submitManualPath() {
         @select-session="onSelectSession"
         @delete-session="onDeleteSession"
         @delete-workflow-draft="onDeleteWorkflowDraft"
+        @delete-active-change="onDeleteActiveChange"
         @abort-session="onAbortSession"
         @new-session="onNewSession"
         @open-chat="onOpenChat"
@@ -497,6 +524,7 @@ function submitManualPath() {
     <UpdateDialog />
     <!-- 新建探索:档位选择对话框 -->
     <TierPickerDialog :open="showTierPicker" @pick="onPickTier" @close="showTierPicker = false" />
+    <ConfirmDialog ref="confirmDialog" />
     <!-- OpenSpec Dialog -->
     <Teleport to="body">
       <div v-if="showOpenSpecDialog" class="openspec-dialog-layer">

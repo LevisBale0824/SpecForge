@@ -52,6 +52,17 @@ const changeTiers = ref<Record<string, WorkflowTier>>(
 );
 const draftKnownChangeIds = ref<Set<string>>(new Set());
 const creatingDraftChange = ref(false);
+// Snapshot of in-progress draft state, taken when user navigates away to an
+// active change. Used to restore the draft when the route returns to no-?change=.
+// Without this, opening an active change overwrites label/tier/activeStep and
+// the user's explore conversation appears lost even though the registry still
+// has the __draft__ → stage → sessionId binding.
+const draftBackup = ref<{
+  label: string;
+  tier: WorkflowTier;
+  activeStep: StepName;
+  injected: Partial<Record<StepName, boolean>>;
+} | null>(null);
 
 const stages = computed(() => stagesForTier(wf.state.value.tier));
 const viewedStep = ref<StepName>(wf.state.value.activeStep);
@@ -89,7 +100,6 @@ const requestedChangeId = computed(() => {
   return typeof value === "string" ? value : "";
 });
 const selectedChange = computed(() => {
-  if (creatingDraftChange.value) return undefined;
   if (requestedChangeId.value) {
     return openspec.state.activeChanges.find((change) => change.id === requestedChangeId.value);
   }
@@ -362,8 +372,6 @@ function discoverStageSessions(wKey: string): void {
 async function prepareStageSession(stage: StepName) {
   let registered = stageSessionsStore.stageSessionId(workflowKey.value, stage);
   if (!registered && workflowKey.value !== "__draft__") {
-    // Registry miss on a real change — try to recover bindings from session
-    // titles (survives localStorage clear / external change creation).
     discoverStageSessions(workflowKey.value);
     registered = stageSessionsStore.stageSessionId(workflowKey.value, stage);
   }
@@ -432,6 +440,16 @@ async function openSelectedChange() {
     router.replace({ name: "workflow", query: { intro: "1" } });
     return;
   }
+  // Snapshot the in-progress draft before opening the active change overwrites
+  // workflow state. Restored by restoreDraft() when user navigates back.
+  if (creatingDraftChange.value && wf.state.value.label) {
+    draftBackup.value = {
+      label: wf.state.value.label,
+      tier: wf.state.value.tier,
+      activeStep: wf.state.value.activeStep,
+      injected: { ...injected.value },
+    };
+  }
   wf.enable();
   const inferredStage = stageForChange();
   // contract.md 是 tier 的权威来源(持久在 change 目录里,跨机器/清缓存都还在)。
@@ -452,7 +470,9 @@ async function openSelectedChange() {
   const nextStages = stagesForTier(nextTier);
   const targetStage = nextStages.includes(inferredStage) ? inferredStage : nextStages[0];
   wf.setTier(nextTier);
-  wf.state.value.label = changeId.value;
+  // Don't overwrite label — it carries the draft's need text and SidePanel
+  // uses it to title the "探索中" item. The active change is already shown in
+  // "活跃探索"; mirroring its id here would make the two items look identical.
   creatingDraftChange.value = false;
   void enterStage(targetStage, { advance: true });
 }
@@ -478,6 +498,46 @@ watch(
   ],
   openSelectedChange,
 );
+// Route returned to no-?change= while we have a stashed draft snapshot (user
+// clicked "探索中" after opening an active change). Restore the draft's
+// workflow state and re-select its bound explore session so the conversation
+// reappears instead of leaving the user looking at the active change's empty
+// msgStore.
+watch(
+  () => requestedChangeId.value,
+  (newId, oldId) => {
+    if (newId || oldId === undefined) return;
+    if (!draftBackup.value) return;
+    if (creatingDraftChange.value) return; // already in draft, nothing to restore
+    void restoreDraft();
+  },
+);
+
+async function restoreDraft() {
+  const backup = draftBackup.value;
+  if (!backup) return;
+  draftBackup.value = null;
+  creatingDraftChange.value = true;
+  wf.setTier(backup.tier);
+  wf.state.value.label = backup.label;
+  wf.state.value.activeStep = backup.activeStep;
+  viewedStep.value = backup.activeStep;
+  injected.value = { ...backup.injected };
+  contract.value = undefined;
+  contractStale.value = null;
+  verifyWarnings.value = [];
+  taskRunner.reset();
+  // Re-select the draft's bound session for the active step so the
+  // conversation is restored from cache/backend.
+  const stageToEnter = backup.activeStep;
+  const registered = stageSessionsStore.stageSessionId("__draft__", stageToEnter);
+  if (registered) {
+    if (backend.selectedSessionId.value !== registered) {
+      await backend.selectSession(registered);
+    }
+    injected.value[stageToEnter] = true;
+  }
+}
 watch(
   () => [openspec.state.activeChanges.length, openspec.state.lastRefreshedAt],
   () => {
@@ -504,8 +564,9 @@ watch(
         void backend.patchSessionTitle(sid, next);
       }
     }
-    wf.state.value.label = created.id;
+    wf.state.value.label = "";
     creatingDraftChange.value = false;
+    draftBackup.value = null;
     router.replace({ name: "workflow", query: { change: created.id } });
   },
 );
@@ -551,6 +612,7 @@ function pick(t: WorkflowTier) {
   }
   draftKnownChangeIds.value = new Set(openspec.state.activeChanges.map((change) => change.id));
   creatingDraftChange.value = true;
+  draftBackup.value = null;
   wf.setTier(t);
   viewedStep.value = wf.state.value.activeStep;
   wf.enable();

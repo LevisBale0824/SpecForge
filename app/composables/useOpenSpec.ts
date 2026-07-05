@@ -20,6 +20,7 @@ import {
   isElectron,
   readChangeArtifact,
   readOpenSpecState,
+  removeChangeDir,
   runOpenSpecValidate,
   runProjectGate,
   writeChangeArtifact,
@@ -563,6 +564,44 @@ async function init(): Promise<{ ok: boolean; method?: "cli" | "manual"; reason?
   }
 }
 
+/**
+ * Delete an active (non-archived) change directory and clear its stage session
+ * bindings. Bound backend sessions are deleted by the caller (App.vue) since
+ * useOpenSpec has no dependency on the backend/session layer.
+ */
+async function deleteChange(
+  changeId: string,
+  options?: { onBoundSession?: (sessionId: string) => void | Promise<void> },
+): Promise<{ ok: boolean; reason?: string }> {
+  const project = useProject();
+  if (!changeId || changeId === "archive") {
+    return { ok: false, reason: "invalid changeId" };
+  }
+  // Notify caller of bound sessions BEFORE we clear the registry, so they can
+  // delete them via the backend.
+  if (options?.onBoundSession) {
+    // read from localStorage-backed registry via dynamic import to avoid cycle
+    const { useStageSessions } = await import("./useStageSessions");
+    const stages = useStageSessions();
+    for (const sid of stages.sessionsForWorkflow(changeId)) {
+      await options.onBoundSession(sid);
+    }
+    stages.clearStageSessions(changeId);
+  }
+  const root = state.rootPath || project.state.directoryPath;
+  if (!root) {
+    return { ok: false, reason: "no project root" };
+  }
+  const result = await removeChangeDir(root, changeId);
+  if (!result?.ok) {
+    state.error = result?.reason || "删除 change 失败";
+    return { ok: false, reason: result?.reason };
+  }
+  state.error = "";
+  await refresh();
+  return { ok: true };
+}
+
 export function useOpenSpec() {
   const project = useProject();
   watch(
@@ -590,5 +629,6 @@ export function useOpenSpec() {
     archiveChange,
     captureKnowledge,
     init,
+    deleteChange,
   };
 }

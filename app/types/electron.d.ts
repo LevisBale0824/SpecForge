@@ -104,6 +104,11 @@ export interface ElectronAPI {
     taskId: string,
     completed: boolean,
   ) => Promise<import("./openspec").OpenSpecWriteTasksResult>;
+  /** 删除 openspec/changes/<changeId>/ 目录(仅活跃 change,禁止 archive)。 */
+  removeChangeDir: (
+    rootPath: string,
+    changeId: string,
+  ) => Promise<{ ok: boolean; reason?: string }>;
   /** 跑 `openspec validate <changeId?> --strict`;changeId 省略为全局校验 */
   runOpenSpecValidate: (
     rootPath: string,

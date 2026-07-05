@@ -1124,6 +1124,33 @@ function registerIpcHandlers() {
     },
   );
 
+  // Remove an active (non-archived) change directory: openspec/changes/<changeId>/.
+  // Used by the SidePanel "活跃探索" delete button to discard a change without
+  // going through the archive flow. Refuses path escapes and the archive/ dir.
+  ipcMain.handle("removeChangeDir", async (_e, rootPath: string, changeId: string) => {
+    try {
+      if (!/^[a-zA-Z0-9._-]+$/.test(changeId)) {
+        return { ok: false, reason: "invalid changeId" };
+      }
+      if (changeId === "archive") {
+        return { ok: false, reason: "cannot remove archive dir" };
+      }
+      const relPath = `openspec/changes/${changeId}`;
+      const abs = safeJoinPosix(rootPath, relPath);
+      if (!isPathInside(rootPath, abs)) {
+        return { ok: false, reason: "path outside project" };
+      }
+      if (!fs.existsSync(abs)) {
+        return { ok: false, reason: "change dir not found" };
+      }
+      fs.rmSync(abs, { recursive: true, force: true });
+      return { ok: true };
+    } catch (err) {
+      console.error("[electron] removeChangeDir failed:", err);
+      return { ok: false, reason: String(err) };
+    }
+  });
+
   ipcMain.handle("runOpenSpecValidate", async (_e, rootPath: string, changeId?: string) => {
     try {
       return await runOpenspecValidate(rootPath, changeId);
