@@ -483,7 +483,7 @@ async function requestTasksMd() {
     "- 使用 OpenSpec tasks.md checkbox 格式，例如 `- [ ] 1.1 ...`。",
     "- 每个任务必须有明确完成条件；需要测试/构建/手动验收时写清楚验证方式。",
     "- 不要直接开始实现代码，先只生成或更新 tasks.md，完成后说明任务拆分依据。",
-    `Proposal 与 contract 见 openspec/changes/${changeId.value}/proposal.md 与 contract.md,需要时自行读取(避免在本轮对话里重复内联全文)。`,
+    `Proposal 与 contract 见 openspec/changes/${changeId.value}/proposal.md 与 contract.md,需要时自行读取。`,
   ]
     .filter(Boolean)
     .join("\n");
@@ -510,7 +510,7 @@ async function requestStartWork() {
     "- 先阅读相关代码和 OpenSpec 产物，不要凭空实现。",
     "- 保持改动聚焦在当前 change 的 scope 内。",
     "- 实现后运行必要验证，并在回复里说明改了什么、验证结果，以及是否建议补写 tasks.md。",
-    `Proposal 与 contract 见 openspec/changes/${changeId.value}/proposal.md 与 contract.md,需要时自行读取(避免在本轮对话里重复内联全文)。`,
+    `Proposal 与 contract 见 openspec/changes/${changeId.value}/proposal.md 与 contract.md,需要时自行读取。`,
   ]
     .filter(Boolean)
     .join("\n");
@@ -549,7 +549,7 @@ async function requestRunPendingTasksInApply() {
     "- 遵循 TDD: 写/调整测试 -> 看到失败 -> 实现 -> 运行验证。",
     "- 每完成一个 task 后更新 tasks.md 中对应 checkbox。",
     "- 完成后汇总改动、验证命令和结果；如果有任务无法完成，明确说明阻塞原因。",
-    `Proposal 与 contract 见 openspec/changes/${changeId.value}/proposal.md 与 contract.md,需要时自行读取(避免在本轮对话里重复内联全文)。`,
+    `Proposal 与 contract 见 openspec/changes/${changeId.value}/proposal.md 与 contract.md,需要时自行读取。`,
   ]
     .filter(Boolean)
     .join("\n");
