@@ -64,9 +64,7 @@ const displayWorkflowTitle = computed(() => {
   if (ch) return ch.id;
   return wf.state.value.label || "探索中...";
 });
-const hasWorkflowDraft = computed(
-  () => openspec.state.activeChanges.length > 0 || Boolean(wf.state.value.label?.trim()),
-);
+const hasWorkflowDraft = computed(() => Boolean(wf.state.value.label?.trim()));
 
 const workspaceDiffEntries = computed<MessageDiffEntry[]>(() =>
   props.workspaceDiffs
@@ -308,10 +306,7 @@ function handleOpenDiff(diff: MessageDiffEntry) {
               </button>
 
               <!-- 探索中草稿 -->
-              <div
-                v-if="wf.enabled.value && !openspec.state.activeChanges.length && hasWorkflowDraft"
-                class="spec-section"
-              >
+              <div v-if="wf.enabled.value && hasWorkflowDraft" class="spec-section">
                 <div class="spec-group-label"><span>探索中</span></div>
                 <div class="spec-item ongoing" @click="openWorkflow()">
                   <span class="spec-marker violet">◆</span>
