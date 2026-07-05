@@ -17,6 +17,7 @@
 // ---------------------------------------------------------------------------
 
 import type { StepName } from "../types/workflow";
+import type { SessionInfo } from "../types/sse";
 
 const SENTINEL = "⌁sf:";
 const SENTINEL_REGEX = /\s*⌁sf:([a-zA-Z]+):([^\s⌁]+)\s*$/;
@@ -56,4 +57,48 @@ export function encodeStageSuffix(title: string | undefined | null, binding: Sta
   const base = stripStageSuffix(title);
   if (!binding.stage || !binding.workflowKey) return base;
   return `${base} ${SENTINEL}${binding.stage}:${binding.workflowKey}`;
+}
+
+/**
+ * Compute the set of session IDs that should be hidden from the chat sidebar
+ * because they are workflow stage sessions OR descendants (subagent,
+ * sub-subagent, …) of one. Without the descendant walk, subagents would leak
+ * through as "orphans" once their stage-session parent is filtered out.
+ *
+ * Two signals are combined:
+ *  - `extraStageIds`: IDs known by the caller to be stage sessions (typically
+ *    from the localStorage registry); passing `undefined` skips this check.
+ *  - title suffix `⌁sf:<stage>:<workflowKey>`: the authoritative signal that
+ *    travels with the session itself, surviving registry loss / cache clears.
+ */
+export function computeHiddenStageSessions(
+  sessions: SessionInfo[],
+  extraStageIds?: ReadonlySet<string>,
+): Set<string> {
+  const stage = new Set<string>();
+  const parentOf = new Map<string, string | undefined>();
+  for (const s of sessions) {
+    parentOf.set(s.id, s.parentID);
+    if (extraStageIds?.has(s.id) || decodeStageBinding(s.title)) {
+      stage.add(s.id);
+    }
+  }
+  const hidden = new Set<string>();
+  for (const s of sessions) {
+    if (stage.has(s.id)) {
+      hidden.add(s.id);
+      continue;
+    }
+    // Walk ancestor chain — if any ancestor is a stage session, hide this.
+    let cur = parentOf.get(s.id);
+    let guard = 0;
+    while (cur && guard++ < 32) {
+      if (stage.has(cur)) {
+        hidden.add(s.id);
+        break;
+      }
+      cur = parentOf.get(cur);
+    }
+  }
+  return hidden;
 }

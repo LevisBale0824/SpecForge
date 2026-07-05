@@ -20,7 +20,7 @@ import { useRoute, useRouter } from "vue-router";
 import { useFloatingWindows } from "./composables/useFloatingWindows";
 import { useProject } from "./composables/useProject";
 import { useBackend } from "./composables/useBackend";
-import { decodeStageBinding } from "./utils/stageTitleEncoding";
+import { computeHiddenStageSessions } from "./utils/stageTitleEncoding";
 import { useOpenSpec } from "./composables/useOpenSpec";
 import { useStageSessions } from "./composables/useStageSessions";
 import { useWorkflow } from "./plugins/workflowPlugin";
@@ -231,13 +231,13 @@ function onOpenChat() {
   // 它按设计只应从工作流轨道进入,不能泄漏到 chat 视图。当 lastChatSessionId 为空
   // (如在 /workflow 刷新后)时,旧逻辑会带着 stage session 直接进 chat,导致阶段对话
   // 内容被展示。命中 stage session 或无可用会话时,开新会话而非沿用 stage session。
-  // 双重判定:registry 命中 OR title 里带 ⌁sf: 后缀(注册表丢失时兜底)。
+  // 同样适用于 stage session 的子 agent(沿祖先链查找),共用 computeHiddenStageSessions。
   const cur = backend.selectedSessionId.value;
-  const curSession = cur ? backend.sessions.value.find((s) => s.id === cur) : undefined;
   const onStageSession =
     Boolean(cur) &&
-    (stageSessions.stageSessionIds.value.has(cur) ||
-      Boolean(decodeStageBinding(curSession?.title)));
+    computeHiddenStageSessions(backend.sessions.value, stageSessions.stageSessionIds.value).has(
+      cur,
+    );
   if (lastChatSessionId.value && cur !== lastChatSessionId.value) {
     backend.selectSession(lastChatSessionId.value);
   } else if (onStageSession || !cur) {

@@ -12,7 +12,7 @@ import { useOpenSpec } from "../composables/useOpenSpec";
 import { useProject } from "../composables/useProject";
 import { useStageSessions } from "../composables/useStageSessions";
 import { useWorkflow } from "../plugins/workflowPlugin";
-import { decodeStageBinding } from "../utils/stageTitleEncoding";
+import { computeHiddenStageSessions } from "../utils/stageTitleEncoding";
 import type { MessageDiffEntry } from "../types/message";
 import type { FileDiff, SessionInfo, SessionStatusInfo } from "../types/sse";
 import type { SpecTarget } from "../types/openspec";
@@ -90,14 +90,13 @@ const activeDiffs = computed(() => {
 
 const activeDiffCount = computed(() => activeDiffs.value?.length ?? 0);
 const { stageSessionIds } = useStageSessions();
-// Stage sessions must never appear in the chat sidebar. The localStorage
-// registry is the primary signal, but it can be out of sync (cleared cache,
-// sessions created on another machine, registration lost during SSE races).
-// The authoritative signal is the `⌁sf:<stage>:<workflowKey>` suffix in the
-// session title — fall back to that so stage sessions can't leak through.
-const chatSessions = computed(() =>
-  props.sessions.filter((s) => !stageSessionIds.value.has(s.id) && !decodeStageBinding(s.title)),
-);
+// Stage sessions and their subagent descendants must never appear in the chat
+// sidebar. See computeHiddenStageSessions for the rationale (registry + title
+// suffix double-check + ancestor walk).
+const chatSessions = computed(() => {
+  const hidden = computeHiddenStageSessions(props.sessions, stageSessionIds.value);
+  return props.sessions.filter((s) => !hidden.has(s.id));
+});
 const rootSessionCount = computed(() => chatSessions.value.filter((s) => !s.parentID).length);
 const chatActiveSessionId = computed(() => {
   const id = props.activeSessionId;
