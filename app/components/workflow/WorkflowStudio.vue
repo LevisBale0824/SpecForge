@@ -52,6 +52,27 @@ const stages = computed(() => stagesForTier(wf.state.value.tier));
 const cur = computed(() => wf.state.value.activeStep);
 const activeIdx = computed(() => stages.value.indexOf(cur.value));
 const isLast = computed(() => activeIdx.value === stages.value.length - 1);
+// frontier = 用户实际到过的最远阶段。
+// 取"基于 change 产物的推断"和"当前查看位置"的较大者:
+//   - 产物推断:有 evidence→verify、有 tasks→apply、有 proposal→propose、否则 explore
+//   - 当前位置:activeStep(用户可能正在 propose 写 proposal.md,产物还没落盘)
+// 这样在 earlier stage 回看时,后续已解锁的 stage 不会被错误锁定;
+// 同时不会把"正在进行的当前阶段"锁死。
+const frontierIdx = computed(() => {
+  const change = selectedChange.value;
+  let inferredIdx = 0;
+  if (change) {
+    if (openspec.state.evidence[change.id]) {
+      inferredIdx = stages.value.indexOf("verify");
+    } else if (change.taskStats.total > 0) {
+      inferredIdx = stages.value.indexOf("apply");
+    } else if (change.deltaSpecs.length > 0 || change.proposal) {
+      inferredIdx = stages.value.indexOf("propose");
+    }
+    if (inferredIdx < 0) inferredIdx = 0;
+  }
+  return Math.max(inferredIdx, activeIdx.value);
+});
 const nextLabel = computed(() =>
   isLast.value ? "" : stageLabel(stages.value[activeIdx.value + 1]),
 );
@@ -339,7 +360,8 @@ function tierForChange(stage: StepName): WorkflowTier {
 }
 
 async function openSelectedChange() {
-  if (!requestedChangeId.value) return;
+  const requestedId = requestedChangeId.value;
+  if (!requestedId) return;
   if (!changeId.value) {
     wf.state.value.label = "";
     contract.value = undefined;
@@ -354,7 +376,13 @@ async function openSelectedChange() {
   // contract.md 是 tier 的权威来源(持久在 change 目录里,跨机器/清缓存都还在)。
   // localStorage.changeTiers 只在 UI 创建 change 时写入,清数据或 CLI 建 change 时缺失,
   // 会让 tierForChange 跌到默认 lean。先尝试读 contract,失败再回落。
-  const c = await loadContract(changeId.value);
+  const c = await loadContract(requestedId);
+  // Guard:async 期间用户切了 change、或 openspec refresh 重入 watch 时,
+  // 这次 run 的 inferredStage / contract 已经陈旧,放弃继续执行,让新 run 接管。
+  // 否则两次 openSelectedChange 会抢着 setTier / enterStage,
+  // 后跑的可能 startNewSession 把刚加载的消息清掉。
+  if (requestedChangeId.value !== requestedId) return;
+  if (!changeId.value) return;
   if (c) contract.value = c;
   const nextTier =
     c?.tier && (c.tier === "lean" || c.tier === "standard" || c.tier === "thorough")
@@ -428,11 +456,11 @@ const tddGreen = computed(() =>
 
 function stageState(i: number): "done" | "current" | "locked" {
   if (i === activeIdx.value) return "current";
-  return i < activeIdx.value ? "done" : "locked";
+  return i <= frontierIdx.value ? "done" : "locked";
 }
 function canOpenStage(i: number): boolean {
   if (archiving.value) return false;
-  return i <= activeIdx.value;
+  return i <= frontierIdx.value;
 }
 
 function pick(t: WorkflowTier) {
@@ -457,7 +485,7 @@ function backToIntro() {
 }
 function gotoStage(s: StepName) {
   const idx = stages.value.indexOf(s);
-  if (idx > activeIdx.value) return;
+  if (idx > frontierIdx.value) return;
   void enterStage(s);
 }
 function nextStage() {
