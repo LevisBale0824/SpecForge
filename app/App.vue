@@ -200,8 +200,16 @@ function onOpenChat() {
   activeFilePath.value = null;
   showOpenSpecDialog.value = false;
   specDetailTarget.value = null;
-  if (lastChatSessionId.value && backend.selectedSessionId.value !== lastChatSessionId.value) {
+  // 正在探索 change 时,当前 selected session 是 stage session(工作流阶段会话),
+  // 它按设计只应从工作流轨道进入,不能泄漏到 chat 视图。当 lastChatSessionId 为空
+  // (如在 /workflow 刷新后)时,旧逻辑会带着 stage session 直接进 chat,导致阶段对话
+  // 内容被展示。命中 stage session 或无可用会话时,开新会话而非沿用 stage session。
+  const cur = backend.selectedSessionId.value;
+  const onStageSession = Boolean(cur) && stageSessions.stageSessionIds.value.has(cur);
+  if (lastChatSessionId.value && cur !== lastChatSessionId.value) {
     backend.selectSession(lastChatSessionId.value);
+  } else if (onStageSession || !cur) {
+    backend.startNewSession();
   }
   router.push({ name: "chat" });
 }
