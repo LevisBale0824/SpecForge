@@ -32,11 +32,11 @@ export const TIER_STAGES: Record<WorkflowTier, StepName[]> = {
   thorough: ["explore", "propose", "plan", "apply", "verify", "review", "archive"],
 };
 
-/** 档位展示标签 */
+/** 档位展示标签(i18n key,由消费方经 t() 渲染) */
 export const TIER_LABELS: Record<WorkflowTier, string> = {
-  lean: "轻量 · 单文件小改",
-  standard: "标准 · 模块内功能",
-  thorough: "完整 · 跨模块 / 架构级",
+  lean: "workflow.tiers.lean",
+  standard: "workflow.tiers.standard",
+  thorough: "workflow.tiers.thorough",
 };
 
 /** 某档启用的阶段(保持顺序) */

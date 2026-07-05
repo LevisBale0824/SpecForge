@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { watch } from "vue";
+import { useI18n } from "vue-i18n";
 import type { WorkflowTier } from "../../types/workflow";
+
+const { t } = useI18n();
 
 const props = defineProps<{
   open: boolean;
@@ -13,39 +16,19 @@ const emit = defineEmits<{
 
 interface TierCard {
   id: WorkflowTier;
-  name: string;
-  steps: string;
-  fit: string;
-  skip: string;
   dots: number;
   flow: string;
 }
 
 const TIERS: TierCard[] = [
-  {
-    id: "lean",
-    name: "轻量",
-    steps: "4 步",
-    fit: "单文件小改",
-    skip: "跳过 Explore · Plan · Review",
-    dots: 4,
-    flow: "Propose → Apply → Verify → Archive",
-  },
+  { id: "lean", dots: 4, flow: "Propose → Apply → Verify → Archive" },
   {
     id: "standard",
-    name: "标准",
-    steps: "5 步",
-    fit: "模块内功能",
-    skip: "跳过 Plan · Review",
     dots: 5,
     flow: "Explore → Propose → Apply → Verify → Archive",
   },
   {
     id: "thorough",
-    name: "完整",
-    steps: "7 步",
-    fit: "跨模块 / 架构级",
-    skip: "完整流程,不跳阶段",
     dots: 7,
     flow: "Explore → Propose → Plan → Apply → Verify → Review → Archive",
   },
@@ -70,14 +53,24 @@ watch(
     <Transition name="tp-fade">
       <div v-if="props.open" class="tp-layer">
         <div class="tp-backdrop" @click="emit('close')" />
-        <section class="tp-dialog" role="dialog" aria-modal="true" aria-label="选择探索档位">
+        <section
+          class="tp-dialog"
+          role="dialog"
+          aria-modal="true"
+          :aria-label="t('workflow.tierDialog.ariaLabel')"
+        >
           <header class="tp-header">
             <div>
-              <span class="tp-kicker">新建探索</span>
-              <h2 class="tp-title">这次改动有多大？</h2>
-              <p class="tp-sub">不同档位走不同流程长度 — 选好后立即进入工作流</p>
+              <span class="tp-kicker">{{ t("workflow.tierDialog.kicker") }}</span>
+              <h2 class="tp-title">{{ t("workflow.tierDialog.title") }}</h2>
+              <p class="tp-sub">{{ t("workflow.tierDialog.sub") }}</p>
             </div>
-            <button type="button" class="tp-close" title="关闭" @click="emit('close')">
+            <button
+              type="button"
+              class="tp-close"
+              :title="t('workflow.tierDialog.close')"
+              @click="emit('close')"
+            >
               <svg
                 width="16"
                 height="16"
@@ -94,24 +87,24 @@ watch(
           </header>
           <div class="tp-body">
             <button
-              v-for="t in TIERS"
-              :key="t.id"
+              v-for="tier in TIERS"
+              :key="tier.id"
               type="button"
               class="tp-card"
-              :data-tier="t.id"
-              @click="emit('pick', t.id)"
+              :data-tier="tier.id"
+              @click="emit('pick', tier.id)"
             >
               <div class="tp-row1">
-                <span class="tp-name">{{ t.name }}</span>
-                <span class="tp-steps">{{ t.steps }}</span>
-                <span class="tp-fit">{{ t.fit }}</span>
+                <span class="tp-name">{{ t(`workflow.tierDialog.tiers.${tier.id}.name`) }}</span>
+                <span class="tp-steps">{{ t(`workflow.tierDialog.tiers.${tier.id}.steps`) }}</span>
+                <span class="tp-fit">{{ t(`workflow.tierDialog.tiers.${tier.id}.fit`) }}</span>
               </div>
               <div class="tp-dots">
-                <i v-for="n in t.dots" :key="n" class="tp-dot" />
+                <i v-for="n in tier.dots" :key="n" class="tp-dot" />
               </div>
-              <div class="tp-flow">{{ t.flow }}</div>
-              <div class="tp-skip">{{ t.skip }}</div>
-              <div class="tp-cta">选择 →</div>
+              <div class="tp-flow">{{ tier.flow }}</div>
+              <div class="tp-skip">{{ t(`workflow.tierDialog.tiers.${tier.id}.skip`) }}</div>
+              <div class="tp-cta">{{ t("workflow.tierDialog.selectCta") }}</div>
             </button>
           </div>
         </section>

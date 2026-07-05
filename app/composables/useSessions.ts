@@ -8,8 +8,13 @@
 
 import { computed, ref } from "vue";
 import type { SessionInfo } from "../types/sse";
+import { useStageSessions } from "./useStageSessions";
 
 const sessions = ref(new Map<string, SessionInfo>());
+
+// Stage-bound workflow sessions are绝对过滤 from the main sidebar list —
+// independent of selection state; they are only reachable via the track.
+const { stageSessionIds } = useStageSessions();
 
 function upsert(info: SessionInfo): void {
   if (!info?.id) return;
@@ -35,11 +40,13 @@ export function useSessions() {
     sessions,
     // Sorted: pinned first, then by last-updated descending.
     sortedSessions: computed(() => {
-      return [...sessions.value.values()].sort((a, b) => {
-        if (a.time.pinned && !b.time.pinned) return -1;
-        if (!a.time.pinned && b.time.pinned) return 1;
-        return (b.time.updated ?? 0) - (a.time.updated ?? 0);
-      });
+      return [...sessions.value.values()]
+        .filter((s) => !stageSessionIds.value.has(s.id))
+        .sort((a, b) => {
+          if (a.time.pinned && !b.time.pinned) return -1;
+          if (!a.time.pinned && b.time.pinned) return 1;
+          return (b.time.updated ?? 0) - (a.time.updated ?? 0);
+        });
     }),
     upsert,
     remove,

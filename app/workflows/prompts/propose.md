@@ -20,10 +20,13 @@
    - `## Capabilities`:涉及哪些 capability
    - `## Impact`:向后兼容 / 性能 / 迁移路径
 2. 档位为 thorough 时,额外生成 spec delta + `design.md`(记录关键决策与权衡)
+   {{#if lean}}
+3. **lean 专属**:在 proposal.md 末尾追加 `## Acceptance Checklist` section(2-5 项 `- [ ]`,每项绑定一条可验证命令,如 lint/test/build/手动验收),并在当前 change 目录下同步生成 `tasks.md`(checkbox 格式 `- [ ] 1.1 ...`,与 checklist 一一对应)。这是 Apply 的 scope 边界,粒度过粗时 Apply 会迷失。
+   {{/if}}
 
 ## 档位差异(深度而非数量)
 
-- **lean**:需求边界清晰(已跳过 Explore),proposal 写得短而准,直击 What/Impact,避免过度设计
+- **lean**:需求边界清晰(已跳过 Explore),proposal 写得短而准,直击 What/Impact;末尾附 2-5 项 Acceptance Checklist 并同步落 tasks.md,作为 Apply 的 scope 边界
 - **standard**:补全 Why 与 Capabilities 锚点,确保 spec 可验收
 - **thorough**:`design.md` 必须列出至少 2 个备选方案 + 取舍理由;Impact 涵盖向后兼容、性能、迁移路径
   {{#if thorough}}

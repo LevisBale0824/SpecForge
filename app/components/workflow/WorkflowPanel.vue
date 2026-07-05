@@ -32,11 +32,11 @@ const steps = computed(() =>
   })),
 );
 
-const tiers: Array<{ id: WorkflowTier; label: string }> = [
-  { id: "lean", label: TIER_LABELS.lean },
-  { id: "standard", label: TIER_LABELS.standard },
-  { id: "thorough", label: TIER_LABELS.thorough },
-];
+const tiers = computed<Array<{ id: WorkflowTier; label: string }>>(() => [
+  { id: "lean", label: t(TIER_LABELS.lean) },
+  { id: "standard", label: t(TIER_LABELS.standard) },
+  { id: "thorough", label: t(TIER_LABELS.thorough) },
+]);
 </script>
 
 <template>

@@ -7,6 +7,7 @@ import { useOpenSpec } from "../../composables/useOpenSpec";
 import { useBackend } from "../../composables/useBackend";
 import { useMessages, stripSystemReminder } from "../../composables/useMessages";
 import { getStagePrompt } from "../../composables/useStageRunner";
+import { useStageSessions } from "../../composables/useStageSessions";
 import { useContract, checkRequirementsCoverage } from "../../composables/useContract";
 import { useTaskRunner } from "../../composables/useTaskRunner";
 import { TIER_LABELS, stagesForTier, type StepName, type WorkflowTier } from "../../types/workflow";
@@ -22,46 +23,25 @@ const msgStore = useMessages();
 const { generateContract, loadContract, checkStale } = useContract();
 const taskRunner = useTaskRunner();
 
-const LABELS: Record<StepName, string> = {
-  explore: "Explore",
-  propose: "Propose",
-  plan: "Plan",
-  apply: "Apply",
-  verify: "Verify",
-  review: "Review",
-  archive: "Archive",
-};
-const SUBS: Record<StepName, string> = {
-  explore: "需求澄清",
-  propose: "固化 spec",
-  plan: "任务拆解",
-  apply: "TDD 实现",
-  verify: "验证 Gate",
-  review: "只读审查",
-  archive: "归档",
-};
-const HINTS: Record<StepName, string> = {
-  explore: "描述需求开始 — Agent 会 grilling 澄清边界（回复出现在这里）",
-  propose: "点 ✦ AI 起草，基于需求生成 proposal / spec delta",
-  plan: "由 proposal 拆解任务依赖 DAG",
-  apply: "TDD 实现（红→绿）在主对话区进行",
-  verify: "点 Run Gates，应用层真实执行 spec/lint/test/build",
-  review: "只读审查 spec 合规与质量",
-  archive: "归档前 evidence gate 检查",
-};
-
 const TIER_KEYS = ["lean", "standard", "thorough"] as const;
+
+function stageLabel(s: StepName): string {
+  return t(`workflow.stages.${s}.label`);
+}
+function stageSub(s: StepName): string {
+  return t(`workflow.stages.${s}.sub`);
+}
+function stageHint(s: StepName): string {
+  return t(`workflow.stages.${s}.hint`);
+}
 
 const need = ref("");
 const gating = ref(false);
 const archiving = ref(false);
 const draftMsg = ref("");
 const archiveMsg = ref<{ ok: boolean; text: string } | null>(null);
-const STAGE_SESSIONS_KEY = "specforge.workflow.stageSessions";
 const CHANGE_TIERS_KEY = "specforge.workflow.changeTiers";
-const stageSessions = ref<Record<string, Partial<Record<StepName, string>>>>(
-  JSON.parse(localStorage.getItem(STAGE_SESSIONS_KEY) || "{}"),
-);
+const stageSessionsStore = useStageSessions();
 const changeTiers = ref<Record<string, WorkflowTier>>(
   JSON.parse(localStorage.getItem(CHANGE_TIERS_KEY) || "{}"),
 );
@@ -72,7 +52,9 @@ const stages = computed(() => stagesForTier(wf.state.value.tier));
 const cur = computed(() => wf.state.value.activeStep);
 const activeIdx = computed(() => stages.value.indexOf(cur.value));
 const isLast = computed(() => activeIdx.value === stages.value.length - 1);
-const nextLabel = computed(() => (isLast.value ? "" : LABELS[stages.value[activeIdx.value + 1]]));
+const nextLabel = computed(() =>
+  isLast.value ? "" : stageLabel(stages.value[activeIdx.value + 1]),
+);
 const requestedChangeId = computed(() => {
   const value = route.query.change;
   return typeof value === "string" ? value : "";
@@ -88,57 +70,227 @@ const changeId = computed(() => selectedChange.value?.id ?? "");
 const evidence = computed(() =>
   changeId.value ? openspec.state.evidence[changeId.value] : undefined,
 );
+
+type StageGateTone = "ready" | "review" | "blocked" | "info";
+type StageGateActionKind = "next" | "generate-tasks" | "start-work" | "run-tasks";
+type StageGate = {
+  tone: StageGateTone;
+  kicker: string;
+  title: string;
+  body: string;
+  action?: string;
+  actionKind?: StageGateActionKind;
+  secondaryAction?: string;
+  secondaryActionKind?: StageGateActionKind;
+  tertiaryAction?: string;
+  tertiaryActionKind?: StageGateActionKind;
+  canContinue: boolean;
+};
+
 const stageInteracted = computed(
   () => messages.value.length > 0 || injected.value[cur.value] === true,
 );
-const canAdvance = computed(() => !isLast.value && stageInteracted.value);
+const stageGate = computed<StageGate | null>(() => {
+  if (isLast.value) return null;
+
+  const stage = cur.value;
+  const next = nextLabel.value;
+  const change = selectedChange.value;
+  const stats = change?.taskStats;
+  const currentEvidence = evidence.value;
+  const isLean = wf.state.value.tier === "lean";
+  const G = "workflow.studio.gate";
+
+  if (stage === "explore") {
+    if (!stageInteracted.value) return null;
+    return {
+      tone: "review",
+      kicker: t(`${G}.exploreReview.kicker`),
+      title: t(`${G}.exploreReview.title`),
+      body: t(`${G}.exploreReview.body`),
+      action: t(`${G}.exploreReview.action`, { next }),
+      canContinue: true,
+    };
+  }
+
+  if (stage === "propose") {
+    const hasProposal = Boolean(change?.proposal || change?.deltaSpecs.length);
+    if (!hasProposal) {
+      return {
+        tone: "blocked",
+        kicker: t(`${G}.proposeBlocked.kicker`),
+        title: t(`${G}.proposeBlocked.title`),
+        body: t(`${G}.proposeBlocked.body`),
+        canContinue: false,
+      };
+    }
+    return {
+      tone: "review",
+      kicker: t(`${G}.proposeReview.kicker`),
+      title: t(`${G}.proposeReview.title`),
+      body: t(`${G}.proposeReview.body`),
+      action: t(`${G}.proposeReview.action`, { next }),
+      canContinue: true,
+    };
+  }
+
+  if (stage === "plan") {
+    if (!stats || stats.total === 0) {
+      return {
+        tone: "blocked",
+        kicker: t(`${G}.planBlocked.kicker`),
+        title: t(`${G}.planBlocked.title`),
+        body: t(`${G}.planBlocked.body`),
+        action: t(`${G}.planBlocked.action`),
+        actionKind: "generate-tasks",
+        canContinue: false,
+      };
+    }
+    return {
+      tone: "review",
+      kicker: t(`${G}.planReview.kicker`),
+      title: t(`${G}.planReview.title`, { count: stats.total }),
+      body: t(`${G}.planReview.body`),
+      action: t(`${G}.planReview.action`, { next }),
+      canContinue: true,
+    };
+  }
+
+  if (stage === "apply") {
+    if (!changeId.value) {
+      return {
+        tone: "blocked",
+        kicker: t(`${G}.applyNoChange.kicker`),
+        title: t(`${G}.applyNoChange.title`),
+        body: t(`${G}.applyNoChange.body`),
+        canContinue: false,
+      };
+    }
+    if (!stats || stats.total === 0) {
+      if (isLean) {
+        return {
+          tone: "review",
+          kicker: t(`${G}.applyLeanSkip.kicker`),
+          title: t(`${G}.applyLeanSkip.title`),
+          body: t(`${G}.applyLeanSkip.body`),
+          action: t(`${G}.applyLeanSkip.action`),
+          actionKind: "start-work",
+          secondaryAction: t(`${G}.applyLeanSkip.secondaryAction`),
+          secondaryActionKind: "generate-tasks",
+          tertiaryAction: t(`${G}.applyLeanSkip.tertiaryAction`, { next }),
+          tertiaryActionKind: "next",
+          canContinue: true,
+        };
+      }
+      return {
+        tone: "blocked",
+        kicker: t(`${G}.applyNoTasks.kicker`),
+        title: t(`${G}.applyNoTasks.title`),
+        body: t(`${G}.applyNoTasks.body`),
+        action: t(`${G}.applyNoTasks.action`),
+        actionKind: "generate-tasks",
+        canContinue: false,
+      };
+    }
+    if (stats.pending > 0) {
+      return {
+        tone: "info",
+        kicker: t(`${G}.applyRunning.kicker`),
+        title: t(`${G}.applyRunning.title`, { done: stats.completed, total: stats.total }),
+        body: t(`${G}.applyRunning.body`),
+        action: t(`${G}.applyRunning.action`),
+        actionKind: "run-tasks",
+        canContinue: false,
+      };
+    }
+    return {
+      tone: "ready",
+      kicker: t(`${G}.applyReady.kicker`),
+      title: t(`${G}.applyReady.title`),
+      body: t(`${G}.applyReady.body`),
+      action: t(`${G}.applyReady.action`, { next }),
+      actionKind: "next",
+      canContinue: true,
+    };
+  }
+
+  if (stage === "verify") {
+    if (!currentEvidence) {
+      return {
+        tone: "blocked",
+        kicker: t(`${G}.verifyNoEvidence.kicker`),
+        title: t(`${G}.verifyNoEvidence.title`),
+        body: t(`${G}.verifyNoEvidence.body`),
+        canContinue: false,
+      };
+    }
+    if (currentEvidence.verdict === "NOT_READY") {
+      return {
+        tone: "blocked",
+        kicker: currentEvidence.verdict,
+        title: t(`${G}.verifyNotReady.title`),
+        body: t(`${G}.verifyNotReady.body`),
+        canContinue: false,
+      };
+    }
+    return {
+      tone: "ready",
+      kicker: currentEvidence.verdict,
+      title: t(`${G}.verifyReady.title`),
+      body: t(`${G}.verifyReady.body`),
+      action: t(`${G}.verifyReady.action`, { next }),
+      actionKind: "next",
+      canContinue: true,
+    };
+  }
+
+  if (stage === "review") {
+    if (!stageInteracted.value) return null;
+    return {
+      tone: "review",
+      kicker: t(`${G}.reviewConfirm.kicker`),
+      title: t(`${G}.reviewConfirm.title`),
+      body: t(`${G}.reviewConfirm.body`),
+      action: t(`${G}.reviewConfirm.action`, { next }),
+      actionKind: "next",
+      canContinue: true,
+    };
+  }
+
+  return null;
+});
 const displayTitle = computed(() => {
   if (changeId.value) return changeId.value;
   if (need.value.trim()) return need.value.slice(0, 30);
-  return "新建探索";
+  return t("workflow.studio.newExplore");
 });
 
 const workflowKey = computed(() => changeId.value || wf.state.value.label || "__draft__");
 
-function normalizeLookup(value: string): string {
-  return value.toLowerCase().replace(/[^a-z0-9]+/g, "");
-}
-
-function findSessionForChange(id: string): string | undefined {
-  const needle = normalizeLookup(id);
-  if (!needle) return undefined;
-  return backend.sessions.value.find((session) => {
-    return [session.id, session.slug, session.title].some((value) =>
-      normalizeLookup(value || "").includes(needle),
-    );
-  })?.id;
-}
-
-function stageSessionId(stage: StepName): string | undefined {
-  return (
-    stageSessions.value[workflowKey.value]?.[stage] ||
-    wf.state.value.steps[stage]?.sessionId ||
-    (changeId.value ? findSessionForChange(changeId.value) : undefined)
-  );
-}
-
 function rememberStageSession(stage: StepName, sessionId?: string) {
   if (!sessionId) return;
-  const key = workflowKey.value;
-  stageSessions.value[key] = {
-    ...(stageSessions.value[key] ?? {}),
-    [stage]: sessionId,
-  };
-  localStorage.setItem(STAGE_SESSIONS_KEY, JSON.stringify(stageSessions.value));
+  stageSessionsStore.registerStageSession(workflowKey.value, stage, sessionId);
   if (wf.state.value.steps[stage]) {
     wf.state.value.steps[stage]!.sessionId = sessionId;
   }
 }
 
-async function openStageSession(stage: StepName) {
-  const sessionId = stageSessionId(stage);
-  if (!sessionId || backend.selectedSessionId.value === sessionId) return;
-  await backend.selectSession(sessionId);
+/**
+ * Ensure the current backend session matches the stage being entered:
+ *  - stage already has a recorded session → switch to it (回看历史)
+ *  - stage has no record → start a fresh session so the new stage's
+ *    conversation is isolated from the previous stage (修阶段串台)
+ * The first successful send in the stage binds it via rememberStageSession.
+ */
+async function prepareStageSession(stage: StepName) {
+  const registered = stageSessionsStore.stageSessionId(workflowKey.value, stage);
+  if (registered) {
+    if (backend.selectedSessionId.value !== registered) {
+      await backend.selectSession(registered);
+    }
+    return;
+  }
+  backend.startNewSession();
 }
 
 function stageForChange(): StepName {
@@ -154,7 +306,7 @@ function tierForChange(stage: StepName): WorkflowTier {
   if (!changeId.value) return wf.state.value.tier;
   const remembered = changeTiers.value[changeId.value];
   if (remembered) return remembered;
-  const sessions = stageSessions.value[changeId.value];
+  const sessions = stageSessionsStore.stageSessions.value[changeId.value];
   if (sessions?.plan || sessions?.review) return "thorough";
   if (sessions?.explore) return "standard";
   if (stage === "explore") return "standard";
@@ -205,11 +357,7 @@ watch(
     if (!created) return;
     changeTiers.value[created.id] = wf.state.value.tier;
     localStorage.setItem(CHANGE_TIERS_KEY, JSON.stringify(changeTiers.value));
-    if (stageSessions.value.__draft__) {
-      stageSessions.value[created.id] = { ...stageSessions.value.__draft__ };
-      delete stageSessions.value.__draft__;
-      localStorage.setItem(STAGE_SESSIONS_KEY, JSON.stringify(stageSessions.value));
-    }
+    stageSessionsStore.migrateWorkflowKey("__draft__", created.id);
     wf.state.value.label = created.id;
     creatingDraftChange.value = false;
     router.replace({ name: "workflow", query: { change: created.id } });
@@ -241,6 +389,7 @@ function stageState(i: number): "done" | "current" | "locked" {
   return i < activeIdx.value ? "done" : "locked";
 }
 function canOpenStage(i: number): boolean {
+  if (archiving.value) return false;
   return i <= activeIdx.value;
 }
 
@@ -266,13 +415,14 @@ function backToIntro() {
     router.replace({ name: "workflow" });
   }
   creatingDraftChange.value = false;
+  void cleanupWorkflowSessions("__draft__");
   wf.disable();
 }
 function gotoStage(s: StepName) {
   const idx = stages.value.indexOf(s);
   if (idx > activeIdx.value) return;
   wf.setActiveStep(s);
-  void openStageSession(s);
+  void prepareStageSession(s);
   if (s === "apply" && changeId.value) {
     loadContract(changeId.value).then((c) => {
       if (c) contract.value = c;
@@ -287,6 +437,9 @@ function nextStage() {
   const to = stages.value[activeIdx.value + 1];
   wf.setActiveStep(to);
   rememberStageSession(from, backend.selectedSessionId.value);
+  // Isolate the target stage: switch to its recorded session if any, otherwise
+  // start a fresh one so the conversation does not bleed across stage boundaries.
+  void prepareStageSession(to);
   if (from === "propose" && changeId.value) {
     generateContract(changeId.value, need.value || changeId.value, wf.state.value.tier);
   }
@@ -297,6 +450,83 @@ function nextStage() {
     });
   }
   if (to === "verify") refreshVerifyWarnings();
+}
+
+function stageGateActionDisabled(kind?: StageGateActionKind) {
+  if (kind === "generate-tasks") return !changeId.value;
+  if (kind === "start-work") return !changeId.value;
+  if (kind === "run-tasks") return !changeId.value;
+  return !stageGate.value?.canContinue;
+}
+
+async function requestTasksMd() {
+  if (!changeId.value) return;
+  const change = selectedChange.value;
+  const isLean = wf.state.value.tier === "lean";
+  const prompt = [
+    `你处于 ${cur.value === "plan" ? "Plan" : "Apply"} 阶段。`,
+    `请为 OpenSpec change "${changeId.value}" 生成或更新 openspec/changes/${changeId.value}/tasks.md。`,
+    isLean
+      ? "当前是 lean 流程：请生成一份轻量 checklist，只保留验证这个小改动必须完成的 2-5 个任务。"
+      : "当前流程需要 tasks.md 作为 Apply/Verify 的执行边界：请拆成可执行、可勾选、可验证的任务。",
+    "要求：",
+    "- 使用 OpenSpec tasks.md checkbox 格式，例如 `- [ ] 1.1 ...`。",
+    "- 每个任务必须有明确完成条件；需要测试/构建/手动验收时写清楚验证方式。",
+    "- 不要直接开始实现代码，先只生成或更新 tasks.md，完成后说明任务拆分依据。",
+    change?.proposal?.raw ? `\nProposal:\n${change.proposal.raw}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  draftMsg.value = isLean
+    ? t("workflow.studio.msg.requestedLeanTasks")
+    : t("workflow.studio.msg.requestedTasks");
+  injected.value[cur.value] = true;
+  const sent = await backend.sendPrompt(prompt, []);
+  if (sent) rememberStageSession(cur.value, backend.selectedSessionId.value);
+  window.setTimeout(() => (draftMsg.value = ""), 2500);
+}
+
+async function requestStartWork() {
+  if (!changeId.value) return;
+  const change = selectedChange.value;
+  const isLean = wf.state.value.tier === "lean";
+  const prompt = [
+    "你处于 Apply 阶段。",
+    `请直接开始实现 OpenSpec change "${changeId.value}"。`,
+    isLean
+      ? "当前是 lean 流程，没有 tasks.md 时也允许直接开始；请先快速确认 scope，再以最小安全改动完成实现。"
+      : "当前没有可运行的任务上下文时，请先根据 proposal 明确实现范围，再开始改代码。",
+    "工作要求：",
+    "- 先阅读相关代码和 OpenSpec 产物，不要凭空实现。",
+    "- 保持改动聚焦在当前 change 的 scope 内。",
+    "- 实现后运行必要验证，并在回复里说明改了什么、验证结果，以及是否建议补写 tasks.md。",
+    change?.proposal?.raw ? `\nProposal:\n${change.proposal.raw}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  draftMsg.value = t("workflow.studio.msg.requestedStartWork");
+  injected.value[cur.value] = true;
+  const sent = await backend.sendPrompt(prompt, []);
+  if (sent) rememberStageSession(cur.value, backend.selectedSessionId.value);
+  window.setTimeout(() => (draftMsg.value = ""), 2500);
+}
+
+function handleStageGateAction(kind?: StageGateActionKind) {
+  if (kind === "generate-tasks") {
+    void requestTasksMd();
+    return;
+  }
+  if (kind === "start-work") {
+    void requestStartWork();
+    return;
+  }
+  if (kind === "run-tasks") {
+    void runSddTasks();
+    return;
+  }
+  nextStage();
 }
 
 const injected = ref<Partial<Record<string, boolean>>>({});
@@ -312,18 +542,26 @@ function refreshVerifyWarnings() {
   const warns: string[] = [];
   const staleResult = checkStale(changeId.value, contract.value);
   if (staleResult.stale) {
-    warns.push(`契约过期(${staleResult.reason}):${staleResult.detail}`);
+    warns.push(
+      t("workflow.studio.warn.contractStale", {
+        reason: staleResult.reason,
+        detail: staleResult.detail,
+      }),
+    );
   }
   const cov = checkRequirementsCoverage(selectedChange.value, contract.value);
   if (cov.uncovered.length > 0) {
-    warns.push(`验收点未覆盖:${cov.uncovered.join(", ")}(无对应 completed task)`);
+    warns.push(
+      t("workflow.studio.warn.requirementsUncovered", { items: cov.uncovered.join(", ") }),
+    );
   }
   verifyWarnings.value = warns;
 }
 type DraftStage = "explore" | "propose" | "plan" | "apply" | "review";
 async function draft(stage: DraftStage) {
+  if (archiving.value) return;
   if (!need.value.trim()) {
-    draftMsg.value = "请先输入";
+    draftMsg.value = t("workflow.studio.msg.needInput");
     return;
   }
   const isFirst = !injected.value[stage];
@@ -338,7 +576,7 @@ async function draft(stage: DraftStage) {
       })
     : need.value;
   injected.value[stage] = true;
-  draftMsg.value = isFirst ? "已注入阶段指令 + 需求" : "已发送";
+  draftMsg.value = isFirst ? t("workflow.studio.msg.injected") : t("workflow.studio.msg.sent");
   if (!wf.state.value.label) {
     wf.state.value.label = need.value.slice(0, 40);
   }
@@ -397,10 +635,45 @@ async function doArchive() {
   archiving.value = true;
   try {
     const r = await openspec.archiveChange(changeId.value);
-    archiveMsg.value = { ok: r.ok, text: r.ok ? "已归档" : r.reason || "归档失败" };
-    if (r.ok) window.setTimeout(() => (archiveMsg.value = null), 2500);
+    archiveMsg.value = {
+      ok: r.ok,
+      text: r.ok
+        ? t("workflow.studio.msg.archived")
+        : r.reason || t("workflow.studio.msg.archiveFailed"),
+    };
+    if (r.ok) {
+      const archivedKey = changeId.value;
+      await cleanupWorkflowSessions(archivedKey);
+      window.setTimeout(() => (archiveMsg.value = null), 2500);
+    }
   } finally {
     archiving.value = false;
+  }
+}
+
+/**
+ * Best-effort teardown of all stage sessions bound to a workflow key:
+ *  1. delete each registered session from the backend (best-effort, never throws)
+ *  2. clear the registry entry + persist
+ *  3. drop dangling wf.state.steps[*].sessionId references
+ * Used by doArchive (real change) and backToIntro (draft) to prevent orphans.
+ */
+async function cleanupWorkflowSessions(key: string) {
+  const ids = stageSessionsStore.sessionsForWorkflow(key);
+  await Promise.all(
+    ids.map((id) =>
+      backend.deleteSession(id).catch((e) => {
+        console.warn(`[WorkflowStudio] deleteSession(${id}) failed during cleanup:`, e);
+      }),
+    ),
+  );
+  stageSessionsStore.clearStageSessions(key);
+  const steps = wf.state.value.steps;
+  for (const name of Object.keys(steps) as StepName[]) {
+    const step = steps[name];
+    if (step?.sessionId && ids.includes(step.sessionId)) {
+      step.sessionId = undefined;
+    }
   }
 }
 
@@ -439,14 +712,16 @@ function verdictColor(v: string): string {
     <div v-else class="wf-pane">
       <!-- 左轨道(均匀填满高度) -->
       <aside class="track">
-        <div class="ckicker">流程 · {{ TIER_LABELS[wf.state.value.tier] }}</div>
+        <div class="ckicker">
+          {{ t("workflow.studio.flowLabel") }} · {{ t(TIER_LABELS[wf.state.value.tier]) }}
+        </div>
         <div class="track-nodes">
           <template v-for="(s, i) in stages" :key="s">
             <button
               class="tnode"
               :class="stageState(i)"
               :disabled="!canOpenStage(i)"
-              :title="canOpenStage(i) ? '' : '完成当前阶段后才能进入'"
+              :title="canOpenStage(i) ? '' : t('workflow.studio.lockedStageHint')"
               @click="gotoStage(s)"
             >
               <span class="tnode-dot">
@@ -454,8 +729,8 @@ function verdictColor(v: string): string {
                 <span v-else>{{ i + 1 }}</span>
               </span>
               <span class="tnode-text">
-                <span class="tnode-label">{{ LABELS[s] }}</span>
-                <span class="tnode-sub">{{ SUBS[s] }}</span>
+                <span class="tnode-label">{{ stageLabel(s) }}</span>
+                <span class="tnode-sub">{{ stageSub(s) }}</span>
               </span>
             </button>
             <span v-if="i < stages.length - 1" class="tline" :class="stageState(i)" />
@@ -466,7 +741,13 @@ function verdictColor(v: string): string {
       <!-- 右侧 -->
       <div class="conv">
         <div class="header">
-          <button type="button" class="back-btn" title="返回工作流介绍页" @click="backToIntro">
+          <button
+            type="button"
+            class="back-btn"
+            :disabled="archiving"
+            :title="t('workflow.studio.backTitle')"
+            @click="backToIntro"
+          >
             <svg
               width="14"
               height="14"
@@ -479,54 +760,75 @@ function verdictColor(v: string): string {
             >
               <polyline points="15 18 9 12 15 6" />
             </svg>
-            <span>返回</span>
+            <span>{{ t("workflow.studio.back") }}</span>
           </button>
           <div class="h-title">
             <span class="h-main">{{ displayTitle }}</span>
-            <span class="h-sub">Spec 探索</span>
+            <span class="h-sub">{{ t("workflow.studio.specExplore") }}</span>
           </div>
-          <span class="stage-pill">{{ LABELS[cur] }}</span>
+          <span class="stage-pill">{{ stageLabel(cur) }}</span>
         </div>
 
         <!-- 对话流(真实当前会话消息) -->
         <div class="stream">
-          <div v-if="messages.length === 0" class="stream-empty">{{ HINTS[cur] }}</div>
+          <div v-if="messages.length === 0" class="stream-empty">{{ stageHint(cur) }}</div>
           <div v-for="m in messages" :key="m.id" class="msg" :class="m.role">
-            <div class="avatar">{{ m.role === "user" ? "你" : "SF" }}</div>
+            <div class="avatar">
+              {{
+                m.role === "user" ? t("workflow.studio.avatarYou") : t("workflow.studio.avatarSF")
+              }}
+            </div>
             <div class="mb">
-              <div class="name">{{ m.role === "user" ? "you" : "opencode · agent" }}</div>
+              <div class="name">
+                {{
+                  m.role === "user" ? t("workflow.studio.nameYou") : t("workflow.studio.nameAgent")
+                }}
+              </div>
               <div class="bubble">{{ m.text }}</div>
             </div>
           </div>
 
           <!-- Execution Contract(apply 阶段生效) -->
           <div v-if="cur === 'apply' && contract" class="contract-card">
-            <div class="cc-head">Contract — {{ contract.changeId }} · {{ contract.tier }}</div>
+            <div class="cc-head">
+              {{
+                t("workflow.studio.contractHead", {
+                  changeId: contract.changeId,
+                  tier: contract.tier,
+                })
+              }}
+            </div>
             <div v-if="contractStale?.stale" class="cc-section">
               <div class="cc-item warn">
-                ⚠ 契约过期 ({{ contractStale.reason }}):{{ contractStale.detail }}。 建议回到
-                Propose 重新生成,否则 Apply 可能偏离当前规划
+                {{
+                  t("workflow.studio.contractStaleWarn", {
+                    reason: contractStale.reason,
+                    detail: contractStale.detail,
+                  })
+                }}
               </div>
             </div>
             <div v-if="contract.intent" class="cc-section">
-              <span class="cc-sl">Intent Lock</span>
+              <span class="cc-sl">{{ t("workflow.studio.intentLock") }}</span>
               <div class="cc-item intent">{{ contract.intent }}</div>
             </div>
             <div v-if="contract.outOfScope?.length" class="cc-section">
-              <span class="cc-sl">Out of Scope</span>
+              <span class="cc-sl">{{ t("workflow.studio.outOfScope") }}</span>
               <div v-for="(o, i) in contract.outOfScope" :key="i" class="cc-item fence">
                 ⊘ {{ o }}
               </div>
             </div>
             <div class="cc-section">
-              <span class="cc-sl">Scope</span>
+              <span class="cc-sl">{{ t("workflow.studio.scope") }}</span>
               <div v-for="f in contract.scope.files" :key="f" class="cc-item">▸ {{ f }}</div>
               <div v-if="contract.scope.api?.length" class="cc-item api">
-                API: {{ contract.scope.api.join(", ") }}
+                {{ t("workflow.studio.api") }} {{ contract.scope.api.join(", ") }}
               </div>
             </div>
             <div v-if="contract.requirements?.length" class="cc-section">
-              <span class="cc-sl">Requirements ({{ contract.requirements.length }})</span>
+              <span class="cc-sl">{{
+                t("workflow.studio.requirements", { count: contract.requirements.length })
+              }}</span>
               <div
                 v-for="r in contract.requirements"
                 :key="`${r.source}::${r.name}`"
@@ -538,14 +840,14 @@ function verdictColor(v: string): string {
               </div>
             </div>
             <div class="cc-section">
-              <span class="cc-sl">Verify</span>
+              <span class="cc-sl">{{ t("workflow.studio.verify") }}</span>
               <div v-for="v in contract.verify" :key="v.command" class="cc-item mon">
                 <span class="cc-check">$</span> {{ v.command }}
                 <span v-if="v.description" class="cc-desc">{{ v.description }}</span>
               </div>
             </div>
             <div v-if="contract.risks.length" class="cc-section">
-              <span class="cc-sl">Risks</span>
+              <span class="cc-sl">{{ t("workflow.studio.risks") }}</span>
               <div v-for="(r, i) in contract.risks" :key="i" class="cc-item warn">⚠ {{ r }}</div>
             </div>
           </div>
@@ -553,29 +855,37 @@ function verdictColor(v: string): string {
           <!-- Apply TDD 可视化 -->
           <div v-if="cur === 'apply'" class="tdd-bar">
             <span class="tdd-item" :class="tddRed ? 'red' : ''">
-              <span class="tdd-light" :class="tddRed ? 'red' : ''"></span>RED · 写测试
+              <span class="tdd-light" :class="tddRed ? 'red' : ''"></span
+              >{{ t("workflow.studio.tddRed") }}
             </span>
             <span class="tdd-line" :class="tddGreen ? 'green' : tddRed ? 'progress' : ''"></span>
             <span class="tdd-item" :class="tddGreen ? 'green' : ''">
-              <span class="tdd-light" :class="tddGreen ? 'green' : ''"></span>GREEN · 通过
+              <span class="tdd-light" :class="tddGreen ? 'green' : ''"></span
+              >{{ t("workflow.studio.tddGreen") }}
             </span>
           </div>
 
           <!-- SDD Task Runner(apply 阶段) -->
           <div v-if="cur === 'apply'" class="sdd-panel">
             <div class="sdd-head">
-              <span class="sdd-title">SDD · 子代理任务</span>
+              <span class="sdd-title">{{ t("workflow.studio.sddTitle") }}</span>
               <button
                 class="sdd-run-btn"
                 :disabled="taskRunner.busy.value || !changeId"
                 @click="runSddTasks"
               >
-                {{ taskRunner.busy.value ? "运行中…" : "▶ 运行全部待办" }}
+                {{
+                  taskRunner.busy.value
+                    ? t("workflow.studio.running")
+                    : t("workflow.studio.sddRunAll")
+                }}
               </button>
             </div>
             <div v-if="!taskRunner.tasks.value.length && !taskRunner.busy.value" class="sdd-empty">
-              没有待办任务。{{
-                changeId ? "点上方「运行全部待办」或先检查 tasks.md" : "先创建一个 change"
+              {{
+                changeId
+                  ? t("workflow.studio.sddEmptyWithChange")
+                  : t("workflow.studio.sddEmptyNoChange")
               }}
             </div>
             <div v-for="task in taskRunner.tasks.value" :key="task.taskId" class="sdd-row">
@@ -602,32 +912,34 @@ function verdictColor(v: string): string {
 
           <!-- review verdict 卡片 -->
           <div v-if="cur === 'review'" class="review-card">
-            <div class="rc-head">Review Verdict</div>
+            <div class="rc-head">{{ t("workflow.studio.reviewVerdict") }}</div>
             <div class="rc-row">
-              <span class="rc-key">Spec 合规</span><span class="rc-val">—</span>
+              <span class="rc-key">{{ t("workflow.studio.reviewSpecCompliance") }}</span
+              ><span class="rc-val">—</span>
             </div>
             <div class="rc-row">
-              <span class="rc-key">代码质量</span><span class="rc-val">—</span>
+              <span class="rc-key">{{ t("workflow.studio.reviewCodeQuality") }}</span
+              ><span class="rc-val">—</span>
             </div>
             <div class="rc-row">
-              <span class="rc-key">Scope creep</span><span class="rc-val">—</span>
+              <span class="rc-key">{{ t("workflow.studio.reviewScopeCreep") }}</span
+              ><span class="rc-val">—</span>
             </div>
           </div>
 
           <!-- verify 前置门禁警告(契约过期 / Requirements 未覆盖) -->
           <div v-if="cur === 'verify' && verifyWarnings.length" class="verify-warn-card">
-            <div class="vw-head">⚠ Pre-Gate 检测到 {{ verifyWarnings.length }} 项风险</div>
-            <div v-for="(w, i) in verifyWarnings" :key="i" class="vw-item">· {{ w }}</div>
-            <div class="vw-foot">
-              这些风险不阻断 Run Gates,但 verdict 应判为 NOT_READY。 契约过期请回 Propose
-              重建;未覆盖请回 Apply 补 task
+            <div class="vw-head">
+              {{ t("workflow.studio.verifyWarnHead", { count: verifyWarnings.length }) }}
             </div>
+            <div v-for="(w, i) in verifyWarnings" :key="i" class="vw-item">· {{ w }}</div>
+            <div class="vw-foot">{{ t("workflow.studio.verifyWarnFoot") }}</div>
           </div>
 
           <!-- verify 真实 evidence -->
           <div v-if="cur === 'verify' && evidence" class="evidence-card">
             <div class="ev-head">
-              <span class="ev-label">Verdict</span>
+              <span class="ev-label">{{ t("workflow.studio.verdict") }}</span>
               <span
                 class="verdict"
                 :style="{
@@ -641,7 +953,13 @@ function verdictColor(v: string): string {
               <span class="gl">{{ g.layer }}</span>
               <code class="gc">{{ g.command }}</code>
               <span class="gx" :class="g.exitCode === null ? 'skip' : g.passed ? 'pass' : 'fail'">
-                {{ g.exitCode === null ? "skip" : g.passed ? "✓ 0" : "✗ " + g.exitCode }}
+                {{
+                  g.exitCode === null
+                    ? t("workflow.studio.gateSkip")
+                    : g.passed
+                      ? t("workflow.studio.gatePassed")
+                      : t("workflow.studio.gateFailed", { code: g.exitCode })
+                }}
               </span>
             </div>
           </div>
@@ -652,50 +970,62 @@ function verdictColor(v: string): string {
           <template v-if="cur === 'explore'">
             <input
               v-model="need"
-              placeholder="描述需求 / 回答 grilling… (Enter 发送)"
+              :disabled="archiving"
+              :placeholder="t('workflow.studio.placeholderExplore')"
               @keydown.enter="draft('explore')"
             />
-            <button class="btn violet" @click="draft('explore')">发送</button>
+            <button class="btn violet" :disabled="archiving" @click="draft('explore')">
+              {{ t("workflow.studio.send") }}
+            </button>
           </template>
           <template v-else-if="cur === 'propose'">
             <input
               v-model="need"
-              placeholder="先描述改动（必填）…"
+              :disabled="archiving"
+              :placeholder="t('workflow.studio.placeholderPropose')"
               @keydown.enter="draft('propose')"
             />
-            <button class="btn violet" :disabled="!need.trim()" @click="draft('propose')">
-              ✦ AI 起草
+            <button
+              class="btn violet"
+              :disabled="!need.trim() || archiving"
+              @click="draft('propose')"
+            >
+              {{ t("workflow.studio.aiDraft") }}
             </button>
           </template>
           <template v-else-if="cur === 'plan' || cur === 'apply' || cur === 'review'">
             <input
               v-model="need"
-              :placeholder="`${LABELS[cur]} 阶段 — 输入指令 / 补充… (首次发送注入阶段指令)`"
+              :disabled="archiving"
+              :placeholder="t('workflow.studio.placeholderStage', { label: stageLabel(cur) })"
               @keydown.enter="sendForCurrent"
             />
-            <button class="btn violet" :disabled="!need.trim()" @click="sendForCurrent">
-              发送
-            </button>
             <button
-              class="btn ghost"
-              @click="router.push('/chat')"
-              title="代码生成/审查在主对话区进行"
+              class="btn violet"
+              :disabled="!need.trim() || archiving"
+              @click="sendForCurrent"
             >
-              主对话 →
+              {{ t("workflow.studio.send") }}
             </button>
           </template>
           <template v-else-if="cur === 'verify'">
-            <button class="btn emerald" :disabled="gating || !changeId" @click="runGates">
-              {{ gating ? "运行中…" : "Run Gates" }}
+            <button
+              class="btn emerald"
+              :disabled="gating || !changeId || archiving"
+              @click="runGates"
+            >
+              {{ gating ? t("workflow.studio.running") : t("workflow.studio.runGates") }}
             </button>
-            <span v-if="!changeId" class="composer-hint warn">需要先有 active change</span>
+            <span v-if="!changeId" class="composer-hint warn">{{
+              t("workflow.studio.needActiveChange")
+            }}</span>
           </template>
           <template v-else-if="cur === 'archive'">
-            <span v-if="evidence?.verdict === 'NOT_READY'" class="gate-note"
-              >⚠ NOT_READY — gate 将阻止归档</span
-            >
+            <span v-if="evidence?.verdict === 'NOT_READY'" class="gate-note">{{
+              t("workflow.studio.notReadyWarn")
+            }}</span>
             <button class="btn ghost" :disabled="archiving || !changeId" @click="doArchive">
-              {{ archiving ? "归档中…" : "Archive" }}
+              {{ archiving ? t("workflow.studio.archiving") : t("workflow.studio.archive") }}
             </button>
             <span v-if="archiveMsg" :class="archiveMsg.ok ? 'composer-hint ok' : 'gate-note'">{{
               archiveMsg.text
@@ -704,13 +1034,38 @@ function verdictColor(v: string): string {
           <span v-if="draftMsg" class="composer-hint warn">{{ draftMsg }}</span>
         </div>
 
-        <!-- 下一步(composer 下方,仅在当前阶段有交互后显示) -->
-        <div v-if="canAdvance" class="advance-bar">
-          <button class="next-cta" @click="nextStage">
-            <span
-              >完成 {{ LABELS[cur] }} · 进入 <b>{{ nextLabel }}</b></span
-            >
-            <span class="next-cta-arrow">→</span>
+        <!-- 阶段门禁(composer 下方,基于真实产物状态显示) -->
+        <div v-if="stageGate" class="stage-gate" :class="stageGate.tone">
+          <div class="stage-gate-copy">
+            <span class="stage-gate-kicker">{{ stageGate.kicker }}</span>
+            <strong>{{ stageGate.title }}</strong>
+            <span>{{ stageGate.body }}</span>
+          </div>
+          <button
+            v-if="stageGate.action"
+            class="stage-gate-action"
+            :disabled="stageGateActionDisabled(stageGate.actionKind)"
+            @click="handleStageGateAction(stageGate.actionKind)"
+          >
+            {{ stageGate.action }}
+            <span>→</span>
+          </button>
+          <button
+            v-if="stageGate.secondaryAction"
+            class="stage-gate-action secondary"
+            :disabled="stageGateActionDisabled(stageGate.secondaryActionKind)"
+            @click="handleStageGateAction(stageGate.secondaryActionKind)"
+          >
+            {{ stageGate.secondaryAction }}
+          </button>
+          <button
+            v-if="stageGate.tertiaryAction"
+            class="stage-gate-action tertiary"
+            :disabled="stageGateActionDisabled(stageGate.tertiaryActionKind)"
+            @click="handleStageGateAction(stageGate.tertiaryActionKind)"
+          >
+            {{ stageGate.tertiaryAction }}
+            <span>→</span>
           </button>
         </div>
       </div>
@@ -1502,37 +1857,121 @@ function verdictColor(v: string): string {
   color: var(--color-surface-600, #475569);
 }
 
-.advance-bar {
+.stage-gate {
   flex-shrink: 0;
-  padding: 0 22px 14px;
-}
-.next-cta {
-  width: 100%;
+  margin: 0 22px 14px;
+  padding: 13px 14px;
   display: flex;
   align-items: center;
   gap: 14px;
-  padding: 12px 18px;
-  background: color-mix(in srgb, var(--color-accent-violet, #a78bfa) 10%, transparent);
-  border: 1px solid color-mix(in srgb, var(--color-accent-violet, #a78bfa) 35%, transparent);
+  border: 1px solid var(--color-surface-700, #334155);
   border-radius: 10px;
+  background: color-mix(in srgb, var(--color-surface-800, #1e293b) 82%, transparent);
+}
+.stage-gate.review {
+  border-color: color-mix(in srgb, var(--color-accent-violet, #a78bfa) 34%, transparent);
+  background: color-mix(
+    in srgb,
+    var(--color-accent-violet, #a78bfa) 9%,
+    var(--color-surface-900, #0f172a)
+  );
+}
+.stage-gate.ready {
+  border-color: color-mix(in srgb, var(--color-accent-emerald, #34d399) 36%, transparent);
+  background: color-mix(
+    in srgb,
+    var(--color-accent-emerald, #34d399) 8%,
+    var(--color-surface-900, #0f172a)
+  );
+}
+.stage-gate.blocked {
+  border-color: color-mix(in srgb, var(--color-accent-amber, #f59e0b) 38%, transparent);
+  background: color-mix(
+    in srgb,
+    var(--color-accent-amber, #f59e0b) 9%,
+    var(--color-surface-900, #0f172a)
+  );
+}
+.stage-gate.info {
+  border-color: color-mix(in srgb, var(--color-accent-cyan, #22d3ee) 28%, transparent);
+}
+.stage-gate-copy {
+  min-width: 0;
+  flex: 1;
+  display: grid;
+  gap: 3px;
+}
+.stage-gate-kicker {
+  color: var(--color-surface-500, #64748b);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.stage-gate.review .stage-gate-kicker {
+  color: var(--color-accent-violet, #a78bfa);
+}
+.stage-gate.ready .stage-gate-kicker {
+  color: var(--color-accent-emerald, #34d399);
+}
+.stage-gate.blocked .stage-gate-kicker {
+  color: var(--color-accent-amber, #f59e0b);
+}
+.stage-gate.info .stage-gate-kicker {
+  color: var(--color-accent-cyan, #22d3ee);
+}
+.stage-gate-copy strong {
+  color: var(--color-surface-100, #f1f5f9);
+  font-size: 13px;
+}
+.stage-gate-copy span:last-child {
+  color: var(--color-surface-400, #94a3b8);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.stage-gate-action {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  padding: 0 13px;
+  border: 1px solid color-mix(in srgb, var(--color-accent-violet, #a78bfa) 34%, transparent);
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--color-accent-violet, #a78bfa) 14%, transparent);
+  color: var(--color-surface-100, #f1f5f9);
   cursor: pointer;
-  color: var(--color-surface-200, #e2e8f0);
-  font-size: 14px;
   font-family: inherit;
-  transition: all 0.15s;
-}
-.next-cta:hover {
-  background: color-mix(in srgb, var(--color-accent-violet, #a78bfa) 18%, transparent);
-}
-.next-cta b {
-  color: var(--color-accent-violet, #a78bfa);
+  font-size: 12px;
   font-weight: 700;
+  transition:
+    background 0.15s ease-out,
+    border-color 0.15s ease-out,
+    opacity 0.15s ease-out;
 }
-.next-cta-arrow {
-  color: var(--color-accent-violet, #a78bfa);
-  font-size: 18px;
-  font-family: var(--font-mono, monospace);
-  margin-left: auto;
+.stage-gate-action:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--color-accent-violet, #a78bfa) 22%, transparent);
+  border-color: color-mix(in srgb, var(--color-accent-violet, #a78bfa) 52%, transparent);
+}
+.stage-gate-action.secondary {
+  background: transparent;
+  color: var(--color-surface-300, #cbd5e1);
+}
+.stage-gate-action.secondary:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--color-surface-700, #334155) 42%, transparent);
+  border-color: color-mix(in srgb, var(--color-surface-500, #64748b) 52%, transparent);
+}
+.stage-gate.ready .stage-gate-action {
+  border-color: color-mix(in srgb, var(--color-accent-emerald, #34d399) 36%, transparent);
+  background: color-mix(in srgb, var(--color-accent-emerald, #34d399) 14%, transparent);
+}
+.stage-gate.ready .stage-gate-action:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--color-accent-emerald, #34d399) 22%, transparent);
+  border-color: color-mix(in srgb, var(--color-accent-emerald, #34d399) 54%, transparent);
+}
+.stage-gate-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
 }
 
 /* composer */

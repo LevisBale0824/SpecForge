@@ -210,15 +210,15 @@ specforge/
 
 ### 各阶段产物
 
-| 阶段    | 做什么                                               | 产物 / Gate                                                                      |
-| ------- | ---------------------------------------------------- | -------------------------------------------------------------------------------- |
-| Explore | 需求澄清,逐个问清边界与硬约束                        | `brainstorm.md`                                                                  |
-| Propose | 固化为可验收的 OpenSpec 契约                         | `proposal.md`(thorough 额外 spec delta + `design.md`)                            |
-| Plan    | 拆解成带验证命令、可并行的任务 DAG                   | `tasks.md`                                                                       |
-| Apply   | TDD 实现单个任务,先红后绿                            | `tasks.md` 勾选 + evidence                                                       |
-| Verify  | 只认命令退出码的真实验证 Gate                        | `openspec validate --strict` + lint/test/build → READY / CONDITIONAL / NOT_READY |
-| Review  | 只读审查:spec 合规 / 质量 / scope creep / 非功能风险 | verdict: pass / concerns / fail                                                  |
-| Archive | 收尾归档                                             | change 移入 `openspec/changes/archive/`                                          |
+| 阶段    | 做什么                                               | 产物 / Gate                                                                                           |
+| ------- | ---------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| Explore | 需求澄清,逐个问清边界与硬约束                        | `brainstorm.md`                                                                                       |
+| Propose | 固化为可验收的 OpenSpec 契约                         | `proposal.md`(lean 额外轻量 `tasks.md` + Acceptance Checklist,thorough 额外 spec delta + `design.md`) |
+| Plan    | 拆解成带验证命令、可并行的任务 DAG                   | `tasks.md`                                                                                            |
+| Apply   | TDD 实现单个任务,先红后绿                            | `tasks.md` 勾选 + evidence                                                                            |
+| Verify  | 只认命令退出码的真实验证 Gate                        | `openspec validate --strict` + lint/test/build → READY / CONDITIONAL / NOT_READY                      |
+| Review  | 只读审查:spec 合规 / 质量 / scope creep / 非功能风险 | verdict: pass / concerns / fail                                                                       |
+| Archive | 收尾归档                                             | change 移入 `openspec/changes/archive/`                                                               |
 
 ## 开发指南
 

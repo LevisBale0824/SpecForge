@@ -30,6 +30,9 @@ function fillTemplate(tpl: string, ctx: StageContext): string {
   let out = tpl.replace(/\{\{#if thorough\}\}([\s\S]*?)\{\{\/if\}\}/g, (_, body) =>
     ctx.tier === "thorough" ? (body as string) : "",
   );
+  out = out.replace(/\{\{#if lean\}\}([\s\S]*?)\{\{\/if\}\}/g, (_, body) =>
+    ctx.tier === "lean" ? (body as string) : "",
+  );
   out = out.replace(/\{\{#unless lean\}\}([\s\S]*?)\{\{\/unless\}\}/g, (_, body) =>
     ctx.tier !== "lean" ? (body as string) : "",
   );
