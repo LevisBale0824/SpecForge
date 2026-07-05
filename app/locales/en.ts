@@ -17,6 +17,8 @@ export default {
     sessions: "Sessions",
     files: "Files",
     refreshFiles: "Refresh file list",
+    searchFiles: "Search files...",
+    clearSearch: "Clear search",
     openspec: "OpenSpec",
     noSessions: "No sessions yet",
     newSession: "New Session",

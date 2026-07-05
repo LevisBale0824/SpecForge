@@ -17,6 +17,8 @@ export default {
     sessions: "会话",
     files: "文件",
     refreshFiles: "刷新文件列表",
+    searchFiles: "搜索文件...",
+    clearSearch: "清除搜索",
     openspec: "OpenSpec",
     noSessions: "暂无会话",
     newSession: "新建会话",
