@@ -20,6 +20,7 @@ import { useFloatingWindows } from "./composables/useFloatingWindows";
 import { useProject } from "./composables/useProject";
 import { useBackend } from "./composables/useBackend";
 import { useOpenSpec } from "./composables/useOpenSpec";
+import { useStageSessions } from "./composables/useStageSessions";
 import { useWorkflow } from "./plugins/workflowPlugin";
 import { useResizable } from "./composables/useResizable";
 import { isElectron, onOpenFolder, selectDirectory } from "./utils/electronBridge";
@@ -75,6 +76,10 @@ const activeDiff = ref<MessageDiffEntry | null>(null);
 const openFiles = ref<string[]>([]);
 const activeFilePath = ref<string | null>(null);
 
+// Remember the chat session before entering workflow so returning to chat
+// restores it instead of surfacing the workflow's stage session (crosstalk).
+const lastChatSessionId = ref("");
+
 // Auto-close the diff viewer when the opened file is no longer in the
 // workspace diffs (e.g. user deleted or reverted it externally). Only
 // triggers when workspaceDiffs is non-empty so session-originated diffs
@@ -91,6 +96,7 @@ watch(
 const project = useProject();
 const openspec = useOpenSpec();
 const wf = useWorkflow();
+const stageSessions = useStageSessions();
 let unsubOpenFolder: (() => void) | null = null;
 
 // On window focus / tab visibility: assume the user might have modified files
@@ -166,6 +172,20 @@ function onAbortSession(sessionId: string) {
   backend.abortSession(sessionId);
 }
 
+async function onDeleteWorkflowDraft() {
+  const ids = stageSessions.sessionsForWorkflow("__draft__");
+  await Promise.all(
+    ids.map((id) =>
+      backend.deleteSession(id).catch((e) => {
+        console.warn(`[App] deleteSession(${id}) failed during draft cleanup:`, e);
+      }),
+    ),
+  );
+  stageSessions.clearStageSessions("__draft__");
+  wf.disable();
+  router.replace({ name: "workflow", query: { intro: "1" } });
+}
+
 function onNewSession() {
   activeDiff.value = null;
   activeFilePath.value = null;
@@ -180,10 +200,14 @@ function onOpenChat() {
   activeFilePath.value = null;
   showOpenSpecDialog.value = false;
   specDetailTarget.value = null;
+  if (lastChatSessionId.value && backend.selectedSessionId.value !== lastChatSessionId.value) {
+    backend.selectSession(lastChatSessionId.value);
+  }
   router.push({ name: "chat" });
 }
 
 function onOpenWorkflow(changeId?: string) {
+  lastChatSessionId.value = backend.selectedSessionId.value;
   activeDiff.value = null;
   activeFilePath.value = null;
   showOpenSpecDialog.value = false;
@@ -196,6 +220,7 @@ function onOpenSpecDetail(target: SpecTarget) {
 }
 
 function onPickTier(tier: WorkflowTier) {
+  lastChatSessionId.value = backend.selectedSessionId.value;
   showTierPicker.value = false;
   specDetailTarget.value = null;
   activeDiff.value = null;
@@ -312,6 +337,7 @@ function submitManualPath() {
         :spec-detail-target="specDetailTarget"
         @select-session="onSelectSession"
         @delete-session="onDeleteSession"
+        @delete-workflow-draft="onDeleteWorkflowDraft"
         @abort-session="onAbortSession"
         @new-session="onNewSession"
         @open-chat="onOpenChat"

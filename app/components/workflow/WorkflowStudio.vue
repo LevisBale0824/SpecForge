@@ -321,10 +321,19 @@ function openSelectedChange() {
   const inferredStage = stageForChange();
   const nextTier = tierForChange(inferredStage);
   const nextStages = stagesForTier(nextTier);
+  const targetStage = nextStages.includes(inferredStage) ? inferredStage : nextStages[0];
   wf.setTier(nextTier);
-  wf.setActiveStep(nextStages.includes(inferredStage) ? inferredStage : nextStages[0]);
+  wf.setActiveStep(targetStage);
   wf.state.value.label = changeId.value;
   creatingDraftChange.value = false;
+  void prepareStageSession(targetStage);
+  if (targetStage === "apply") {
+    loadContract(changeId.value).then((c) => {
+      if (c) contract.value = c;
+      contractStale.value = checkStale(changeId.value, c);
+    });
+  }
+  if (targetStage === "verify") refreshVerifyWarnings();
 }
 
 onMounted(openSelectedChange);
@@ -509,6 +518,52 @@ async function requestStartWork() {
   window.setTimeout(() => (draftMsg.value = ""), 2500);
 }
 
+async function requestRunPendingTasksInApply() {
+  if (!changeId.value) return;
+  const change = selectedChange.value;
+  if (!change) return;
+  const pending = change.tasks.filter((task) => task.status === "pending");
+  if (!pending.length) return;
+
+  if (cur.value !== "apply") {
+    wf.setActiveStep("apply");
+  }
+  await prepareStageSession("apply");
+  loadContract(changeId.value).then((c) => {
+    if (c) contract.value = c;
+    contractStale.value = checkStale(changeId.value, c);
+  });
+
+  const taskLines = pending
+    .map(
+      (task) =>
+        `- ${task.id}: ${task.title}${task.verification ? `\n  Verification: ${task.verification}` : ""}`,
+    )
+    .join("\n");
+  const prompt = [
+    `你处于 Apply 阶段。请按顺序执行 OpenSpec change "${changeId.value}" 的待办任务。`,
+    "",
+    "待办任务:",
+    taskLines,
+    "",
+    "执行要求:",
+    "- 先阅读相关代码和 OpenSpec 产物，不要凭空实现。",
+    "- 一次聚焦一个 pending task，保持改动在当前 change scope 内。",
+    "- 遵循 TDD: 写/调整测试 -> 看到失败 -> 实现 -> 运行验证。",
+    "- 每完成一个 task 后更新 tasks.md 中对应 checkbox。",
+    "- 完成后汇总改动、验证命令和结果；如果有任务无法完成，明确说明阻塞原因。",
+    change.proposal?.raw ? `\nProposal:\n${change.proposal.raw}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  draftMsg.value = t("workflow.studio.msg.sent");
+  injected.value.apply = true;
+  const sent = await backend.sendPrompt(prompt, []);
+  if (sent) rememberStageSession("apply", backend.selectedSessionId.value);
+  window.setTimeout(() => (draftMsg.value = ""), 2500);
+}
+
 function handleStageGateAction(kind?: StageGateActionKind) {
   if (kind === "generate-tasks") {
     void requestTasksMd();
@@ -519,7 +574,7 @@ function handleStageGateAction(kind?: StageGateActionKind) {
     return;
   }
   if (kind === "run-tasks") {
-    void runSddTasks();
+    void requestRunPendingTasksInApply();
     return;
   }
   nextStage();

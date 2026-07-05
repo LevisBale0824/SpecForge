@@ -87,8 +87,8 @@ describe("useStageSessions registry", () => {
   });
 });
 
-describe("useSessions sidebar filtering", () => {
-  it("hides stage-bound sessions from sortedSessions (absolute filter)", () => {
+describe("useSessions + stage discriminator", () => {
+  it("sortedSessions includes all sessions (no absolute filter)", () => {
     const stages = useStageSessions();
     const sessions = useSessions();
 
@@ -99,29 +99,22 @@ describe("useSessions sidebar filtering", () => {
     stages.registerStageSession("change-1", "propose", "stage-2");
 
     const ids = sessions.sortedSessions.value.map((s) => s.id);
-    expect(ids).toEqual(["normal-1"]);
+    expect(ids).toEqual(["stage-2", "stage-1", "normal-1"]);
   });
 
-  it("a session reappears after its workflow key is cleared", () => {
+  it("stageSessionIds discriminates workflow vs chat sessions", () => {
     const stages = useStageSessions();
     const sessions = useSessions();
-    sessions.upsert(sessionInfo("stage-1", 20));
-    stages.registerStageSession("change-1", "explore", "stage-1");
-
-    expect(sessions.sortedSessions.value.map((s) => s.id)).toEqual([]);
-
-    stages.clearStageSessions("change-1");
-    expect(sessions.sortedSessions.value.map((s) => s.id)).toEqual(["stage-1"]);
-  });
-
-  it("draft sessions (__draft__ key) are also filtered", () => {
-    const stages = useStageSessions();
-    const sessions = useSessions();
-    sessions.upsert(sessionInfo("draft-sess", 5));
     sessions.upsert(sessionInfo("normal", 1));
+    sessions.upsert(sessionInfo("draft-sess", 5));
     stages.registerStageSession("__draft__", "explore", "draft-sess");
 
-    const ids = sessions.sortedSessions.value.map((s) => s.id);
-    expect(ids).toEqual(["normal"]);
+    const all = sessions.sortedSessions.value.map((s) => s.id);
+    const stage = [...stages.stageSessionIds.value];
+    const chat = all.filter((id) => !stage.includes(id));
+
+    expect(all).toEqual(["draft-sess", "normal"]);
+    expect(stage).toEqual(["draft-sess"]);
+    expect(chat).toEqual(["normal"]);
   });
 });

@@ -10,6 +10,7 @@ import { useFileIndex } from "../composables/useFileIndex";
 import { useMessages } from "../composables/useMessages";
 import { useOpenSpec } from "../composables/useOpenSpec";
 import { useProject } from "../composables/useProject";
+import { useStageSessions } from "../composables/useStageSessions";
 import { useWorkflow } from "../plugins/workflowPlugin";
 import type { MessageDiffEntry } from "../types/message";
 import type { FileDiff, SessionInfo, SessionStatusInfo } from "../types/sse";
@@ -45,6 +46,7 @@ const props = withDefaults(
 const emit = defineEmits<{
   "select-session": [sessionId: string];
   "delete-session": [sessionId: string];
+  "delete-workflow-draft": [];
   "abort-session": [sessionId: string];
   "new-session": [];
   "open-file": [path: string];
@@ -86,9 +88,13 @@ const activeDiffs = computed(() => {
 });
 
 const activeDiffCount = computed(() => activeDiffs.value?.length ?? 0);
-const rootSessionCount = computed(
-  () => props.sessions.filter((session) => !session.parentID).length,
-);
+const { stageSessionIds } = useStageSessions();
+const chatSessions = computed(() => props.sessions.filter((s) => !stageSessionIds.value.has(s.id)));
+const rootSessionCount = computed(() => chatSessions.value.filter((s) => !s.parentID).length);
+const chatActiveSessionId = computed(() => {
+  const id = props.activeSessionId;
+  return id && chatSessions.value.some((s) => s.id === id) ? id : "";
+});
 
 function openWorkflow(changeId?: string) {
   emit("open-workflow", changeId);
@@ -266,8 +272,8 @@ function handleOpenDiff(diff: MessageDiffEntry) {
 
             <div class="pane-body">
               <SessionTree
-                :sessions="sessions"
-                :active-session-id="activeSessionId"
+                :sessions="chatSessions"
+                :active-session-id="chatActiveSessionId"
                 :status-of="statusOf"
                 @select="emit('select-session', $event)"
                 @delete="emit('delete-session', $event)"
@@ -310,6 +316,16 @@ function handleOpenDiff(diff: MessageDiffEntry) {
                 <div class="spec-item ongoing" @click="openWorkflow()">
                   <span class="spec-marker violet">◆</span>
                   <span class="spec-id">{{ displayWorkflowTitle }}</span>
+                  <button
+                    type="button"
+                    class="spec-item-action danger"
+                    :title="t('sidebar.deleteSession', 'Delete')"
+                    @click.stop="emit('delete-workflow-draft')"
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                      <path d="M3 6h18M8 6V4h8v2M10 11v6M14 11v6M6 6l1 14h10l1-14" />
+                    </svg>
+                  </button>
                 </div>
               </div>
 
@@ -1011,6 +1027,46 @@ function handleOpenDiff(diff: MessageDiffEntry) {
   font-size: 10px;
   color: var(--color-surface-500, #64748b);
   font-family: var(--font-sans, inherit);
+}
+
+.spec-item-action {
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--color-surface-500, #64748b);
+  cursor: pointer;
+  opacity: 0;
+  transition:
+    opacity 0.12s,
+    background 0.12s,
+    color 0.12s;
+}
+
+.spec-item:hover .spec-item-action,
+.spec-item-action:focus-visible {
+  opacity: 1;
+}
+
+.spec-item-action:hover {
+  background: color-mix(in srgb, var(--color-surface-700, #334155) 40%, transparent);
+  color: var(--color-surface-100, #f1f5f9);
+}
+
+.spec-item-action.danger:hover {
+  background: color-mix(in srgb, var(--color-accent-rose, #f43f5e) 16%, transparent);
+  color: var(--color-accent-rose, #f43f5e);
+}
+
+.spec-item-action svg {
+  width: 13px;
+  height: 13px;
+  stroke-width: 2;
 }
 
 .header-icon-button.accent-violet {
