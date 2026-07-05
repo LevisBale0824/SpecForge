@@ -1459,7 +1459,7 @@ function verdictColor(v: string): string {
 }
 .msg.user .bubble {
   background: color-mix(in srgb, var(--color-accent-violet, #a78bfa) 12%, transparent);
-  color: #ddd6fe;
+  color: var(--color-surface-100, #f1f5f9);
   border: 1px solid color-mix(in srgb, var(--color-accent-violet, #a78bfa) 25%, transparent);
   border-top-right-radius: 3px;
 }
