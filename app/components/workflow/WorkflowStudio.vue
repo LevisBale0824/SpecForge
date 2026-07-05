@@ -530,10 +530,12 @@ const tddGreen = computed(() =>
   messages.value.some((m) => /pass.*[✓]|[✓].*pass|exit 0/.test(m.text)),
 );
 
-function stageState(i: number): "done" | "current" | "viewing" | "locked" {
+function stageState(i: number): "done" | "current" | "locked" {
   if (i === progressIdx.value) return "current";
-  if (i === viewIdx.value && i <= frontierIdx.value) return "viewing";
   return i <= frontierIdx.value ? "done" : "locked";
+}
+function isViewingStage(i: number): boolean {
+  return i === viewIdx.value && i !== progressIdx.value && i <= frontierIdx.value;
 }
 function lineState(i: number): "done" | "locked" {
   return i < frontierIdx.value ? "done" : "locked";
@@ -550,6 +552,7 @@ function pick(t: WorkflowTier) {
   draftKnownChangeIds.value = new Set(openspec.state.activeChanges.map((change) => change.id));
   creatingDraftChange.value = true;
   wf.setTier(t);
+  viewedStep.value = wf.state.value.activeStep;
   wf.enable();
   injected.value = {};
   wf.state.value.label = "";
@@ -883,7 +886,7 @@ function verdictColor(v: string): string {
           <template v-for="(s, i) in stages" :key="s">
             <button
               class="tnode"
-              :class="stageState(i)"
+              :class="[stageState(i), { viewing: isViewingStage(i) }]"
               :disabled="!canOpenStage(i)"
               :title="canOpenStage(i) ? '' : t('workflow.studio.lockedStageHint')"
               @click="gotoStage(s)"
