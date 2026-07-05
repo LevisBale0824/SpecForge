@@ -67,6 +67,7 @@ const selectedChange = computed(() => {
   return undefined;
 });
 const changeId = computed(() => selectedChange.value?.id ?? "");
+const showIntro = computed(() => !wf.enabled.value || route.query.intro === "1");
 const evidence = computed(() =>
   changeId.value ? openspec.state.evidence[changeId.value] : undefined,
 );
@@ -411,12 +412,7 @@ function pick(t: WorkflowTier) {
   backend.startNewSession();
 }
 function backToIntro() {
-  if (route.query.change) {
-    router.replace({ name: "workflow" });
-  }
-  creatingDraftChange.value = false;
-  void cleanupWorkflowSessions("__draft__");
-  wf.disable();
+  router.replace({ name: "workflow", query: { intro: "1" } });
 }
 function gotoStage(s: StepName) {
   const idx = stages.value.indexOf(s);
@@ -687,7 +683,7 @@ function verdictColor(v: string): string {
 <template>
   <div class="wf-page">
     <!-- 未启用工作流:模块介绍 -->
-    <div v-if="!wf.enabled.value" class="wf-intro">
+    <div v-if="showIntro" class="wf-intro">
       <div class="wf-intro-kicker">{{ t("workflow.intro.kicker") }}</div>
       <h2 class="wf-intro-title">{{ t("workflow.intro.title") }}</h2>
       <p class="wf-intro-sub">{{ t("workflow.intro.sub") }}</p>

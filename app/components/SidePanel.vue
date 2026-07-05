@@ -307,7 +307,7 @@ function handleOpenDiff(diff: MessageDiffEntry) {
                 class="spec-section"
               >
                 <div class="spec-group-label"><span>探索中</span></div>
-                <div class="spec-item ongoing" @click="openTierPicker">
+                <div class="spec-item ongoing" @click="openWorkflow()">
                   <span class="spec-marker violet">◆</span>
                   <span class="spec-id">{{ displayWorkflowTitle }}</span>
                 </div>
