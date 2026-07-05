@@ -289,9 +289,30 @@ async function prepareStageSession(stage: StepName) {
     if (backend.selectedSessionId.value !== registered) {
       await backend.selectSession(registered);
     }
+    injected.value[stage] = true;
     return;
   }
   backend.startNewSession();
+}
+
+async function loadStageSideEffects(stage: StepName) {
+  if (stage === "apply" && changeId.value) {
+    const currentChangeId = changeId.value;
+    const c = await loadContract(currentChangeId);
+    if (cur.value !== "apply" || changeId.value !== currentChangeId) return;
+    if (c) contract.value = c;
+    contractStale.value = checkStale(currentChangeId, c);
+    return;
+  }
+  if (stage === "verify" && cur.value === "verify") {
+    refreshVerifyWarnings();
+  }
+}
+
+async function enterStage(stage: StepName) {
+  wf.setActiveStep(stage);
+  await prepareStageSession(stage);
+  await loadStageSideEffects(stage);
 }
 
 function stageForChange(): StepName {
@@ -316,24 +337,24 @@ function tierForChange(stage: StepName): WorkflowTier {
 
 function openSelectedChange() {
   if (!requestedChangeId.value) return;
-  if (!changeId.value) return;
+  if (!changeId.value) {
+    wf.state.value.label = "";
+    contract.value = undefined;
+    contractStale.value = null;
+    verifyWarnings.value = [];
+    taskRunner.reset();
+    router.replace({ name: "workflow", query: { intro: "1" } });
+    return;
+  }
   wf.enable();
   const inferredStage = stageForChange();
   const nextTier = tierForChange(inferredStage);
   const nextStages = stagesForTier(nextTier);
   const targetStage = nextStages.includes(inferredStage) ? inferredStage : nextStages[0];
   wf.setTier(nextTier);
-  wf.setActiveStep(targetStage);
   wf.state.value.label = changeId.value;
   creatingDraftChange.value = false;
-  void prepareStageSession(targetStage);
-  if (targetStage === "apply") {
-    loadContract(changeId.value).then((c) => {
-      if (c) contract.value = c;
-      contractStale.value = checkStale(changeId.value, c);
-    });
-  }
-  if (targetStage === "verify") refreshVerifyWarnings();
+  void enterStage(targetStage);
 }
 
 onMounted(openSelectedChange);
@@ -426,35 +447,17 @@ function backToIntro() {
 function gotoStage(s: StepName) {
   const idx = stages.value.indexOf(s);
   if (idx > activeIdx.value) return;
-  wf.setActiveStep(s);
-  void prepareStageSession(s);
-  if (s === "apply" && changeId.value) {
-    loadContract(changeId.value).then((c) => {
-      if (c) contract.value = c;
-      contractStale.value = checkStale(changeId.value, c);
-    });
-  }
-  if (s === "verify") refreshVerifyWarnings();
+  void enterStage(s);
 }
 function nextStage() {
   if (isLast.value) return;
   const from = cur.value;
   const to = stages.value[activeIdx.value + 1];
-  wf.setActiveStep(to);
   rememberStageSession(from, backend.selectedSessionId.value);
-  // Isolate the target stage: switch to its recorded session if any, otherwise
-  // start a fresh one so the conversation does not bleed across stage boundaries.
-  void prepareStageSession(to);
   if (from === "propose" && changeId.value) {
     generateContract(changeId.value, need.value || changeId.value, wf.state.value.tier);
   }
-  if (to === "apply" && changeId.value) {
-    loadContract(changeId.value).then((c) => {
-      if (c) contract.value = c;
-      contractStale.value = checkStale(changeId.value, c);
-    });
-  }
-  if (to === "verify") refreshVerifyWarnings();
+  void enterStage(to);
 }
 
 function stageGateActionDisabled(kind?: StageGateActionKind) {
@@ -525,14 +528,7 @@ async function requestRunPendingTasksInApply() {
   const pending = change.tasks.filter((task) => task.status === "pending");
   if (!pending.length) return;
 
-  if (cur.value !== "apply") {
-    wf.setActiveStep("apply");
-  }
-  await prepareStageSession("apply");
-  loadContract(changeId.value).then((c) => {
-    if (c) contract.value = c;
-    contractStale.value = checkStale(changeId.value, c);
-  });
+  await enterStage("apply");
 
   const taskLines = pending
     .map(
