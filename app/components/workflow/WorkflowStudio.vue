@@ -338,7 +338,7 @@ function tierForChange(stage: StepName): WorkflowTier {
   return "lean";
 }
 
-function openSelectedChange() {
+async function openSelectedChange() {
   if (!requestedChangeId.value) return;
   if (!changeId.value) {
     wf.state.value.label = "";
@@ -351,7 +351,15 @@ function openSelectedChange() {
   }
   wf.enable();
   const inferredStage = stageForChange();
-  const nextTier = tierForChange(inferredStage);
+  // contract.md 是 tier 的权威来源(持久在 change 目录里,跨机器/清缓存都还在)。
+  // localStorage.changeTiers 只在 UI 创建 change 时写入,清数据或 CLI 建 change 时缺失,
+  // 会让 tierForChange 跌到默认 lean。先尝试读 contract,失败再回落。
+  const c = await loadContract(changeId.value);
+  if (c) contract.value = c;
+  const nextTier =
+    c?.tier && (c.tier === "lean" || c.tier === "standard" || c.tier === "thorough")
+      ? c.tier
+      : tierForChange(inferredStage);
   const nextStages = stagesForTier(nextTier);
   const targetStage = nextStages.includes(inferredStage) ? inferredStage : nextStages[0];
   wf.setTier(nextTier);
