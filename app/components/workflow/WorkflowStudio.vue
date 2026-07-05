@@ -266,7 +266,10 @@ const displayTitle = computed(() => {
   return t("workflow.studio.newExplore");
 });
 
-const workflowKey = computed(() => changeId.value || wf.state.value.label || "__draft__");
+// Draft 阶段固定用 "__draft__" 作为 workflowKey，避免 label 在首次发送时被
+// 设成 need 文本后，与 change 创建后的 migrateWorkflowKey("__draft__", id)
+// 错位，导致 explore 阶段已注册的 session 找不到而被 startNewSession 清空。
+const workflowKey = computed(() => changeId.value || "__draft__");
 
 function rememberStageSession(stage: StepName, sessionId?: string) {
   if (!sessionId) return;
