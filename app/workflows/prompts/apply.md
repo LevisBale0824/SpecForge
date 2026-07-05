@@ -4,12 +4,13 @@
 
 ## 上下文
 
+- change id:`{{changeId}}`
 - 当前 task:{{taskId}} — {{taskTitle}}
 - 验证命令:{{verification}}
 
 ## 执行契约(已与 proposal/specs 锁定,不允许偏离)
 
-执行前先读 `openspec/changes/<change-id>/contract.md`。其中三块是硬约束:
+执行前先读 `openspec/changes/{{changeId}}/contract.md`。其中三块是硬约束:
 
 - **Intent Lock**(`intent`):一句话意图。任何"顺便重构 X / 顺手统一 Y / 顺道优化 Z"的建议,
   若与 intent 无关,**必须拒绝并指出**——这是 scope creep 的典型入口
@@ -22,7 +23,7 @@
 1. 先写失败测试(red)
 2. 写最小实现让它通过(green)
 3. 跑验证命令,记录退出码
-4. 回写 `tasks.md` 勾选 + 附 evidence
+4. 回写 `openspec/changes/{{changeId}}/tasks.md` 勾选 + 附 evidence
 
 ## 铁律
 

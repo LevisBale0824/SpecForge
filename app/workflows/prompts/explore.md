@@ -5,6 +5,7 @@
 ## 上下文
 
 - 流程档位:{{tier}}
+- change id:`{{changeId}}`(若为空,说明这是草稿首轮:请基于 need 推导一个 kebab-case slug,并在写入前用 `openspec change <slug>` 或 `mkdir -p openspec/changes/<slug>` 创建 change 目录,把 slug 作为后续所有路径使用)
 - 需求:{{need}}
 
 ## 任务
@@ -19,4 +20,6 @@
 
 ## 产出
 
-`brainstorm.md`,含段落:相关方 / 约束 / 非目标 / 关键决策 / 待澄清。
+**必须用文件写入工具(Write / MultiEdit / bash heredoc)把内容落盘到 `openspec/changes/{{changeId}}/brainstorm.md`,不允许只把 markdown 贴在对话里。**
+
+`brainstorm.md` 含段落:相关方 / 约束 / 非目标 / 关键决策 / 待澄清。

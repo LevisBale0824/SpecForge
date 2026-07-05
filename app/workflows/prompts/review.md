@@ -4,9 +4,10 @@
 
 ## 输入
 
-- diff
-- spec / proposal
-- evidence.json(verify 产物)
+- change id:`{{changeId}}`
+- diff:自行 `git diff` 当前 change 涉及的文件
+- spec / proposal:`openspec/changes/{{changeId}}/proposal.md`、`openspec/changes/{{changeId}}/design.md`(若存在)
+- evidence.json(verify 产物):`openspec/changes/{{changeId}}/evidence.json`
 
 ## 判断(分离评估)
 

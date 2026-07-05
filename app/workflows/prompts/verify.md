@@ -4,7 +4,8 @@
 
 ## 上下文
 
-- change:{{changeId}}
+- change id:`{{changeId}}`
+- 工作目录:`openspec/changes/{{changeId}}/`
 
 ## 任务
 
@@ -17,10 +18,11 @@
 1. 把每个 AC 映射到一条测试或手动证据
 2. 汇总残留风险
 3. 产出 verify 结论(READY / CONDITIONAL / NOT_READY)
+4. **落盘 `openspec/changes/{{changeId}}/verify.md`**(若应用层未自动生成),含 verdict、每条 AC 的证据指针、残留风险
 
 ## Pre-Gate 检查(归档前最后一道闸)
 
-Run Gates 之前/之后,都要核对 `openspec/changes/<change-id>/contract.md`:
+Run Gates 之前/之后,都要核对 `openspec/changes/{{changeId}}/contract.md`:
 
 - **契约过期**(proposal/specs 改了但 contract.md 没重建) → verdict 必须为 NOT_READY,
   指引用户回 Propose 重新生成契约
