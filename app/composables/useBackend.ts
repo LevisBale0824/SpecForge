@@ -24,6 +24,11 @@ import { useProject } from "./useProject";
 import { isElectron as detectElectron, readWorkspaceDiff } from "../utils/electronBridge";
 import { isCommandLike } from "../utils/commands";
 import {
+  encodeStageSuffix,
+  decodeStageBinding,
+  stripStageSuffix,
+} from "../utils/stageTitleEncoding";
+import {
   getActiveBackendKind,
   getActiveBackendAdapter,
   resolveBackendConfig,
@@ -824,28 +829,32 @@ export function useBackend() {
     const existing = sessionsStore.sessions.value.get(sessionId);
     if (!existing) return;
 
-    // Skip if the session already has a meaningful title (opencode / user
-    // rename). Match the "Session <id>" / "New Session …" placeholders plus
-    // any title that's just an 8-char id prefix.
-    const current = (existing.title ?? "").trim();
+    // Strip any stage-binding suffix (⌁sf:...) before placeholder detection
+    // so an encoded session still gets auto-titled on its first stage prompt.
+    const stripped = stripStageSuffix(existing.title);
     const isPlaceholder =
-      !current ||
-      /^Session(\s|$)/i.test(current) ||
-      /^New\s+Session/i.test(current) ||
-      current === sessionId.slice(0, 8);
+      !stripped ||
+      /^Session(\s|$)/i.test(stripped) ||
+      /^New\s+Session/i.test(stripped) ||
+      stripped === sessionId.slice(0, 8);
     if (!isPlaceholder) {
       autoTitledSessions.add(sessionId);
       return;
     }
 
-    const title = deriveTitleFromPrompt(promptText);
-    if (!title) return;
+    const derived = deriveTitleFromPrompt(promptText);
+    if (!derived) return;
     autoTitledSessions.add(sessionId);
+
+    // Re-attach any pre-existing stage-binding suffix so the auto-title
+    // doesn't clobber the binding written by rememberStageSession.
+    const binding = decodeStageBinding(existing.title);
+    const finalTitle = binding ? encodeStageSuffix(derived, binding) : derived;
 
     // Optimistically update the sidebar so the new title shows up immediately.
     sessionsStore.upsert({
       ...existing,
-      title,
+      title: finalTitle,
       time: { ...existing.time, updated: Date.now() / 1000 },
     });
 
@@ -855,10 +864,64 @@ export function useBackend() {
     try {
       const adapter = getActiveBackendAdapter();
       if (adapter.updateSession) {
-        await adapter.updateSession(sessionId, { title }, activeDirectory.value || undefined);
+        await adapter.updateSession(
+          sessionId,
+          { title: finalTitle },
+          activeDirectory.value || undefined,
+        );
       }
     } catch (error) {
       console.warn("[useBackend] auto-title PATCH failed:", error);
+    }
+  }
+
+  /**
+   * PATCH a session's title verbatim. Used by the workflow track to write the
+   * stage-binding suffix. Also upserts the local sessionsStore so the sidebar
+   * stays in sync without waiting for the SSE round-trip.
+   */
+  async function patchSessionTitle(sessionId: string, title: string): Promise<void> {
+    const existing = sessionsStore.sessions.value.get(sessionId);
+    if (existing) {
+      sessionsStore.upsert({
+        ...existing,
+        title,
+        time: { ...existing.time, updated: Date.now() / 1000 },
+      });
+    }
+    try {
+      const adapter = getActiveBackendAdapter();
+      if (adapter.updateSession) {
+        await adapter.updateSession(sessionId, { title }, activeDirectory.value || undefined);
+      }
+    } catch (error) {
+      console.warn("[useBackend] patchSessionTitle failed:", error);
+    }
+  }
+
+  /**
+   * Return the SessionInfo for `sessionId`, fetching from the backend if it
+   * isn't in the local store yet. Used right after a freshly-created session
+   * is referenced (e.g. by the workflow track binding the stage to it) — at
+   * that point the createSession SSE may not have arrived, so the store miss
+   * is expected. The fetched info is upserted so subsequent reads are local.
+   */
+  async function fetchSession(sessionId: string): Promise<SessionInfo | undefined> {
+    const cached = sessionsStore.sessions.value.get(sessionId);
+    if (cached) return cached;
+    try {
+      const adapter = getActiveBackendAdapter();
+      if (!adapter.getSession) return undefined;
+      const info = (await adapter.getSession(sessionId, activeDirectory.value || undefined)) as
+        | SessionInfo
+        | undefined;
+      if (info && info.id) {
+        sessionsStore.upsert(info);
+      }
+      return info;
+    } catch (error) {
+      console.warn("[useBackend] fetchSession failed:", error);
+      return undefined;
     }
   }
 
@@ -1108,6 +1171,8 @@ export function useBackend() {
     deleteSession,
     abortSession: sessionLifecycle.abortSession,
     startNewSession,
+    patchSessionTitle,
+    fetchSession,
 
     // Messages (with auto session creation)
     sendPrompt: sendPromptWithSession,

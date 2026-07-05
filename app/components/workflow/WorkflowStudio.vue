@@ -12,6 +12,11 @@ import { useContract, checkRequirementsCoverage } from "../../composables/useCon
 import { useTaskRunner } from "../../composables/useTaskRunner";
 import { TIER_LABELS, stagesForTier, type StepName, type WorkflowTier } from "../../types/workflow";
 import type { ExecutionContract, ContractStaleResult } from "../../types/openspec";
+import {
+  encodeStageSuffix,
+  decodeStageBinding,
+  stripStageSuffix,
+} from "../../utils/stageTitleEncoding";
 
 const route = useRoute();
 const router = useRouter();
@@ -49,9 +54,14 @@ const draftKnownChangeIds = ref<Set<string>>(new Set());
 const creatingDraftChange = ref(false);
 
 const stages = computed(() => stagesForTier(wf.state.value.tier));
-const cur = computed(() => wf.state.value.activeStep);
-const activeIdx = computed(() => stages.value.indexOf(cur.value));
-const isLast = computed(() => activeIdx.value === stages.value.length - 1);
+const viewedStep = ref<StepName>(wf.state.value.activeStep);
+const progressStep = computed(() => wf.state.value.activeStep);
+const cur = computed(() =>
+  stages.value.includes(viewedStep.value) ? viewedStep.value : progressStep.value,
+);
+const viewIdx = computed(() => stages.value.indexOf(cur.value));
+const progressIdx = computed(() => stages.value.indexOf(progressStep.value));
+const isLast = computed(() => viewIdx.value === stages.value.length - 1);
 // frontier = 用户实际到过的最远阶段。
 // 取"基于 change 产物的推断"和"当前查看位置"的较大者:
 //   - 产物推断:有 evidence→verify、有 tasks→apply、有 proposal→propose、否则 explore
@@ -71,11 +81,9 @@ const frontierIdx = computed(() => {
     }
     if (inferredIdx < 0) inferredIdx = 0;
   }
-  return Math.max(inferredIdx, activeIdx.value);
+  return Math.max(inferredIdx, progressIdx.value);
 });
-const nextLabel = computed(() =>
-  isLast.value ? "" : stageLabel(stages.value[activeIdx.value + 1]),
-);
+const nextLabel = computed(() => (isLast.value ? "" : stageLabel(stages.value[viewIdx.value + 1])));
 const requestedChangeId = computed(() => {
   const value = route.query.change;
   return typeof value === "string" ? value : "";
@@ -298,6 +306,50 @@ function rememberStageSession(stage: StepName, sessionId?: string) {
   if (wf.state.value.steps[stage]) {
     wf.state.value.steps[stage]!.sessionId = sessionId;
   }
+  // Persist the binding in the session title so it survives localStorage
+  // clears and is recoverable by discoverStageSessions later.
+  void persistStageBindingInTitle(sessionId, stage, workflowKey.value);
+}
+
+/**
+ * Append the stage-binding suffix to a session's title (best-effort).
+ * The suffix is invisible in the main sidebar because stage sessions are
+ * filtered out via stageSessionIds; it only matters for recovery.
+ */
+async function persistStageBindingInTitle(
+  sessionId: string,
+  stage: StepName,
+  wKey: string,
+): Promise<void> {
+  // Right after createSession the SSE upsert may not have landed in
+  // sessionsStore yet — fetch from the backend so we have a real title to
+  // append the suffix to (otherwise auto-title's later PATCH would replace
+  // the empty title and we'd lose the binding).
+  const session =
+    backend.sessions.value.find((s) => s.id === sessionId) ??
+    (await backend.fetchSession(sessionId));
+  if (!session) return;
+  const current = session.title ?? "";
+  const existing = decodeStageBinding(current);
+  if (existing && existing.stage === stage && existing.workflowKey === wKey) return;
+  const next = encodeStageSuffix(stripStageSuffix(current), { stage, workflowKey: wKey });
+  await backend.patchSessionTitle(sessionId, next);
+}
+
+/**
+ * Scan known sessions for an encoded `⌁sf:<stage>:<workflowKey>` suffix and
+ * backfill the registry for the given workflowKey. Used as a fallback when
+ * prepareStageSession finds no binding in localStorage.
+ */
+function discoverStageSessions(wKey: string): void {
+  for (const session of backend.sessions.value) {
+    const binding = decodeStageBinding(session.title);
+    if (!binding || binding.workflowKey !== wKey) continue;
+    const already = stageSessionsStore.stageSessionId(wKey, binding.stage);
+    if (!already) {
+      stageSessionsStore.registerStageSession(wKey, binding.stage, session.id);
+    }
+  }
 }
 
 /**
@@ -308,7 +360,13 @@ function rememberStageSession(stage: StepName, sessionId?: string) {
  * The first successful send in the stage binds it via rememberStageSession.
  */
 async function prepareStageSession(stage: StepName) {
-  const registered = stageSessionsStore.stageSessionId(workflowKey.value, stage);
+  let registered = stageSessionsStore.stageSessionId(workflowKey.value, stage);
+  if (!registered && workflowKey.value !== "__draft__") {
+    // Registry miss on a real change — try to recover bindings from session
+    // titles (survives localStorage clear / external change creation).
+    discoverStageSessions(workflowKey.value);
+    registered = stageSessionsStore.stageSessionId(workflowKey.value, stage);
+  }
   if (registered) {
     if (backend.selectedSessionId.value !== registered) {
       await backend.selectSession(registered);
@@ -333,8 +391,11 @@ async function loadStageSideEffects(stage: StepName) {
   }
 }
 
-async function enterStage(stage: StepName) {
-  wf.setActiveStep(stage);
+async function enterStage(stage: StepName, opts: { advance?: boolean } = {}) {
+  viewedStep.value = stage;
+  if (opts.advance) {
+    wf.setActiveStep(stage);
+  }
   await prepareStageSession(stage);
   await loadStageSideEffects(stage);
 }
@@ -393,7 +454,7 @@ async function openSelectedChange() {
   wf.setTier(nextTier);
   wf.state.value.label = changeId.value;
   creatingDraftChange.value = false;
-  void enterStage(targetStage);
+  void enterStage(targetStage, { advance: true });
 }
 
 onMounted(openSelectedChange);
@@ -427,7 +488,22 @@ watch(
     if (!created) return;
     changeTiers.value[created.id] = wf.state.value.tier;
     localStorage.setItem(CHANGE_TIERS_KEY, JSON.stringify(changeTiers.value));
+    // Migrate the local registry, then re-PATCH each affected session's title
+    // so the suffix's workflowKey stays consistent (the encoded binding is what
+    // discoverStageSessions reads to recover from a cleared localStorage).
+    const draftSessions = stageSessionsStore.sessionsForWorkflow("__draft__");
     stageSessionsStore.migrateWorkflowKey("__draft__", created.id);
+    for (const sid of draftSessions) {
+      const session = backend.sessions.value.find((s) => s.id === sid);
+      const binding = decodeStageBinding(session?.title);
+      if (binding && binding.workflowKey === "__draft__") {
+        const next = encodeStageSuffix(stripStageSuffix(session!.title), {
+          stage: binding.stage,
+          workflowKey: created.id,
+        });
+        void backend.patchSessionTitle(sid, next);
+      }
+    }
     wf.state.value.label = created.id;
     creatingDraftChange.value = false;
     router.replace({ name: "workflow", query: { change: created.id } });
@@ -454,9 +530,13 @@ const tddGreen = computed(() =>
   messages.value.some((m) => /pass.*[✓]|[✓].*pass|exit 0/.test(m.text)),
 );
 
-function stageState(i: number): "done" | "current" | "locked" {
-  if (i === activeIdx.value) return "current";
+function stageState(i: number): "done" | "current" | "viewing" | "locked" {
+  if (i === progressIdx.value) return "current";
+  if (i === viewIdx.value && i <= frontierIdx.value) return "viewing";
   return i <= frontierIdx.value ? "done" : "locked";
+}
+function lineState(i: number): "done" | "locked" {
+  return i < frontierIdx.value ? "done" : "locked";
 }
 function canOpenStage(i: number): boolean {
   if (archiving.value) return false;
@@ -491,12 +571,12 @@ function gotoStage(s: StepName) {
 function nextStage() {
   if (isLast.value) return;
   const from = cur.value;
-  const to = stages.value[activeIdx.value + 1];
+  const to = stages.value[viewIdx.value + 1];
   rememberStageSession(from, backend.selectedSessionId.value);
   if (from === "propose" && changeId.value) {
     generateContract(changeId.value, need.value || changeId.value, wf.state.value.tier);
   }
-  void enterStage(to);
+  void enterStage(to, { advance: true });
 }
 
 function stageGateActionDisabled(kind?: StageGateActionKind) {
@@ -817,7 +897,7 @@ function verdictColor(v: string): string {
                 <span class="tnode-sub">{{ stageSub(s) }}</span>
               </span>
             </button>
-            <span v-if="i < stages.length - 1" class="tline" :class="stageState(i)" />
+            <span v-if="i < stages.length - 1" class="tline" :class="lineState(i)" />
           </template>
         </div>
       </aside>
@@ -1322,7 +1402,8 @@ function verdictColor(v: string): string {
   cursor: not-allowed;
 }
 .tnode.done:hover .tnode-label,
-.tnode.current:hover .tnode-label {
+.tnode.current:hover .tnode-label,
+.tnode.viewing:hover .tnode-label {
   color: var(--color-surface-100, #f1f5f9);
 }
 .tnode-dot {
@@ -1351,6 +1432,12 @@ function verdictColor(v: string): string {
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent-violet, #a78bfa) 20%, transparent);
   animation: pulse 2s infinite;
 }
+.tnode.viewing .tnode-dot {
+  border-color: var(--color-accent-violet, #a78bfa);
+  background: color-mix(in srgb, var(--color-accent-violet, #a78bfa) 8%, transparent);
+  color: var(--color-accent-violet, #a78bfa);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-accent-violet, #a78bfa) 12%, transparent);
+}
 .tnode.locked .tnode-dot {
   background: transparent;
   border-color: color-mix(in srgb, var(--color-surface-700, #334155) 70%, transparent);
@@ -1374,6 +1461,10 @@ function verdictColor(v: string): string {
   color: var(--color-surface-300, #cbd5e1);
 }
 .tnode.current .tnode-label {
+  color: var(--color-surface-100, #f1f5f9);
+  font-weight: 600;
+}
+.tnode.viewing .tnode-label {
   color: var(--color-surface-100, #f1f5f9);
   font-weight: 600;
 }
