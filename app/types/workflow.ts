@@ -1,15 +1,16 @@
 // ---------------------------------------------------------------------------
 // OpenSpec Workflow Type Definitions
 // ---------------------------------------------------------------------------
-// 风险自适应三档流程:lean / standard / thorough。
-// 不同档位启用不同阶段子集 — 小改走捷径,大改动才上完整流程。
+// 风险自适应两档流程:standard / thorough。
+// 两档都走完整阶段(差异在 review 是否启用 + 深度),不再跳阶段。
+// plan 阶段已合并进 apply(先拆 tasks 再 TDD 执行)。
 // ---------------------------------------------------------------------------
 
 /** 流程强度档位 */
-export type WorkflowTier = "lean" | "standard" | "thorough";
+export type WorkflowTier = "standard" | "thorough";
 
 /** 所有可能的阶段(不同 tier 启用不同子集,按全序排列) */
-export type StepName = "explore" | "propose" | "plan" | "apply" | "verify" | "review" | "archive";
+export type StepName = "explore" | "propose" | "apply" | "verify" | "review" | "archive";
 
 /** 单步内的阶段 */
 export type StepPhase = "idle" | "input" | "executing" | "reviewing" | "done" | "blocked";
@@ -18,7 +19,6 @@ export type StepPhase = "idle" | "input" | "executing" | "reviewing" | "done" | 
 export const STEP_ORDER: StepName[] = [
   "explore",
   "propose",
-  "plan",
   "apply",
   "verify",
   "review",
@@ -27,14 +27,12 @@ export const STEP_ORDER: StepName[] = [
 
 /** 每档启用哪些阶段(按执行顺序) */
 export const TIER_STAGES: Record<WorkflowTier, StepName[]> = {
-  lean: ["propose", "apply", "verify", "archive"],
   standard: ["explore", "propose", "apply", "verify", "archive"],
-  thorough: ["explore", "propose", "plan", "apply", "verify", "review", "archive"],
+  thorough: ["explore", "propose", "apply", "verify", "review", "archive"],
 };
 
 /** 档位展示标签(i18n key,由消费方经 t() 渲染) */
 export const TIER_LABELS: Record<WorkflowTier, string> = {
-  lean: "workflow.tiers.lean",
   standard: "workflow.tiers.standard",
   thorough: "workflow.tiers.thorough",
 };
@@ -44,9 +42,8 @@ export function stagesForTier(tier: WorkflowTier): StepName[] {
   return TIER_STAGES[tier] ?? TIER_STAGES.standard;
 }
 
-/** 某档的入口阶段(轻量档直达 propose,其余从 explore) */
+/** 某档的入口阶段(两档都从 explore 开始) */
 export function entryStageForTier(tier: WorkflowTier): StepName {
-  if (tier === "lean") return "propose";
   const stages = stagesForTier(tier);
   return stages[0] ?? "explore";
 }
@@ -65,7 +62,7 @@ export type WorkflowState = {
   tier: WorkflowTier;
   activeStep: StepName;
   label?: string;
-  /** 仅当前 tier 启用的阶段会有条目 */
+  /** 仅当前 tier 启用的阶段才会有条目 */
   steps: Partial<Record<StepName, StepState>>;
   enabled: boolean;
 };

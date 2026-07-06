@@ -186,13 +186,12 @@ export default {
     intro: {
       kicker: "Spec 探索",
       title: "从需求到上线的结构化工作流",
-      sub: "按改动规模选择档位 — 轻量 / 标准 / 完整 — 不同档位启用不同阶段子集,小改走捷径、大改才上完整流程;每个阶段都有明确的产物与 Gate。",
+      sub: "按改动复杂度选择档位 — 标准 / 完整 — 不同档位启用不同阶段子集;每个阶段都有明确的产物与 Gate。",
       ctaPre: "从左侧 Spec 探索 点",
       ctaPost: "开始一次新探索",
       tiers: {
-        lean: { name: "轻量", steps: "4 步", fit: "单文件小改" },
         standard: { name: "标准", steps: "5 步", fit: "模块内功能" },
-        thorough: { name: "完整", steps: "7 步", fit: "跨模块 / 架构级" },
+        thorough: { name: "完整", steps: "6 步", fit: "跨模块 / 架构级" },
       },
     },
     stages: {
@@ -206,8 +205,7 @@ export default {
         sub: "固化 spec",
         hint: "点 ✦ AI 起草，基于需求生成 proposal / spec delta",
       },
-      plan: { label: "Plan", sub: "任务拆解", hint: "由 proposal 拆解任务依赖 DAG" },
-      apply: { label: "Apply", sub: "TDD 实现", hint: "TDD 实现（红→绿）在主对话区进行" },
+      apply: { label: "Apply", sub: "拆任务 + TDD", hint: "先拆 tasks.md，再 TDD 实现（红→绿）" },
       verify: {
         label: "Verify",
         sub: "验证 Gate",
@@ -217,7 +215,6 @@ export default {
       archive: { label: "Archive", sub: "归档", hint: "归档前 evidence gate 检查" },
     },
     tiers: {
-      lean: "轻量 · 单文件小改",
       standard: "标准 · 模块内功能",
       thorough: "完整 · 跨模块 / 架构级",
     },
@@ -375,18 +372,17 @@ export default {
       close: "关闭",
       selectCta: "选择 →",
       tiers: {
-        lean: {
-          name: "轻量",
-          steps: "4 步",
-          fit: "单文件小改",
-          skip: "跳过 Explore · Plan · Review",
+        standard: {
+          name: "标准",
+          steps: "5 步",
+          fit: "模块内功能",
+          skip: "不含 Review",
         },
-        standard: { name: "标准", steps: "5 步", fit: "模块内功能", skip: "跳过 Plan · Review" },
         thorough: {
           name: "完整",
-          steps: "7 步",
+          steps: "6 步",
           fit: "跨模块 / 架构级",
-          skip: "完整流程,不跳阶段",
+          skip: "完整流程,含只读审查",
         },
       },
     },

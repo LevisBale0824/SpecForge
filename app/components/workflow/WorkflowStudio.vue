@@ -28,7 +28,7 @@ const msgStore = useMessages();
 const { generateContract, loadContract, checkStale } = useContract();
 const taskRunner = useTaskRunner();
 
-const TIER_KEYS = ["lean", "standard", "thorough"] as const;
+const TIER_KEYS = ["standard", "thorough"] as const;
 
 function stageLabel(s: StepName): string {
   return t(`workflow.stages.${s}.label`);
@@ -138,7 +138,6 @@ const stageGate = computed<StageGate | null>(() => {
   const change = selectedChange.value;
   const stats = change?.taskStats;
   const currentEvidence = evidence.value;
-  const isLean = wf.state.value.tier === "lean";
   const G = "workflow.studio.gate";
 
   if (stage === "explore") {
@@ -174,28 +173,6 @@ const stageGate = computed<StageGate | null>(() => {
     };
   }
 
-  if (stage === "plan") {
-    if (!stats || stats.total === 0) {
-      return {
-        tone: "blocked",
-        kicker: t(`${G}.planBlocked.kicker`),
-        title: t(`${G}.planBlocked.title`),
-        body: t(`${G}.planBlocked.body`),
-        action: t(`${G}.planBlocked.action`),
-        actionKind: "generate-tasks",
-        canContinue: false,
-      };
-    }
-    return {
-      tone: "review",
-      kicker: t(`${G}.planReview.kicker`),
-      title: t(`${G}.planReview.title`, { count: stats.total }),
-      body: t(`${G}.planReview.body`),
-      action: t(`${G}.planReview.action`, { next }),
-      canContinue: true,
-    };
-  }
-
   if (stage === "apply") {
     if (!changeId.value) {
       return {
@@ -207,21 +184,6 @@ const stageGate = computed<StageGate | null>(() => {
       };
     }
     if (!stats || stats.total === 0) {
-      if (isLean) {
-        return {
-          tone: "review",
-          kicker: t(`${G}.applyLeanSkip.kicker`),
-          title: t(`${G}.applyLeanSkip.title`),
-          body: t(`${G}.applyLeanSkip.body`),
-          action: t(`${G}.applyLeanSkip.action`),
-          actionKind: "start-work",
-          secondaryAction: t(`${G}.applyLeanSkip.secondaryAction`),
-          secondaryActionKind: "generate-tasks",
-          tertiaryAction: t(`${G}.applyLeanSkip.tertiaryAction`, { next }),
-          tertiaryActionKind: "next",
-          canContinue: true,
-        };
-      }
       return {
         tone: "blocked",
         kicker: t(`${G}.applyNoTasks.kicker`),
@@ -422,10 +384,10 @@ function tierForChange(stage: StepName): WorkflowTier {
   const remembered = changeTiers.value[changeId.value];
   if (remembered) return remembered;
   const sessions = stageSessionsStore.stageSessions.value[changeId.value];
-  if (sessions?.plan || sessions?.review) return "thorough";
+  if (sessions?.review) return "thorough";
   if (sessions?.explore) return "standard";
   if (stage === "explore") return "standard";
-  return "lean";
+  return "standard";
 }
 
 async function openSelectedChange() {
@@ -463,10 +425,9 @@ async function openSelectedChange() {
   if (requestedChangeId.value !== requestedId) return;
   if (!changeId.value) return;
   if (c) contract.value = c;
-  const nextTier =
-    c?.tier && (c.tier === "lean" || c.tier === "standard" || c.tier === "thorough")
-      ? c.tier
-      : tierForChange(inferredStage);
+  const cTier = c?.tier;
+  const nextTier: WorkflowTier =
+    cTier === "standard" || cTier === "thorough" ? cTier : tierForChange(inferredStage);
   const nextStages = stagesForTier(nextTier);
   const targetStage = nextStages.includes(inferredStage) ? inferredStage : nextStages[0];
   wf.setTier(nextTier);
@@ -653,13 +614,10 @@ function stageGateActionDisabled(kind?: StageGateActionKind) {
 
 async function requestTasksMd() {
   if (!changeId.value) return;
-  const isLean = wf.state.value.tier === "lean";
   const prompt = [
-    `你处于 ${cur.value === "plan" ? "Plan" : "Apply"} 阶段。`,
+    `你处于 Apply 阶段。`,
     `请为 OpenSpec change "${changeId.value}" 生成或更新 openspec/changes/${changeId.value}/tasks.md。`,
-    isLean
-      ? "当前是 lean 流程：请生成一份轻量 checklist，只保留验证这个小改动必须完成的 2-5 个任务。"
-      : "当前流程需要 tasks.md 作为 Apply/Verify 的执行边界：请拆成可执行、可勾选、可验证的任务。",
+    "当前流程需要 tasks.md 作为 Apply/Verify 的执行边界：请拆成可执行、可勾选、可验证的任务。",
     "要求：",
     "- 使用 OpenSpec tasks.md checkbox 格式，例如 `- [ ] 1.1 ...`。",
     "- 每个任务必须有明确完成条件；需要测试/构建/手动验收时写清楚验证方式。",
@@ -669,9 +627,7 @@ async function requestTasksMd() {
     .filter(Boolean)
     .join("\n");
 
-  draftMsg.value = isLean
-    ? t("workflow.studio.msg.requestedLeanTasks")
-    : t("workflow.studio.msg.requestedTasks");
+  draftMsg.value = t("workflow.studio.msg.requestedTasks");
   injected.value[cur.value] = true;
   const sent = await backend.sendPrompt(prompt, []);
   if (sent) rememberStageSession(cur.value, backend.selectedSessionId.value);
@@ -680,13 +636,10 @@ async function requestTasksMd() {
 
 async function requestStartWork() {
   if (!changeId.value) return;
-  const isLean = wf.state.value.tier === "lean";
   const prompt = [
     "你处于 Apply 阶段。",
     `请直接开始实现 OpenSpec change "${changeId.value}"。`,
-    isLean
-      ? "当前是 lean 流程，没有 tasks.md 时也允许直接开始；请先快速确认 scope，再以最小安全改动完成实现。"
-      : "当前没有可运行的任务上下文时，请先根据 proposal 明确实现范围，再开始改代码。",
+    "当前没有可运行的任务上下文时，请先根据 proposal 明确实现范围，再开始改代码。",
     "工作要求：",
     "- 先阅读相关代码和 OpenSpec 产物，不要凭空实现。",
     "- 保持改动聚焦在当前 change 的 scope 内。",
@@ -786,7 +739,7 @@ function refreshVerifyWarnings() {
   }
   verifyWarnings.value = warns;
 }
-type DraftStage = "explore" | "propose" | "plan" | "apply" | "review";
+type DraftStage = "explore" | "propose" | "apply" | "review" | "archive";
 async function draft(stage: DraftStage) {
   if (archiving.value) return;
   if (!need.value.trim()) {
@@ -825,7 +778,7 @@ async function draft(stage: DraftStage) {
 }
 function sendForCurrent() {
   const s = cur.value;
-  if (s === "explore" || s === "propose" || s === "plan" || s === "apply" || s === "review") {
+  if (s === "explore" || s === "propose" || s === "apply" || s === "review" || s === "archive") {
     draft(s);
   }
 }
@@ -1214,26 +1167,18 @@ function verdictColor(v: string): string {
               :placeholder="t('workflow.studio.placeholderPropose')"
               @keydown.enter="draft('propose')"
             />
-            <button
-              class="btn violet"
-              :disabled="!need.trim() || archiving"
-              @click="draft('propose')"
-            >
-              {{ t("workflow.studio.aiDraft") }}
+            <button class="btn violet" :disabled="archiving" @click="draft('propose')">
+              {{ t("workflow.studio.send") }}
             </button>
           </template>
-          <template v-else-if="cur === 'plan' || cur === 'apply' || cur === 'review'">
+          <template v-else-if="cur === 'apply' || cur === 'review'">
             <input
               v-model="need"
               :disabled="archiving"
               :placeholder="t('workflow.studio.placeholderStage', { label: stageLabel(cur) })"
               @keydown.enter="sendForCurrent"
             />
-            <button
-              class="btn violet"
-              :disabled="!need.trim() || archiving"
-              @click="sendForCurrent"
-            >
+            <button class="btn violet" :disabled="archiving" @click="sendForCurrent">
               {{ t("workflow.studio.send") }}
             </button>
           </template>
@@ -1250,12 +1195,21 @@ function verdictColor(v: string): string {
             }}</span>
           </template>
           <template v-else-if="cur === 'archive'">
-            <span v-if="evidence?.verdict === 'NOT_READY'" class="gate-note">{{
-              t("workflow.studio.notReadyWarn")
-            }}</span>
+            <input
+              v-model="need"
+              :disabled="archiving"
+              :placeholder="t('workflow.studio.placeholderStage', { label: stageLabel(cur) })"
+              @keydown.enter="sendForCurrent"
+            />
+            <button class="btn violet" :disabled="archiving" @click="sendForCurrent">
+              {{ t("workflow.studio.send") }}
+            </button>
             <button class="btn ghost" :disabled="archiving || !changeId" @click="doArchive">
               {{ archiving ? t("workflow.studio.archiving") : t("workflow.studio.archive") }}
             </button>
+            <span v-if="evidence?.verdict === 'NOT_READY'" class="gate-note">{{
+              t("workflow.studio.notReadyWarn")
+            }}</span>
             <span v-if="archiveMsg" :class="archiveMsg.ok ? 'composer-hint ok' : 'gate-note'">{{
               archiveMsg.text
             }}</span>

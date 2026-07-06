@@ -21,7 +21,6 @@ interface TierCard {
 }
 
 const TIERS: TierCard[] = [
-  { id: "lean", dots: 4, flow: "Propose → Apply → Verify → Archive" },
   {
     id: "standard",
     dots: 5,
@@ -29,8 +28,8 @@ const TIERS: TierCard[] = [
   },
   {
     id: "thorough",
-    dots: 7,
-    flow: "Explore → Propose → Plan → Apply → Verify → Review → Archive",
+    dots: 6,
+    flow: "Explore → Propose → Apply → Verify → Review → Archive",
   },
 ];
 

@@ -191,13 +191,12 @@ export default {
     intro: {
       kicker: "Spec Explore",
       title: "A structured workflow from idea to ship",
-      sub: "Pick a tier by change size — lean / standard / thorough — each tier enables a different subset of stages. Small changes take shortcuts; large ones run the full flow. Every stage has a concrete artifact and gate.",
+      sub: "Pick a tier by change complexity — standard / thorough — each tier enables a different subset of stages. Every stage has a concrete artifact and gate.",
       ctaPre: "Click",
       ctaPost: "in the Spec Explore sidebar to start a new exploration",
       tiers: {
-        lean: { name: "Lean", steps: "4 steps", fit: "Single-file tweak" },
         standard: { name: "Standard", steps: "5 steps", fit: "In-module feature" },
-        thorough: { name: "Thorough", steps: "7 steps", fit: "Cross-module / architectural" },
+        thorough: { name: "Thorough", steps: "6 steps", fit: "Cross-module / architectural" },
       },
     },
     stages: {
@@ -210,11 +209,6 @@ export default {
         label: "Propose",
         sub: "Lock spec",
         hint: "Click ✦ AI Draft to generate a proposal / spec delta from the need",
-      },
-      plan: {
-        label: "Plan",
-        sub: "Break down tasks",
-        hint: "Splits the proposal into a task dependency DAG",
       },
       apply: {
         label: "Apply",
@@ -234,7 +228,6 @@ export default {
       archive: { label: "Archive", sub: "Archive", hint: "Evidence gate check before archiving" },
     },
     tiers: {
-      lean: "Lean · Single-file tweak",
       standard: "Standard · In-module feature",
       thorough: "Thorough · Cross-module / architectural",
     },
@@ -393,23 +386,17 @@ export default {
       close: "Close",
       selectCta: "Select →",
       tiers: {
-        lean: {
-          name: "Lean",
-          steps: "4 steps",
-          fit: "Single-file tweak",
-          skip: "Skips Explore · Plan · Review",
-        },
         standard: {
           name: "Standard",
           steps: "5 steps",
           fit: "In-module feature",
-          skip: "Skips Plan · Review",
+          skip: "No Review",
         },
         thorough: {
           name: "Thorough",
-          steps: "7 steps",
+          steps: "6 steps",
           fit: "Cross-module / architectural",
-          skip: "Full flow, no stages skipped",
+          skip: "Full flow with read-only review",
         },
       },
     },
@@ -456,10 +443,10 @@ export default {
     },
     openspec: {
       title: "5 · OpenSpec Workflow",
-      body: "With OpenSpec enabled, pick a tier by change size and walk Explore → Propose → Plan → Apply → Verify → Review → Archive. Every stage has a concrete artifact and gate.",
+      body: "With OpenSpec enabled, pick a tier by change complexity and walk Explore → Propose → Apply → Verify → Review → Archive. Every stage has a concrete artifact and gate.",
       bullets: [
-        "Pick a tier by change size: lean / standard / thorough",
-        "Stages: Explore → Propose → Plan → Apply → Verify → Review → Archive",
+        "Pick a tier by change complexity: standard / thorough",
+        "Stages: Explore → Propose → Apply → Verify → Review → Archive",
         "Every stage has a concrete artifact and gate",
       ],
     },

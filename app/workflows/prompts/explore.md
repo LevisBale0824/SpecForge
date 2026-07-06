@@ -16,10 +16,12 @@
 2. 非目标(明确不做什么)
 3. 关键决策点与风险
 
-档位越重,问得越深:standard 抓最关键的不确定点(通常 1–3 个)即可;thorough 时要把上面三类都覆盖到,逐个深挖直到边界清晰。lean 不走此阶段。
+档位越重,问得越深:standard 抓最关键的不确定点(通常 1–3 个)即可;thorough 要把上面三类都覆盖到,逐个深挖直到边界清晰。
 
-## 产出
+## 产物契约
 
-**必须用文件写入工具(Write / MultiEdit / bash heredoc)把内容落盘到 `openspec/changes/{{changeId}}/brainstorm.md`,不允许只把 markdown 贴在对话里。**
+- **落盘** `openspec/changes/{{changeId}}/brainstorm.md`
+- **下游消费者**:Propose 读 brainstorm 固化为 proposal
+- 含段落:相关方 / 约束 / 非目标 / 关键决策 / 待澄清
 
-`brainstorm.md` 含段落:相关方 / 约束 / 非目标 / 关键决策 / 待澄清。
+必须用文件写入工具(Write / MultiEdit / bash heredoc)落盘,不允许只贴对话。完成后简要说明,不复述全文。

@@ -7,6 +7,11 @@
 - change id:`{{changeId}}`
 - 工作目录:`openspec/changes/{{changeId}}/`
 
+## 产物契约
+
+- **落盘** `verify.md`(verdict / 每条 AC 的证据指针 / 残留风险)
+- **应用层生成** `evidence.json`(gates / exitCode / verdict)
+
 ## 任务
 
 应用层会真实执行下列命令并捕获退出码(非你自述):
@@ -35,6 +40,6 @@ Run Gates 之前/之后,都要核对 `openspec/changes/{{changeId}}/contract.md`
 
 ## 铁律
 
-- 不要从"对话里没报错"推断通过 —— 只认命令退出码
-- 跳过的检查必须显式列出原因
-- 不允许在契约过期或 Requirements 未覆盖的情况下给 READY
+- [RULE-VERIFY-01] 不要从"对话里没报错"推断通过 —— 只认命令退出码
+- [RULE-VERIFY-02] 跳过的检查必须显式列出原因
+- [RULE-VERIFY-03] 不允许在契约过期或 Requirements 未覆盖的情况下给 READY

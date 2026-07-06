@@ -11,7 +11,6 @@ const { state, enabled, setActiveStep, nextStep, setTier, activeStages } = useWo
 const STAGE_LABELS: Record<StepName, string> = {
   explore: "Explore",
   propose: "Propose",
-  plan: "Plan",
   apply: "Apply",
   verify: "Verify",
   review: "Review",
@@ -33,7 +32,6 @@ const steps = computed(() =>
 );
 
 const tiers = computed<Array<{ id: WorkflowTier; label: string }>>(() => [
-  { id: "lean", label: t(TIER_LABELS.lean) },
   { id: "standard", label: t(TIER_LABELS.standard) },
   { id: "thorough", label: t(TIER_LABELS.thorough) },
 ]);
