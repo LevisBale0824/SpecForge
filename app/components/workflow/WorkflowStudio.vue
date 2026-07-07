@@ -1865,7 +1865,7 @@ function verdictColor(v: string): string {
 }
 .msg.user {
   align-self: flex-end;
-  flex-direction: row-reverse;
+  justify-content: flex-end;
 }
 .avatar-img {
   width: 30px;
