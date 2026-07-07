@@ -58,6 +58,19 @@ export type RunGatesOptions = {
   onGateUpdate?: (event: GateProgressEvent) => void;
 };
 
+export type ArchiveProgressStep = "check" | "command" | "refresh" | "done" | "failed";
+
+export type ArchiveProgressEvent = {
+  step: ArchiveProgressStep;
+  status: "running" | "done" | "failed";
+  command?: string;
+  reason?: string;
+};
+
+export type ArchiveChangeOptions = {
+  onArchiveUpdate?: (event: ArchiveProgressEvent) => void;
+};
+
 const state = reactive<OpenSpecState>({
   rootPath: "",
   initialized: false,
@@ -501,23 +514,43 @@ async function runGates(
   return evidence;
 }
 
-async function archiveChange(changeId: string): Promise<{ ok: boolean; reason?: string }> {
+async function archiveChange(
+  changeId: string,
+  options: ArchiveChangeOptions = {},
+): Promise<{ ok: boolean; reason?: string }> {
+  const emit = (event: ArchiveProgressEvent) => options.onArchiveUpdate?.(event);
+
+  emit({ step: "check", status: "running" });
   const ev = state.evidence[changeId];
   if (ev && ev.verdict === "NOT_READY") {
+    const reason = "verify NOT_READY - archive blocked";
+    emit({ step: "check", status: "failed", reason });
+    emit({ step: "failed", status: "failed", reason });
     return {
       ok: false,
-      reason: `verify 未通过（${ev.verdict}）— evidence gate 确定性阻止归档`,
+      reason,
     };
   }
+  emit({ step: "check", status: "done" });
+
   if (isElectron()) {
     const project = useProject();
     const root = state.rootPath || project.state.directoryPath;
-    const r = await runProjectGate(root, `openspec archive ${changeId} -y`);
+    const command = `openspec archive ${changeId} -y`;
+    emit({ step: "command", status: "running", command });
+    const r = await runProjectGate(root, command);
     if (r?.exitCode !== 0) {
-      return { ok: false, reason: r?.stderr?.slice(0, 300) || "openspec archive 失败" };
+      const reason = r?.stderr?.slice(0, 300) || "openspec archive failed";
+      emit({ step: "command", status: "failed", command, reason });
+      emit({ step: "failed", status: "failed", reason });
+      return { ok: false, reason };
     }
+    emit({ step: "command", status: "done", command });
   }
+  emit({ step: "refresh", status: "running" });
   await refresh();
+  emit({ step: "refresh", status: "done" });
+  emit({ step: "done", status: "done" });
   return { ok: true };
 }
 

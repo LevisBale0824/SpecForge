@@ -264,6 +264,14 @@ export default {
       tddGreen: "GREEN · 通过",
       sddTitle: "SDD · 子代理任务",
       sddRunAll: "▶ 运行全部待办",
+      sddSummary: "{done}/{total} 完成 · {running} 运行 · {failed} 失败",
+      sddCompleted: "tasks.md 完成",
+      sddStatus: {
+        pending: "待办",
+        running: "运行中",
+        done: "完成",
+        failed: "失败",
+      },
       sddEmptyWithChange: "没有待办任务。点上方「运行全部待办」或先检查 tasks.md",
       sddEmptyNoChange: "没有待办任务。先创建一个 change",
       reviewVerdict: "Review Verdict",
@@ -290,11 +298,18 @@ export default {
         archived: "已归档",
         archiveFailed: "归档失败",
       },
-      archiveConfirmTitle: '归档探索 "{id}"?',
-      archiveConfirmMessage:
-        "归档后将更新主 specs 并把 change 移入 archive 目录，此操作不可自动撤销。",
-      archiveConfirm: "确认归档",
-      archiveCancel: "取消",
+      archiveSteps: {
+        check: "检查 evidence",
+        command: "执行归档命令",
+        refresh: "刷新状态",
+        cleanup: "清理会话",
+      },
+      archiveStatus: {
+        pending: "待执行",
+        running: "运行中",
+        done: "完成",
+        failed: "失败",
+      },
       warn: {
         contractStale: "契约过期({reason}):{detail}",
         requirementsUncovered: "验收点未覆盖:{items}(无对应 completed task)",

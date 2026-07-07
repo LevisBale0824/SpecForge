@@ -6,10 +6,12 @@ export interface TaskSpec {
   title: string;
   prompt: string;
   verification?: string;
+  changeId?: string;
 }
 
 export interface TaskStatus {
   taskId: string;
+  changeId?: string;
   title: string;
   status: "pending" | "running" | "done" | "failed";
   exitCode: number | null;
@@ -24,6 +26,7 @@ export function useTaskRunner() {
   async function loadPendingTasks(specs: TaskSpec[]) {
     tasks.value = specs.map((s) => ({
       taskId: s.id,
+      changeId: s.changeId,
       title: s.title,
       status: "pending" as const,
       exitCode: null,
@@ -51,7 +54,9 @@ export function useTaskRunner() {
           directory,
         });
 
-        const result = await pollSession(session.id, 180_000);
+        const result = await pollSession(session.id, 180_000, (output) => {
+          t.output = output;
+        });
         t.exitCode = result.exitCode;
         t.output = result.output;
         t.status = result.exitCode === 0 ? "done" : "failed";
@@ -91,7 +96,9 @@ export function useTaskRunner() {
         directory,
       });
 
-      const result = await pollSession(session.id, 180_000);
+      const result = await pollSession(session.id, 180_000, (output) => {
+        t.output = output;
+      });
       t.exitCode = result.exitCode;
       t.output = result.output;
       t.status = result.exitCode === 0 ? "done" : "failed";
@@ -107,31 +114,43 @@ export function useTaskRunner() {
   async function pollSession(
     sessionId: string,
     timeoutMs: number,
+    onOutput?: (output: string) => void,
   ): Promise<{ exitCode: number | null; output: string }> {
     const deadline = Date.now() + timeoutMs;
+    let lastOutput = "";
     while (Date.now() < deadline) {
       const s = (await cliBridge.getSession(sessionId)) as {
         status?: string;
       } | null;
       if (!s) return { exitCode: null, output: "session lost" };
+      const output = await readAssistantOutput(sessionId);
+      if (output && output !== lastOutput) {
+        lastOutput = output;
+        onOutput?.(output);
+      }
       if (s.status === "idle" || s.status === "error") {
-        const msgs = (await cliBridge.listSessionMessages(sessionId)) as Array<{
-          role: string;
-          content?: string;
-        }> | null;
-        const output =
-          msgs
-            ?.filter((m) => m.role === "assistant")
-            .map((m) => m.content ?? "")
-            .join("\n") ?? "";
         return {
           exitCode: s.status === "error" ? 1 : 0,
-          output,
+          output: output || lastOutput,
         };
       }
       await new Promise((r) => setTimeout(r, 2000));
     }
-    return { exitCode: null, output: "timeout" };
+    return { exitCode: null, output: lastOutput || "timeout" };
+  }
+
+  async function readAssistantOutput(sessionId: string): Promise<string> {
+    const msgs = (await cliBridge.listSessionMessages(sessionId)) as Array<{
+      role: string;
+      content?: string;
+    }> | null;
+    return (
+      msgs
+        ?.filter((m) => m.role === "assistant")
+        .map((m) => m.content ?? "")
+        .filter(Boolean)
+        .join("\n") ?? ""
+    );
   }
 
   const specsMap = ref<Map<string, TaskSpec>>(new Map());

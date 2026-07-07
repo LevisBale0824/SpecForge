@@ -279,6 +279,14 @@ export default {
       tddGreen: "GREEN · Pass",
       sddTitle: "SDD · Sub-agent tasks",
       sddRunAll: "▶ Run all pending",
+      sddSummary: "{done}/{total} done · {running} running · {failed} failed",
+      sddCompleted: "tasks.md done",
+      sddStatus: {
+        pending: "pending",
+        running: "running",
+        done: "done",
+        failed: "failed",
+      },
       sddEmptyWithChange: 'No pending tasks. Click "Run all pending" above or check tasks.md',
       sddEmptyNoChange: "No pending tasks. Create a change first",
       reviewVerdict: "Review Verdict",
@@ -305,11 +313,18 @@ export default {
         archived: "Archived",
         archiveFailed: "Archive failed",
       },
-      archiveConfirmTitle: 'Archive change "{id}"?',
-      archiveConfirmMessage:
-        "This will update main specs and move the change into the archive directory. This action cannot be automatically undone.",
-      archiveConfirm: "Archive",
-      archiveCancel: "Cancel",
+      archiveSteps: {
+        check: "Check evidence",
+        command: "Run archive command",
+        refresh: "Refresh state",
+        cleanup: "Clean sessions",
+      },
+      archiveStatus: {
+        pending: "pending",
+        running: "running",
+        done: "done",
+        failed: "failed",
+      },
       warn: {
         contractStale: "Contract stale ({reason}): {detail}",
         requirementsUncovered: "Requirements uncovered: {items} (no matching completed task)",

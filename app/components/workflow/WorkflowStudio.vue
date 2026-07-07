@@ -4,7 +4,7 @@ import { useRoute, useRouter } from "vue-router";
 import { useI18n } from "vue-i18n";
 import { useWorkflow } from "../../plugins/workflowPlugin";
 import { useOpenSpec } from "../../composables/useOpenSpec";
-import type { GateProgressEvent } from "../../composables/useOpenSpec";
+import type { ArchiveProgressEvent, GateProgressEvent } from "../../composables/useOpenSpec";
 import { useBackend } from "../../composables/useBackend";
 import { useMessages, stripSystemReminder } from "../../composables/useMessages";
 import { getStagePrompt } from "../../composables/useStageRunner";
@@ -14,7 +14,6 @@ import { useTaskRunner } from "../../composables/useTaskRunner";
 import { useAutoScroller, type ScrollMode } from "../../composables/useAutoScroller";
 import { useDisplayNames } from "../../composables/useDisplayNames";
 import MessageContent from "../MessageContent.vue";
-import ConfirmDialog from "../ConfirmDialog.vue";
 import { TIER_LABELS, stagesForTier, type StepName, type WorkflowTier } from "../../types/workflow";
 import type {
   ExecutionContract,
@@ -54,9 +53,18 @@ function stageHint(s: StepName): string {
 const need = ref("");
 const gating = ref(false);
 const archiving = ref(false);
-const archiveConfirmDialog = ref<InstanceType<typeof ConfirmDialog> | null>(null);
 const draftMsg = ref("");
 const archiveMsg = ref<{ ok: boolean; text: string } | null>(null);
+type ArchiveStepKey = "check" | "command" | "refresh" | "cleanup";
+type ArchiveStepStatus = "pending" | "running" | "done" | "failed";
+type ArchiveStepRow = {
+  step: ArchiveStepKey;
+  status: ArchiveStepStatus;
+  command?: string;
+  reason?: string;
+};
+const ARCHIVE_PLAN: ArchiveStepKey[] = ["check", "command", "refresh", "cleanup"];
+const archiveProgress = ref<Partial<Record<ArchiveStepKey, ArchiveStepRow>>>({});
 const CHANGE_TIERS_KEY = "specforge.workflow.changeTiers";
 const stageSessionsStore = useStageSessions();
 const changeTiers = ref<Record<string, WorkflowTier>>(
@@ -133,6 +141,20 @@ type GateRow = {
   outputSnippet?: string;
 };
 
+type ApplyTaskRunStatus = "pending" | "running" | "done" | "failed";
+type ApplyTaskRow = {
+  taskId: string;
+  title: string;
+  groupTitle: string;
+  status: ApplyTaskRunStatus;
+  verification?: string;
+  requirement?: string;
+  exitCode: number | null;
+  output: string;
+  sessionId?: string;
+  source: "tasks" | "runner";
+};
+
 const GATE_PLAN: { layer: GateLayer; command: (id: string) => string }[] = [
   { layer: "spec", command: (id) => `openspec validate${id ? ` ${id}` : ""} --strict` },
   { layer: "lint", command: () => "npm run lint" },
@@ -178,6 +200,46 @@ const displayedVerdict = computed<GateVerdict | "PENDING" | "RUNNING">(() => {
 
 watch(changeId, () => {
   liveGates.value = {};
+  if (!taskRunner.busy.value) {
+    taskRunner.reset();
+  }
+});
+
+const applyTaskRows = computed<ApplyTaskRow[]>(() => {
+  const change = selectedChange.value;
+  if (!change) return [];
+  const runtime = new Map(
+    taskRunner.tasks.value
+      .filter((task) => task.changeId === change.id)
+      .map((task) => [task.taskId, task]),
+  );
+  return change.tasks.map((task) => {
+    const live = runtime.get(task.id);
+    const completed = task.status === "completed";
+    return {
+      taskId: task.id,
+      title: task.title,
+      groupTitle: task.groupTitle,
+      status: live?.status ?? (completed ? "done" : "pending"),
+      verification: task.verification,
+      requirement: task.requirement,
+      exitCode: live?.exitCode ?? null,
+      output: live?.output ?? task.result ?? "",
+      sessionId: live?.sessionId,
+      source: live ? "runner" : "tasks",
+    };
+  });
+});
+
+const applyTaskSummary = computed(() => {
+  const rows = applyTaskRows.value;
+  return {
+    total: rows.length,
+    done: rows.filter((task) => task.status === "done").length,
+    running: rows.filter((task) => task.status === "running").length,
+    failed: rows.filter((task) => task.status === "failed").length,
+    pending: rows.filter((task) => task.status === "pending").length,
+  };
 });
 
 type StageGateTone = "ready" | "review" | "blocked" | "info";
@@ -1049,11 +1111,13 @@ async function runSddTasks() {
   const pending = change.tasks.filter((t) => t.status === "pending");
   const specs = pending.map((t) => ({
     id: t.id,
+    changeId: change.id,
     title: t.title,
     prompt: `你处于 Apply 阶段(TDD 模式)。\n任务: ${t.id} - ${t.title}\n${t.verification ? `验证命令: ${t.verification}` : ""}\n背景: ${change.proposal?.why ?? ""}\n\n流程:写测试→红灯→实现→绿灯→验证。只改这个 task scope,不改其他。完成后更新 tasks.md(${t.id} → [x])。`,
     verification: t.verification,
   }));
   const projectRoot = openspec.state.rootPath;
+  taskRunner.reset();
   taskRunner.setSpecs(specs);
   await taskRunner.loadPendingTasks(specs);
   await taskRunner.runAll(projectRoot || ".");
@@ -1065,17 +1129,26 @@ async function runSddTasks() {
 async function doArchive() {
   if (!changeId.value) return;
   const cid = changeId.value;
-  const confirmed = await archiveConfirmDialog.value?.confirm({
-    title: t("workflow.studio.archiveConfirmTitle", { id: cid }),
-    message: t("workflow.studio.archiveConfirmMessage"),
-    confirmText: t("workflow.studio.archiveConfirm"),
-    cancelText: t("workflow.studio.archiveCancel"),
-    danger: true,
-  });
-  if (!confirmed) return;
+  archiveMsg.value = null;
+  archiveProgress.value = Object.fromEntries(
+    ARCHIVE_PLAN.map((step) => [step, { step, status: "pending" } satisfies ArchiveStepRow]),
+  ) as Partial<Record<ArchiveStepKey, ArchiveStepRow>>;
   archiving.value = true;
   try {
-    const r = await openspec.archiveChange(changeId.value);
+    const r = await openspec.archiveChange(cid, {
+      onArchiveUpdate(event: ArchiveProgressEvent) {
+        if (event.step === "done" || event.step === "failed") return;
+        archiveProgress.value = {
+          ...archiveProgress.value,
+          [event.step]: {
+            step: event.step,
+            status: event.status,
+            command: event.command,
+            reason: event.reason,
+          },
+        };
+      },
+    });
     archiveMsg.value = {
       ok: r.ok,
       text: r.ok
@@ -1083,9 +1156,30 @@ async function doArchive() {
         : r.reason || t("workflow.studio.msg.archiveFailed"),
     };
     if (r.ok) {
-      const archivedKey = changeId.value;
-      await cleanupWorkflowSessions(archivedKey);
+      archiveProgress.value = {
+        ...archiveProgress.value,
+        cleanup: { step: "cleanup", status: "running" },
+      };
+      await cleanupWorkflowSessions(cid);
+      archiveProgress.value = {
+        ...archiveProgress.value,
+        cleanup: { step: "cleanup", status: "done" },
+      };
       window.setTimeout(() => (archiveMsg.value = null), 2500);
+    } else {
+      const failedStep = ARCHIVE_PLAN.find(
+        (step) => archiveProgress.value[step]?.status === "running",
+      );
+      if (failedStep) {
+        archiveProgress.value = {
+          ...archiveProgress.value,
+          [failedStep]: {
+            ...(archiveProgress.value[failedStep] ?? { step: failedStep }),
+            status: "failed",
+            reason: r.reason,
+          },
+        };
+      }
     }
   } finally {
     archiving.value = false;
@@ -1132,6 +1226,35 @@ function gateStatusText(g: GateRow): string {
   if (g.status === "skip") return t("workflow.studio.gateSkip");
   if (g.status === "pass") return t("workflow.studio.gatePassed");
   return t("workflow.studio.gateFailed", { code: g.exitCode });
+}
+
+function archiveStepText(step: ArchiveStepKey): string {
+  return t(`workflow.studio.archiveSteps.${step}`);
+}
+
+function archiveStatusText(status: ArchiveStepStatus): string {
+  return t(`workflow.studio.archiveStatus.${status}`);
+}
+
+function applyTaskStatusIcon(status: ApplyTaskRunStatus): string {
+  if (status === "pending") return "○";
+  if (status === "running") return "";
+  if (status === "done") return "✓";
+  return "✗";
+}
+
+function applyTaskStatusText(status: ApplyTaskRunStatus): string {
+  return t(`workflow.studio.sddStatus.${status}`);
+}
+
+function applyTaskDetail(task: ApplyTaskRow): string {
+  const output = task.output
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .at(-1);
+  if (output && task.source === "runner") return output;
+  return task.verification || task.requirement || task.groupTitle;
 }
 </script>
 
@@ -1365,9 +1488,19 @@ function gateStatusText(g: GateRow): string {
             <div v-if="cur === 'apply'" class="sdd-panel">
               <div class="sdd-head">
                 <span class="sdd-title">{{ t("workflow.studio.sddTitle") }}</span>
+                <span class="sdd-summary">
+                  {{
+                    t("workflow.studio.sddSummary", {
+                      done: applyTaskSummary.done,
+                      total: applyTaskSummary.total,
+                      running: applyTaskSummary.running,
+                      failed: applyTaskSummary.failed,
+                    })
+                  }}
+                </span>
                 <button
                   class="sdd-run-btn"
-                  :disabled="taskRunner.busy.value || !changeId"
+                  :disabled="taskRunner.busy.value || !changeId || applyTaskSummary.pending === 0"
                   @click="runSddTasks"
                 >
                   {{
@@ -1377,35 +1510,38 @@ function gateStatusText(g: GateRow): string {
                   }}
                 </button>
               </div>
-              <div
-                v-if="!taskRunner.tasks.value.length && !taskRunner.busy.value"
-                class="sdd-empty"
-              >
+              <div v-if="!applyTaskRows.length && !taskRunner.busy.value" class="sdd-empty">
                 {{
                   changeId
                     ? t("workflow.studio.sddEmptyWithChange")
                     : t("workflow.studio.sddEmptyNoChange")
                 }}
               </div>
-              <div v-for="task in taskRunner.tasks.value" :key="task.taskId" class="sdd-row">
+              <div
+                v-for="task in applyTaskRows"
+                :key="task.taskId"
+                class="sdd-row"
+                :class="`sdd-row-${task.status}`"
+              >
                 <span class="sdd-status" :class="task.status">
-                  {{
-                    task.status === "pending"
-                      ? "○"
-                      : task.status === "running"
-                        ? "◐"
-                        : task.status === "done"
-                          ? "✓"
-                          : "✗"
-                  }}
+                  <span v-if="task.status === 'running'" class="gate-spinner" />
+                  <span v-else>{{ applyTaskStatusIcon(task.status) }}</span>
                 </span>
                 <span class="sdd-id">{{ task.taskId }}</span>
-                <span class="sdd-label">{{ task.title }}</span>
-                <span v-if="task.status === 'running'" class="sdd-spin">⋯</span>
-                <span v-else-if="task.status === 'done'" class="sdd-exit pass">exit 0</span>
-                <span v-else-if="task.status === 'failed'" class="sdd-exit fail"
-                  >exit {{ task.exitCode ?? "?" }}</span
-                >
+                <span class="sdd-label">
+                  <span>{{ task.title }}</span>
+                  <small v-if="applyTaskDetail(task)">{{ applyTaskDetail(task) }}</small>
+                </span>
+                <span class="sdd-exit" :class="task.status">
+                  <template v-if="task.status === 'done' && task.source === 'tasks'">
+                    {{ t("workflow.studio.sddCompleted") }}
+                  </template>
+                  <template v-else-if="task.status === 'done'">exit 0</template>
+                  <template v-else-if="task.status === 'failed'">
+                    exit {{ task.exitCode ?? "?" }}
+                  </template>
+                  <template v-else>{{ applyTaskStatusText(task.status) }}</template>
+                </span>
               </div>
             </div>
 
@@ -1572,6 +1708,32 @@ function gateStatusText(g: GateRow): string {
             <span v-if="archiveMsg" :class="archiveMsg.ok ? 'composer-hint ok' : 'gate-note'">{{
               archiveMsg.text
             }}</span>
+            <div
+              v-if="archiving || Object.keys(archiveProgress).length"
+              class="archive-progress"
+              aria-live="polite"
+            >
+              <div
+                v-for="step in ARCHIVE_PLAN"
+                :key="step"
+                class="archive-step"
+                :class="`archive-${archiveProgress[step]?.status ?? 'pending'}`"
+              >
+                <span class="archive-dot">
+                  <span v-if="archiveProgress[step]?.status === 'running'" class="gate-spinner" />
+                  <span v-else-if="archiveProgress[step]?.status === 'done'">✓</span>
+                  <span v-else-if="archiveProgress[step]?.status === 'failed'">✗</span>
+                  <span v-else>○</span>
+                </span>
+                <span class="archive-label">{{ archiveStepText(step) }}</span>
+                <code v-if="archiveProgress[step]?.command" class="archive-command">
+                  {{ archiveProgress[step]?.command }}
+                </code>
+                <span class="archive-state">{{
+                  archiveStatusText(archiveProgress[step]?.status ?? "pending")
+                }}</span>
+              </div>
+            </div>
           </template>
           <span v-if="draftMsg" class="composer-hint warn">{{ draftMsg }}</span>
         </div>
@@ -1613,7 +1775,6 @@ function gateStatusText(g: GateRow): string {
       </div>
     </div>
   </div>
-  <ConfirmDialog ref="archiveConfirmDialog" />
 </template>
 
 <style scoped>
@@ -2265,6 +2426,11 @@ function gateStatusText(g: GateRow): string {
   letter-spacing: 0.05em;
   color: var(--color-surface-400, #94a3b8);
 }
+.sdd-summary {
+  color: var(--color-surface-500, #64748b);
+  font-size: 11px;
+  font-weight: 700;
+}
 .sdd-run-btn {
   margin-left: auto;
   background: var(--color-accent-violet, #a78bfa);
@@ -2289,17 +2455,24 @@ function gateStatusText(g: GateRow): string {
 }
 .sdd-row {
   display: grid;
-  grid-template-columns: 20px 40px 1fr auto;
-  gap: 8px;
+  grid-template-columns: 20px 48px minmax(0, 1fr) auto;
+  gap: 10px;
   align-items: center;
-  padding: 7px 14px;
+  padding: 8px 14px;
   font-size: 12px;
   border-bottom: 1px solid color-mix(in srgb, var(--color-surface-800, #1e293b) 50%, transparent);
+  transition: background 160ms ease;
 }
 .sdd-row:last-child {
   border-bottom: none;
 }
+.sdd-row-running {
+  background: color-mix(in srgb, var(--color-accent-amber, #fbbf24) 8%, transparent);
+}
 .sdd-status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   font-size: 14px;
   font-family: var(--font-mono, monospace);
 }
@@ -2320,25 +2493,36 @@ function gateStatusText(g: GateRow): string {
   color: var(--color-surface-500, #64748b);
 }
 .sdd-label {
+  display: grid;
+  gap: 2px;
   color: var(--color-surface-200, #e2e8f0);
+  overflow: hidden;
+}
+.sdd-label span,
+.sdd-label small {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.sdd-spin {
-  font-size: 16px;
-  color: var(--color-accent-amber, #fbbf24);
+.sdd-label small {
+  color: var(--color-surface-500, #64748b);
+  font-family: var(--font-mono, monospace);
+  font-size: 10px;
 }
 .sdd-exit {
   font-family: var(--font-mono, monospace);
   font-weight: 700;
   font-size: 11px;
+  color: var(--color-surface-500, #64748b);
 }
-.sdd-exit.pass {
+.sdd-exit.done {
   color: var(--color-accent-emerald, #34d399);
 }
-.sdd-exit.fail {
+.sdd-exit.failed {
   color: var(--color-accent-rose, #f43f5e);
+}
+.sdd-exit.running {
+  color: var(--color-accent-amber, #fbbf24);
 }
 
 .tdd-bar {
@@ -2540,6 +2724,71 @@ function gateStatusText(g: GateRow): string {
   to {
     transform: rotate(360deg);
   }
+}
+
+.archive-progress {
+  width: min(620px, 100%);
+  display: grid;
+  gap: 0;
+  overflow: hidden;
+  border: 1px solid var(--color-surface-800, #1e293b);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--color-surface-950, #020617) 48%, transparent);
+}
+.archive-step {
+  display: grid;
+  grid-template-columns: 22px 130px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 11px;
+  border-bottom: 1px solid color-mix(in srgb, var(--color-surface-800, #1e293b) 58%, transparent);
+  font-size: 12px;
+}
+.archive-step:last-child {
+  border-bottom: none;
+}
+.archive-running {
+  background: color-mix(in srgb, var(--color-accent-cyan, #22d3ee) 8%, transparent);
+}
+.archive-dot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-surface-500, #64748b);
+  font-weight: 800;
+}
+.archive-done .archive-dot {
+  color: var(--color-accent-emerald, #34d399);
+}
+.archive-failed .archive-dot {
+  color: var(--color-accent-rose, #f43f5e);
+}
+.archive-label {
+  color: var(--color-surface-200, #e2e8f0);
+  font-weight: 700;
+}
+.archive-command {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--color-surface-400, #94a3b8);
+  font-family: var(--font-mono, monospace);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.archive-state {
+  color: var(--color-surface-500, #64748b);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+.archive-running .archive-state {
+  color: var(--color-accent-cyan, #22d3ee);
+}
+.archive-done .archive-state {
+  color: var(--color-accent-emerald, #34d399);
+}
+.archive-failed .archive-state {
+  color: var(--color-accent-rose, #f43f5e);
 }
 
 .stage-gate {
