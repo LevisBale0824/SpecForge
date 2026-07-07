@@ -38,6 +38,7 @@ import {
 } from "../backends/registry";
 import { i18n } from "../i18n";
 import type { BackendKind } from "../backends/types";
+import { performHardDelete } from "../utils/sessionDelete";
 import type {
   FileDiff,
   MessageUpdatedPacket,
@@ -1113,22 +1114,39 @@ export function useBackend() {
 
   async function deleteSession(sessionId: string): Promise<void> {
     if (!sessionId) return;
-    try {
-      const adapter = getActiveBackendAdapter();
-      if (adapter.deleteSession) {
-        await adapter.deleteSession(sessionId, activeDirectory.value || undefined);
-      }
-    } catch (error) {
-      console.error("[useBackend] deleteSession failed:", error);
+    const adapter = getActiveBackendAdapter();
+    const directory = activeDirectory.value || undefined;
+    if (!adapter.deleteSession) {
+      throw new Error(
+        `[useBackend] active backend "${adapter.kind}" does not support deleteSession`,
+      );
     }
-    sessionsStore.remove(sessionId);
-    sessionStatus.remove(sessionId);
-    sessionModelStore.clearModelForSession(sessionId);
-    sessionAgentStore.clearAgentForSession(sessionId);
-    // If the deleted session was active, clear the transcript so the next prompt
-    // lazily creates a fresh session.
-    if (selectedSessionId.value === sessionId) {
-      msgStore.saveSessionState(sessionId);
+
+    // Throws on any failure; in-memory state cleared ONLY after success —
+    // the load-bearing invariant that prevents the "resurrection" bug.
+    const { deletedIds } = await performHardDelete(
+      {
+        deleteSession: (id, dir) => adapter.deleteSession!(id, dir),
+        getSessionChildren: adapter.getSessionChildren
+          ? (id, dir) => adapter.getSessionChildren!(id, dir)
+          : undefined,
+        listSessions: adapter.listSessions ? (opts) => adapter.listSessions!(opts) : undefined,
+      },
+      sessionId,
+      directory,
+    );
+
+    for (const id of deletedIds) {
+      sessionsStore.remove(id);
+      sessionStatus.remove(id);
+      sessionModelStore.clearModelForSession(id);
+      sessionAgentStore.clearAgentForSession(id);
+    }
+    // If the deleted session (or a descendant) was active, clear the transcript
+    // so the next prompt lazily creates a fresh session.
+    const activeId = selectedSessionId.value;
+    if (activeId && deletedIds.includes(activeId)) {
+      msgStore.saveSessionState(activeId);
       msgStore.reset();
       selectedSessionId.value = "";
     }

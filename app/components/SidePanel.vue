@@ -55,7 +55,7 @@ const emit = defineEmits<{
   "open-diff": [diff: MessageDiffEntry];
   "open-folder": [];
   "open-chat": [];
-  "open-workflow": [changeId?: string];
+  "open-workflow": [changeId?: string, intro?: boolean];
   "open-spec-detail": [target: SpecTarget];
   "open-tier-picker": [];
   "refresh-files": [];
@@ -103,8 +103,8 @@ const chatActiveSessionId = computed(() => {
   return id && chatSessions.value.some((s) => s.id === id) ? id : "";
 });
 
-function openWorkflow(changeId?: string) {
-  emit("open-workflow", changeId);
+function openWorkflow(changeId?: string, intro = false) {
+  emit("open-workflow", changeId, intro);
 }
 
 const route = useRoute();
@@ -211,7 +211,7 @@ function handleOpenDiff(diff: MessageDiffEntry) {
             title="Spec 探索"
             @click="
               sideTab = 'spec';
-              openWorkflow();
+              openWorkflow(undefined, true);
             "
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">

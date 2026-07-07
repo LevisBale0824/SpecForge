@@ -31,9 +31,8 @@ Run Gates 之前/之后,都要核对 `openspec/changes/{{changeId}}/contract.md`
 
 - **契约过期**(proposal/specs 改了但 contract.md 没重建) → verdict 必须为 NOT_READY,
   指引用户回 Propose 重新生成契约
-- **Requirements 未覆盖**(contract.requirements 中的 SHALL/MUST 在 tasks.md 里
-  找不到对应 completed task) → verdict 必须为 NOT_READY,列出未覆盖的 requirement 名,
-  指引用户回 Apply 补 task 或显式声明放弃该验收点
+- **Requirements 未覆盖**(contract.requirements 中的 SHALL/MUST 在 tasks.md 中无对应 completed task) → verdict 须为 NOT_READY,列出未覆盖的 requirement 名,并指引用户回 Apply 补充任务或显式声明放弃该验收点。
+  此处“对应”定义为:存在一个状态为 completed 的任务,其 `- Requirement: <name>` 子字段与该 requirement 的 `name` 逐字相等。未声明该绑定的 requirement 一律视为未覆盖,无论任务是否已勾选。
 
 哪怕 lint/test/build 全绿,只要上面两条任一命中,verdict 就是 NOT_READY。
 真实的退出码是必要不充分条件 —— 契约一致性是另一半。

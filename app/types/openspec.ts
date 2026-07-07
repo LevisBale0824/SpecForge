@@ -160,6 +160,8 @@ export interface OpenSpecChange {
   taskPath: string;
   /** 相对 openspec 根的 proposal.md 路径 */
   proposalPath: string;
+  /** tasks.md 原文,用于在 UI 中渲染预览/弹窗 */
+  tasksRaw?: string;
 }
 
 // ── Validation ────────────────────────────────────────────────────────

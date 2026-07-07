@@ -14,9 +14,11 @@ import OpenSpecPanel from "./components/openspec/OpenSpecPanel.vue";
 import SpecDetailView from "./components/openspec/SpecDetailView.vue";
 import TierPickerDialog from "./components/workflow/TierPickerDialog.vue";
 import ConfirmDialog from "./components/ConfirmDialog.vue";
+import MarkdownArtifactModal from "./components/MarkdownArtifactModal.vue";
 import UpdateToast from "./components/UpdateToast.vue";
 import UpdateDialog from "./components/UpdateDialog.vue";
 import { useRoute, useRouter } from "vue-router";
+import { useI18n } from "vue-i18n";
 import { useFloatingWindows } from "./composables/useFloatingWindows";
 import { useProject } from "./composables/useProject";
 import { useBackend } from "./composables/useBackend";
@@ -32,6 +34,7 @@ import type { WorkflowTier } from "./types/workflow";
 
 const route = useRoute();
 const router = useRouter();
+const { t } = useI18n();
 
 // Sidebar drag-resize: clamp to [200, 600], persist to localStorage. The
 // `resize-active` body class (added by the composable during drag) disables
@@ -167,8 +170,29 @@ function onRefreshFiles(): void {
   backend.reloadFileIndex();
 }
 
-function onDeleteSession(sessionId: string) {
-  backend.deleteSession(sessionId);
+async function onDeleteSession(sessionId: string) {
+  if (!sessionId) return;
+  const confirmed = await confirmDialog.value?.confirm({
+    title: t("sidebar.deleteSessionConfirmTitle"),
+    message: t("sidebar.deleteSessionConfirmMessage"),
+    confirmText: t("sidebar.deleteSessionConfirm"),
+    cancelText: t("sidebar.deleteSessionCancel"),
+    danger: true,
+  });
+  if (!confirmed) return;
+  try {
+    await backend.deleteSession(sessionId);
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    console.error(`[App] deleteSession(${sessionId}) failed:`, error);
+    await confirmDialog.value?.confirm({
+      title: t("sidebar.deleteSessionFailedTitle"),
+      message: reason,
+      confirmText: t("sidebar.deleteSessionFailedConfirm"),
+      cancelText: t("sidebar.deleteSessionCancel"),
+      danger: true,
+    });
+  }
 }
 
 function onAbortSession(sessionId: string) {
@@ -246,13 +270,18 @@ function onOpenChat() {
   router.push({ name: "chat" });
 }
 
-function onOpenWorkflow(changeId?: string) {
+function onOpenWorkflow(changeId?: string, intro = false) {
   lastChatSessionId.value = backend.selectedSessionId.value;
   activeDiff.value = null;
   activeFilePath.value = null;
   showOpenSpecDialog.value = false;
   specDetailTarget.value = null;
-  router.push({ name: "workflow", query: changeId ? { change: changeId } : {} });
+  // 点击 spec 探索轨道按钮(无 changeId)时强制 intro=1,防止 keep-alive 缓存的
+  // 草稿工作流状态在主区自动续上 —— 用户想真正续草稿需点击"探索中"草稿项。
+  const query: Record<string, string> = {};
+  if (changeId) query.change = changeId;
+  else if (intro) query.intro = "1";
+  router.push({ name: "workflow", query });
 }
 
 function onOpenSpecDetail(target: SpecTarget) {
@@ -531,6 +560,7 @@ function submitManualPath() {
     <!-- 新建探索:档位选择对话框 -->
     <TierPickerDialog :open="showTierPicker" @pick="onPickTier" @close="showTierPicker = false" />
     <ConfirmDialog ref="confirmDialog" />
+    <MarkdownArtifactModal />
     <!-- OpenSpec Dialog -->
     <Teleport to="body">
       <div v-if="showOpenSpecDialog" class="openspec-dialog-layer">

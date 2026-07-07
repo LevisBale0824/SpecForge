@@ -10,6 +10,10 @@ import { getStagePrompt } from "../../composables/useStageRunner";
 import { useStageSessions } from "../../composables/useStageSessions";
 import { useContract, checkRequirementsCoverage } from "../../composables/useContract";
 import { useTaskRunner } from "../../composables/useTaskRunner";
+import { useAutoScroller, type ScrollMode } from "../../composables/useAutoScroller";
+import { useDisplayNames } from "../../composables/useDisplayNames";
+import MessageContent from "../MessageContent.vue";
+import ConfirmDialog from "../ConfirmDialog.vue";
 import { TIER_LABELS, stagesForTier, type StepName, type WorkflowTier } from "../../types/workflow";
 import type { ExecutionContract, ContractStaleResult } from "../../types/openspec";
 import {
@@ -43,6 +47,7 @@ function stageHint(s: StepName): string {
 const need = ref("");
 const gating = ref(false);
 const archiving = ref(false);
+const archiveConfirmDialog = ref<InstanceType<typeof ConfirmDialog> | null>(null);
 const draftMsg = ref("");
 const archiveMsg = ref<{ ok: boolean; text: string } | null>(null);
 const CHANGE_TIERS_KEY = "specforge.workflow.changeTiers";
@@ -112,7 +117,7 @@ const evidence = computed(() =>
 );
 
 type StageGateTone = "ready" | "review" | "blocked" | "info";
-type StageGateActionKind = "next" | "generate-tasks" | "start-work" | "run-tasks";
+type StageGateActionKind = "next" | "generate-tasks" | "start-work" | "run-tasks" | "draft-propose";
 type StageGate = {
   tone: StageGateTone;
   kicker: string;
@@ -160,6 +165,8 @@ const stageGate = computed<StageGate | null>(() => {
         kicker: t(`${G}.proposeBlocked.kicker`),
         title: t(`${G}.proposeBlocked.title`),
         body: t(`${G}.proposeBlocked.body`),
+        action: t(`${G}.proposeBlocked.action`),
+        actionKind: "draft-propose",
         canContinue: false,
       };
     }
@@ -540,17 +547,155 @@ function extractText(id: string): string {
     .filter(Boolean)
     .join("\n");
 }
+
+// Mirror ChatView's visibility rules so the workflow stream shows the same
+// content (text + reasoning + tool windows) instead of just the trimmed text.
+function hasRenderableParts(id: string): boolean {
+  return msgStore.getParts(id).some((part) => {
+    switch (part.type) {
+      case "text":
+        return !part.synthetic && stripSystemReminder(part.text).trim().length > 0;
+      case "tool":
+        return true;
+      case "reasoning":
+        return part.text.trim().length > 0;
+      default:
+        return false;
+    }
+  });
+}
+function shouldShowMessage(id: string, role: string): boolean {
+  if (role === "user") return msgStore.isDisplayable(id);
+  return msgStore.getStatus(id) === "streaming" || hasRenderableParts(id);
+}
+
+const emit = defineEmits<{ "navigate-session": [sessionId: string] }>();
+
 const messages = computed(() =>
   msgStore
     .list()
-    .map((m) => ({ id: m.id, role: m.role as "user" | "assistant", text: extractText(m.id) }))
-    .filter((m) => m.text),
+    .filter((m) => shouldShowMessage(m.id, m.role))
+    .map((m) => ({
+      id: m.id,
+      role: m.role as "user" | "assistant",
+      created: m.time?.created,
+    })),
 );
 
-const tddRed = computed(() => messages.value.some((m) => /fail|✗|exit [^0]/.test(m.text)));
+// tddRed/tddGreen still key off text content (tool/exit-code mentions) so
+// they keep working now that messages no longer carry the text inline.
+const messageTexts = computed(() => messages.value.map((m) => extractText(m.id)));
+const tddRed = computed(() => messageTexts.value.some((t) => /fail|✗|exit [^0]/.test(t)));
 const tddGreen = computed(() =>
-  messages.value.some((m) => /pass.*[✓]|[✓].*pass|exit 0/.test(m.text)),
+  messageTexts.value.some((t) => /pass.*[✓]|[✓].*pass|exit 0/.test(t)),
 );
+
+// ── 头像与显示名(与 ChatView 同源) ──────────────────────────────────────────
+const { agentName, userName } = useDisplayNames();
+const avatarBaseUrl = import.meta.env.BASE_URL;
+const agentAvatarSrc = `${avatarBaseUrl}avatars/agent.png`;
+const userAvatarSrc = `${avatarBaseUrl}avatars/user.png`;
+
+function formatMessageTime(timestamp?: number): string {
+  if (!timestamp) return "";
+  const ms = timestamp > 1e12 ? timestamp : timestamp * 1000;
+  const date = new Date(ms);
+  if (Number.isNaN(date.getTime())) return "";
+  const now = new Date();
+  const sameDay = date.toDateString() === now.toDateString();
+  if (sameDay) {
+    return date.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+  }
+  return date.toLocaleString(undefined, {
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+// ── 自动滚动到底 / 跳转控件 ─────────────────────────────────────────────────
+const streamEl = ref<HTMLElement | undefined>(undefined);
+const scrollMode = ref<ScrollMode>("follow");
+const historyScrollLocked = ref(true);
+const { notifyContentChange, showResumeButton, resumeFollow, pauseFollow } = useAutoScroller(
+  streamEl,
+  scrollMode,
+  { smoothOnInitialFollow: false, scrollOnSetup: false },
+);
+
+const contentSignature = computed(() =>
+  messages.value
+    .map((m) => {
+      const partSig = msgStore
+        .getParts(m.id)
+        .map((p) => {
+          if (p.type === "text") return `${p.id}:text:${p.text.length}`;
+          if (p.type === "reasoning") return `${p.id}:reasoning:${p.text.length}`;
+          if (p.type === "tool") {
+            const s = p.state;
+            const outLen = s.status === "completed" ? s.output.length : 0;
+            const errLen = s.status === "error" ? s.error.length : 0;
+            return `${p.id}:tool:${p.tool}:${s.status}:${outLen}:${errLen}`;
+          }
+          return `${p.id}:${p.type}`;
+        })
+        .join(",");
+      return `${m.id}:${m.role}:${msgStore.getStatus(m.id)}:${partSig}`;
+    })
+    .join("|"),
+);
+watch(
+  contentSignature,
+  () => {
+    if (historyScrollLocked.value) return;
+    notifyContentChange(false);
+  },
+  { flush: "post" },
+);
+watch(
+  () => messages.value[0]?.id,
+  () => {
+    historyScrollLocked.value = false;
+    resumeFollow(false);
+  },
+  { flush: "post" },
+);
+function jumpToLatest() {
+  historyScrollLocked.value = false;
+  resumeFollow(false);
+}
+function jumpToTop() {
+  historyScrollLocked.value = true;
+  pauseFollow();
+  const el = streamEl.value;
+  if (el) el.scrollTop = 0;
+}
+
+// 复制按钮
+const copiedId = ref<string | null>(null);
+let copyTimer: ReturnType<typeof setTimeout> | null = null;
+async function copyMessage(msgId: string) {
+  const text = extractText(msgId);
+  if (!text) return;
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch {
+    return;
+  }
+  copiedId.value = msgId;
+  if (copyTimer) clearTimeout(copyTimer);
+  copyTimer = setTimeout(() => {
+    copiedId.value = null;
+  }, 1500);
+}
+function canCopy(msgId: string): boolean {
+  return extractText(msgId).length > 0;
+}
+
+function onNavigateSession(sessionId: string) {
+  emit("navigate-session", sessionId);
+}
 
 function stageState(i: number): "done" | "current" | "locked" {
   if (i === progressIdx.value) return "current";
@@ -606,6 +751,7 @@ function nextStage() {
 }
 
 function stageGateActionDisabled(kind?: StageGateActionKind) {
+  if (kind === "draft-propose") return !changeId.value;
   if (kind === "generate-tasks") return !changeId.value;
   if (kind === "start-work") return !changeId.value;
   if (kind === "run-tasks") return !changeId.value;
@@ -665,19 +811,14 @@ async function requestRunPendingTasksInApply() {
 
   await enterStage("apply");
 
-  const taskLines = pending
-    .map(
-      (task) =>
-        `- ${task.id}: ${task.title}${task.verification ? `\n  Verification: ${task.verification}` : ""}`,
-    )
-    .join("\n");
+  const tasksRel = `openspec/changes/${changeId.value}/tasks.md`;
   const prompt = [
     `你处于 Apply 阶段。请按顺序执行 OpenSpec change "${changeId.value}" 的待办任务。`,
     "",
-    "待办任务:",
-    taskLines,
+    `待办任务清单见 ${tasksRel}（pending 项共 ${pending.length} 条）。`,
     "",
     "执行要求:",
+    `- 先读取 ${tasksRel} 拿到完整的待办任务列表与验收方式，再开始实现。`,
     "- 先阅读相关代码和 OpenSpec 产物，不要凭空实现。",
     "- 一次聚焦一个 pending task，保持改动在当前 change scope 内。",
     "- 遵循 TDD: 写/调整测试 -> 看到失败 -> 实现 -> 运行验证。",
@@ -696,6 +837,10 @@ async function requestRunPendingTasksInApply() {
 }
 
 function handleStageGateAction(kind?: StageGateActionKind) {
+  if (kind === "draft-propose") {
+    void draft("propose");
+    return;
+  }
   if (kind === "generate-tasks") {
     void requestTasksMd();
     return;
@@ -742,11 +887,11 @@ function refreshVerifyWarnings() {
 type DraftStage = "explore" | "propose" | "apply" | "review" | "archive";
 async function draft(stage: DraftStage) {
   if (archiving.value) return;
-  if (!need.value.trim()) {
+  const isFirst = !injected.value[stage];
+  if (!isFirst && !need.value.trim()) {
     draftMsg.value = t("workflow.studio.msg.needInput");
     return;
   }
-  const isFirst = !injected.value[stage];
   const change = selectedChange.value;
   const text = isFirst
     ? getStagePrompt(stage, {
@@ -814,6 +959,15 @@ async function runSddTasks() {
 }
 async function doArchive() {
   if (!changeId.value) return;
+  const cid = changeId.value;
+  const confirmed = await archiveConfirmDialog.value?.confirm({
+    title: t("workflow.studio.archiveConfirmTitle", { id: cid }),
+    message: t("workflow.studio.archiveConfirmMessage"),
+    confirmText: t("workflow.studio.archiveConfirm"),
+    cancelText: t("workflow.studio.archiveCancel"),
+    danger: true,
+  });
+  if (!confirmed) return;
   archiving.value = true;
   try {
     const r = await openspec.archiveChange(changeId.value);
@@ -951,199 +1105,290 @@ function verdictColor(v: string): string {
           <span class="stage-pill">{{ stageLabel(cur) }}</span>
         </div>
 
-        <!-- 对话流(真实当前会话消息) -->
-        <div class="stream">
-          <div v-if="messages.length === 0" class="stream-empty">{{ stageHint(cur) }}</div>
-          <div v-for="m in messages" :key="m.id" class="msg" :class="m.role">
-            <div class="avatar">
-              {{
-                m.role === "user" ? t("workflow.studio.avatarYou") : t("workflow.studio.avatarSF")
-              }}
-            </div>
-            <div class="mb">
-              <div class="name">
-                {{
-                  m.role === "user" ? t("workflow.studio.nameYou") : t("workflow.studio.nameAgent")
-                }}
-              </div>
-              <div class="bubble">{{ m.text }}</div>
-            </div>
-          </div>
+        <!-- 对话流(真实当前会话消息,复用 ChatView 同款渲染) -->
+        <div class="conv-body">
+          <div ref="streamEl" class="stream">
+            <div v-if="messages.length === 0" class="stream-empty">{{ stageHint(cur) }}</div>
+            <template v-else>
+              <div v-for="m in messages" :key="m.id" class="msg" :class="m.role">
+                <template v-if="m.role === 'assistant'">
+                  <img :src="agentAvatarSrc" alt="Agent" class="avatar-img" />
+                  <div class="mb group">
+                    <div class="bubble agent">
+                      <div class="name agent-name">
+                        {{ agentName }}
+                        <span v-if="formatMessageTime(m.created)" class="msg-time">{{
+                          formatMessageTime(m.created)
+                        }}</span>
+                      </div>
+                      <MessageContent :message-id="m.id" @navigate-session="onNavigateSession" />
+                    </div>
+                    <button
+                      v-if="canCopy(m.id)"
+                      type="button"
+                      class="copy-btn"
+                      :title="
+                        copiedId === m.id ? t('workflow.studio.copied') : t('workflow.studio.copy')
+                      "
+                      @click="copyMessage(m.id)"
+                    >
+                      {{
+                        copiedId === m.id ? t("workflow.studio.copied") : t("workflow.studio.copy")
+                      }}
+                    </button>
+                  </div>
+                </template>
 
-          <!-- Execution Contract(apply 阶段生效) -->
-          <div v-if="cur === 'apply' && contract" class="contract-card">
-            <div class="cc-head">
-              {{
-                t("workflow.studio.contractHead", {
-                  changeId: contract.changeId,
-                  tier: contract.tier,
-                })
-              }}
-            </div>
-            <div v-if="contractStale?.stale" class="cc-section">
-              <div class="cc-item warn">
+                <template v-else>
+                  <div class="mb group user-mb">
+                    <div class="bubble user">
+                      <div class="name user-name">
+                        {{ userName }}
+                        <span v-if="formatMessageTime(m.created)" class="msg-time">{{
+                          formatMessageTime(m.created)
+                        }}</span>
+                      </div>
+                      <MessageContent :message-id="m.id" @navigate-session="onNavigateSession" />
+                    </div>
+                    <button
+                      v-if="canCopy(m.id)"
+                      type="button"
+                      class="copy-btn"
+                      :title="
+                        copiedId === m.id ? t('workflow.studio.copied') : t('workflow.studio.copy')
+                      "
+                      @click="copyMessage(m.id)"
+                    >
+                      {{
+                        copiedId === m.id ? t("workflow.studio.copied") : t("workflow.studio.copy")
+                      }}
+                    </button>
+                  </div>
+                  <img :src="userAvatarSrc" alt="User" class="avatar-img" />
+                </template>
+              </div>
+            </template>
+
+            <!-- Execution Contract(apply 阶段生效) -->
+            <div v-if="cur === 'apply' && contract" class="contract-card">
+              <div class="cc-head">
                 {{
-                  t("workflow.studio.contractStaleWarn", {
-                    reason: contractStale.reason,
-                    detail: contractStale.detail,
+                  t("workflow.studio.contractHead", {
+                    changeId: contract.changeId,
+                    tier: contract.tier,
                   })
                 }}
               </div>
-            </div>
-            <div v-if="contract.intent" class="cc-section">
-              <span class="cc-sl">{{ t("workflow.studio.intentLock") }}</span>
-              <div class="cc-item intent">{{ contract.intent }}</div>
-            </div>
-            <div v-if="contract.outOfScope?.length" class="cc-section">
-              <span class="cc-sl">{{ t("workflow.studio.outOfScope") }}</span>
-              <div v-for="(o, i) in contract.outOfScope" :key="i" class="cc-item fence">
-                ⊘ {{ o }}
+              <div v-if="contractStale?.stale" class="cc-section">
+                <div class="cc-item warn">
+                  {{
+                    t("workflow.studio.contractStaleWarn", {
+                      reason: contractStale.reason,
+                      detail: contractStale.detail,
+                    })
+                  }}
+                </div>
+              </div>
+              <div v-if="contract.intent" class="cc-section">
+                <span class="cc-sl">{{ t("workflow.studio.intentLock") }}</span>
+                <div class="cc-item intent">{{ contract.intent }}</div>
+              </div>
+              <div v-if="contract.outOfScope?.length" class="cc-section">
+                <span class="cc-sl">{{ t("workflow.studio.outOfScope") }}</span>
+                <div v-for="(o, i) in contract.outOfScope" :key="i" class="cc-item fence">
+                  ⊘ {{ o }}
+                </div>
+              </div>
+              <div class="cc-section">
+                <span class="cc-sl">{{ t("workflow.studio.scope") }}</span>
+                <div v-for="f in contract.scope.files" :key="f" class="cc-item">▸ {{ f }}</div>
+                <div v-if="contract.scope.api?.length" class="cc-item api">
+                  {{ t("workflow.studio.api") }} {{ contract.scope.api.join(", ") }}
+                </div>
+              </div>
+              <div v-if="contract.requirements?.length" class="cc-section">
+                <span class="cc-sl">{{
+                  t("workflow.studio.requirements", { count: contract.requirements.length })
+                }}</span>
+                <div
+                  v-for="r in contract.requirements"
+                  :key="`${r.source}::${r.name}`"
+                  class="cc-item mon"
+                >
+                  <span class="cc-level" :class="r.level.toLowerCase()">{{ r.level }}</span>
+                  {{ r.name }}
+                  <span class="cc-src">{{ r.source }}</span>
+                </div>
+              </div>
+              <div class="cc-section">
+                <span class="cc-sl">{{ t("workflow.studio.verify") }}</span>
+                <div v-for="v in contract.verify" :key="v.command" class="cc-item mon">
+                  <span class="cc-check">$</span> {{ v.command }}
+                  <span v-if="v.description" class="cc-desc">{{ v.description }}</span>
+                </div>
+              </div>
+              <div v-if="contract.risks.length" class="cc-section">
+                <span class="cc-sl">{{ t("workflow.studio.risks") }}</span>
+                <div v-for="(r, i) in contract.risks" :key="i" class="cc-item warn">⚠ {{ r }}</div>
               </div>
             </div>
-            <div class="cc-section">
-              <span class="cc-sl">{{ t("workflow.studio.scope") }}</span>
-              <div v-for="f in contract.scope.files" :key="f" class="cc-item">▸ {{ f }}</div>
-              <div v-if="contract.scope.api?.length" class="cc-item api">
-                {{ t("workflow.studio.api") }} {{ contract.scope.api.join(", ") }}
-              </div>
+
+            <!-- Apply TDD 可视化 -->
+            <div v-if="cur === 'apply'" class="tdd-bar">
+              <span class="tdd-item" :class="tddRed ? 'red' : ''">
+                <span class="tdd-light" :class="tddRed ? 'red' : ''"></span
+                >{{ t("workflow.studio.tddRed") }}
+              </span>
+              <span class="tdd-line" :class="tddGreen ? 'green' : tddRed ? 'progress' : ''"></span>
+              <span class="tdd-item" :class="tddGreen ? 'green' : ''">
+                <span class="tdd-light" :class="tddGreen ? 'green' : ''"></span
+                >{{ t("workflow.studio.tddGreen") }}
+              </span>
             </div>
-            <div v-if="contract.requirements?.length" class="cc-section">
-              <span class="cc-sl">{{
-                t("workflow.studio.requirements", { count: contract.requirements.length })
-              }}</span>
+
+            <!-- SDD Task Runner(apply 阶段) -->
+            <div v-if="cur === 'apply'" class="sdd-panel">
+              <div class="sdd-head">
+                <span class="sdd-title">{{ t("workflow.studio.sddTitle") }}</span>
+                <button
+                  class="sdd-run-btn"
+                  :disabled="taskRunner.busy.value || !changeId"
+                  @click="runSddTasks"
+                >
+                  {{
+                    taskRunner.busy.value
+                      ? t("workflow.studio.running")
+                      : t("workflow.studio.sddRunAll")
+                  }}
+                </button>
+              </div>
               <div
-                v-for="r in contract.requirements"
-                :key="`${r.source}::${r.name}`"
-                class="cc-item mon"
+                v-if="!taskRunner.tasks.value.length && !taskRunner.busy.value"
+                class="sdd-empty"
               >
-                <span class="cc-level" :class="r.level.toLowerCase()">{{ r.level }}</span>
-                {{ r.name }}
-                <span class="cc-src">{{ r.source }}</span>
+                {{
+                  changeId
+                    ? t("workflow.studio.sddEmptyWithChange")
+                    : t("workflow.studio.sddEmptyNoChange")
+                }}
+              </div>
+              <div v-for="task in taskRunner.tasks.value" :key="task.taskId" class="sdd-row">
+                <span class="sdd-status" :class="task.status">
+                  {{
+                    task.status === "pending"
+                      ? "○"
+                      : task.status === "running"
+                        ? "◐"
+                        : task.status === "done"
+                          ? "✓"
+                          : "✗"
+                  }}
+                </span>
+                <span class="sdd-id">{{ task.taskId }}</span>
+                <span class="sdd-label">{{ task.title }}</span>
+                <span v-if="task.status === 'running'" class="sdd-spin">⋯</span>
+                <span v-else-if="task.status === 'done'" class="sdd-exit pass">exit 0</span>
+                <span v-else-if="task.status === 'failed'" class="sdd-exit fail"
+                  >exit {{ task.exitCode ?? "?" }}</span
+                >
               </div>
             </div>
-            <div class="cc-section">
-              <span class="cc-sl">{{ t("workflow.studio.verify") }}</span>
-              <div v-for="v in contract.verify" :key="v.command" class="cc-item mon">
-                <span class="cc-check">$</span> {{ v.command }}
-                <span v-if="v.description" class="cc-desc">{{ v.description }}</span>
+
+            <!-- review verdict 卡片 -->
+            <div v-if="cur === 'review'" class="review-card">
+              <div class="rc-head">{{ t("workflow.studio.reviewVerdict") }}</div>
+              <div class="rc-row">
+                <span class="rc-key">{{ t("workflow.studio.reviewSpecCompliance") }}</span
+                ><span class="rc-val">—</span>
+              </div>
+              <div class="rc-row">
+                <span class="rc-key">{{ t("workflow.studio.reviewCodeQuality") }}</span
+                ><span class="rc-val">—</span>
+              </div>
+              <div class="rc-row">
+                <span class="rc-key">{{ t("workflow.studio.reviewScopeCreep") }}</span
+                ><span class="rc-val">—</span>
               </div>
             </div>
-            <div v-if="contract.risks.length" class="cc-section">
-              <span class="cc-sl">{{ t("workflow.studio.risks") }}</span>
-              <div v-for="(r, i) in contract.risks" :key="i" class="cc-item warn">⚠ {{ r }}</div>
+
+            <!-- verify 前置门禁警告(契约过期 / Requirements 未覆盖) -->
+            <div v-if="cur === 'verify' && verifyWarnings.length" class="verify-warn-card">
+              <div class="vw-head">
+                {{ t("workflow.studio.verifyWarnHead", { count: verifyWarnings.length }) }}
+              </div>
+              <div v-for="(w, i) in verifyWarnings" :key="i" class="vw-item">· {{ w }}</div>
+              <div class="vw-foot">{{ t("workflow.studio.verifyWarnFoot") }}</div>
+            </div>
+
+            <!-- verify 真实 evidence -->
+            <div v-if="cur === 'verify' && evidence" class="evidence-card">
+              <div class="ev-head">
+                <span class="ev-label">{{ t("workflow.studio.verdict") }}</span>
+                <span
+                  class="verdict"
+                  :style="{
+                    color: verdictColor(evidence.verdict),
+                    borderColor: verdictColor(evidence.verdict),
+                  }"
+                  >{{ evidence.verdict }}</span
+                >
+              </div>
+              <div v-for="g in evidence.gates" :key="g.layer" class="grow">
+                <span class="gl">{{ g.layer }}</span>
+                <code class="gc">{{ g.command }}</code>
+                <span class="gx" :class="g.exitCode === null ? 'skip' : g.passed ? 'pass' : 'fail'">
+                  {{
+                    g.exitCode === null
+                      ? t("workflow.studio.gateSkip")
+                      : g.passed
+                        ? t("workflow.studio.gatePassed")
+                        : t("workflow.studio.gateFailed", { code: g.exitCode })
+                  }}
+                </span>
+              </div>
             </div>
           </div>
 
-          <!-- Apply TDD 可视化 -->
-          <div v-if="cur === 'apply'" class="tdd-bar">
-            <span class="tdd-item" :class="tddRed ? 'red' : ''">
-              <span class="tdd-light" :class="tddRed ? 'red' : ''"></span
-              >{{ t("workflow.studio.tddRed") }}
-            </span>
-            <span class="tdd-line" :class="tddGreen ? 'green' : tddRed ? 'progress' : ''"></span>
-            <span class="tdd-item" :class="tddGreen ? 'green' : ''">
-              <span class="tdd-light" :class="tddGreen ? 'green' : ''"></span
-              >{{ t("workflow.studio.tddGreen") }}
-            </span>
-          </div>
-
-          <!-- SDD Task Runner(apply 阶段) -->
-          <div v-if="cur === 'apply'" class="sdd-panel">
-            <div class="sdd-head">
-              <span class="sdd-title">{{ t("workflow.studio.sddTitle") }}</span>
-              <button
-                class="sdd-run-btn"
-                :disabled="taskRunner.busy.value || !changeId"
-                @click="runSddTasks"
+          <!-- 滚动控件 -->
+          <div class="stream-nav">
+            <button
+              v-if="!showResumeButton"
+              type="button"
+              class="stream-nav-btn"
+              :title="t('workflow.studio.jumpTop')"
+              @click="jumpToTop"
+            >
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
               >
-                {{
-                  taskRunner.busy.value
-                    ? t("workflow.studio.running")
-                    : t("workflow.studio.sddRunAll")
-                }}
-              </button>
-            </div>
-            <div v-if="!taskRunner.tasks.value.length && !taskRunner.busy.value" class="sdd-empty">
-              {{
-                changeId
-                  ? t("workflow.studio.sddEmptyWithChange")
-                  : t("workflow.studio.sddEmptyNoChange")
-              }}
-            </div>
-            <div v-for="task in taskRunner.tasks.value" :key="task.taskId" class="sdd-row">
-              <span class="sdd-status" :class="task.status">
-                {{
-                  task.status === "pending"
-                    ? "○"
-                    : task.status === "running"
-                      ? "◐"
-                      : task.status === "done"
-                        ? "✓"
-                        : "✗"
-                }}
-              </span>
-              <span class="sdd-id">{{ task.taskId }}</span>
-              <span class="sdd-label">{{ task.title }}</span>
-              <span v-if="task.status === 'running'" class="sdd-spin">⋯</span>
-              <span v-else-if="task.status === 'done'" class="sdd-exit pass">exit 0</span>
-              <span v-else-if="task.status === 'failed'" class="sdd-exit fail"
-                >exit {{ task.exitCode ?? "?" }}</span
+                <line x1="12" y1="19" x2="12" y2="5" />
+                <polyline points="5 12 12 5 19 12" />
+              </svg>
+            </button>
+            <button
+              v-if="showResumeButton"
+              type="button"
+              class="stream-nav-btn primary"
+              :title="t('workflow.studio.jumpBottom')"
+              @click="jumpToLatest"
+            >
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
               >
-            </div>
-          </div>
-
-          <!-- review verdict 卡片 -->
-          <div v-if="cur === 'review'" class="review-card">
-            <div class="rc-head">{{ t("workflow.studio.reviewVerdict") }}</div>
-            <div class="rc-row">
-              <span class="rc-key">{{ t("workflow.studio.reviewSpecCompliance") }}</span
-              ><span class="rc-val">—</span>
-            </div>
-            <div class="rc-row">
-              <span class="rc-key">{{ t("workflow.studio.reviewCodeQuality") }}</span
-              ><span class="rc-val">—</span>
-            </div>
-            <div class="rc-row">
-              <span class="rc-key">{{ t("workflow.studio.reviewScopeCreep") }}</span
-              ><span class="rc-val">—</span>
-            </div>
-          </div>
-
-          <!-- verify 前置门禁警告(契约过期 / Requirements 未覆盖) -->
-          <div v-if="cur === 'verify' && verifyWarnings.length" class="verify-warn-card">
-            <div class="vw-head">
-              {{ t("workflow.studio.verifyWarnHead", { count: verifyWarnings.length }) }}
-            </div>
-            <div v-for="(w, i) in verifyWarnings" :key="i" class="vw-item">· {{ w }}</div>
-            <div class="vw-foot">{{ t("workflow.studio.verifyWarnFoot") }}</div>
-          </div>
-
-          <!-- verify 真实 evidence -->
-          <div v-if="cur === 'verify' && evidence" class="evidence-card">
-            <div class="ev-head">
-              <span class="ev-label">{{ t("workflow.studio.verdict") }}</span>
-              <span
-                class="verdict"
-                :style="{
-                  color: verdictColor(evidence.verdict),
-                  borderColor: verdictColor(evidence.verdict),
-                }"
-                >{{ evidence.verdict }}</span
-              >
-            </div>
-            <div v-for="g in evidence.gates" :key="g.layer" class="grow">
-              <span class="gl">{{ g.layer }}</span>
-              <code class="gc">{{ g.command }}</code>
-              <span class="gx" :class="g.exitCode === null ? 'skip' : g.passed ? 'pass' : 'fail'">
-                {{
-                  g.exitCode === null
-                    ? t("workflow.studio.gateSkip")
-                    : g.passed
-                      ? t("workflow.studio.gatePassed")
-                      : t("workflow.studio.gateFailed", { code: g.exitCode })
-                }}
-              </span>
-            </div>
+                <line x1="12" y1="5" x2="12" y2="19" />
+                <polyline points="19 12 12 19 5 12" />
+              </svg>
+            </button>
           </div>
         </div>
 
@@ -1231,7 +1476,7 @@ function verdictColor(v: string): string {
             @click="handleStageGateAction(stageGate.actionKind)"
           >
             {{ stageGate.action }}
-            <span>→</span>
+            <span v-if="stageGate.actionKind === 'next'">→</span>
           </button>
           <button
             v-if="stageGate.secondaryAction"
@@ -1254,6 +1499,7 @@ function verdictColor(v: string): string {
       </div>
     </div>
   </div>
+  <ConfirmDialog ref="archiveConfirmDialog" />
 </template>
 
 <style scoped>
@@ -1585,14 +1831,26 @@ function verdictColor(v: string): string {
   font-weight: 700;
 }
 
+/* 对话流容器 — 包住滚动区与浮动跳转按钮 */
+.conv-body {
+  position: relative;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
 /* 对话流 */
 .stream {
   flex: 1;
   overflow-y: auto;
+  overflow-x: hidden;
   padding: 22px 26px;
   display: flex;
   flex-direction: column;
   gap: 16px;
+  overscroll-behavior: contain;
+  overflow-anchor: none;
 }
 .stream-empty {
   color: var(--color-surface-600, #475569);
@@ -1609,45 +1867,50 @@ function verdictColor(v: string): string {
   align-self: flex-end;
   flex-direction: row-reverse;
 }
-.avatar {
+.avatar-img {
   width: 30px;
   height: 30px;
-  border-radius: 8px;
+  border-radius: 50%;
   flex-shrink: 0;
-  display: grid;
-  place-items: center;
-  font-size: 12px;
-  font-weight: 700;
-}
-.msg.assistant .avatar {
-  background: linear-gradient(135deg, var(--color-accent-violet, #a78bfa), #8b5cf6);
-  color: #1e1b3a;
-}
-.msg.user .avatar {
-  background: var(--color-surface-800, #1e293b);
-  color: var(--color-surface-300, #cbd5e1);
+  object-fit: cover;
+  border: 1px solid color-mix(in srgb, var(--color-surface-700, #334155) 50%, transparent);
 }
 .mb {
   display: flex;
   flex-direction: column;
-  min-width: 0;
+  min-width: 180px;
+  max-width: 100%;
+}
+.msg.user .mb {
+  align-items: flex-end;
 }
 .name {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--color-surface-500, #64748b);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
   margin-bottom: 4px;
-  font-family: var(--font-mono, monospace);
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
-.msg.assistant .name {
-  color: var(--color-accent-violet, #a78bfa);
+.agent-name {
+  color: var(--color-accent-emerald, #34d399);
+}
+.user-name {
+  color: var(--color-accent-cyan, #22d3ee);
+  justify-content: flex-end;
+}
+.msg-time {
+  font-size: 10px;
+  font-weight: 400;
+  color: var(--color-surface-500, #64748b);
+  font-family: var(--font-mono, monospace);
 }
 .bubble {
   padding: 11px 15px;
   border-radius: 11px;
   font-size: 14px;
   line-height: 1.6;
-  white-space: pre-wrap;
   word-break: break-word;
 }
 .msg.assistant .bubble {
@@ -1660,6 +1923,75 @@ function verdictColor(v: string): string {
   color: var(--color-surface-100, #f1f5f9);
   border: 1px solid color-mix(in srgb, var(--color-accent-violet, #a78bfa) 25%, transparent);
   border-top-right-radius: 3px;
+}
+.copy-btn {
+  margin-top: 4px;
+  align-self: flex-start;
+  padding: 3px 8px;
+  font-size: 10px;
+  color: var(--color-surface-500, #64748b);
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  opacity: 0;
+  transition:
+    opacity 0.15s ease,
+    color 0.15s ease,
+    background 0.15s ease;
+}
+.mb:hover .copy-btn {
+  opacity: 1;
+}
+.copy-btn:hover {
+  color: var(--color-surface-300, #cbd5e1);
+  background: color-mix(in srgb, var(--color-surface-700, #334155) 25%, transparent);
+}
+
+/* 浮动跳转按钮 */
+.stream-nav {
+  position: absolute;
+  bottom: 14px;
+  right: 14px;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  pointer-events: none;
+}
+.stream-nav-btn {
+  pointer-events: auto;
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  border: 1px solid var(--color-surface-700, #334155);
+  background: color-mix(in srgb, var(--color-surface-900, #0f172a) 90%, transparent);
+  color: var(--color-surface-300, #cbd5e1);
+  cursor: pointer;
+  backdrop-filter: blur(6px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  transition:
+    background 0.15s ease,
+    color 0.15s ease,
+    border-color 0.15s ease;
+}
+.stream-nav-btn:hover {
+  background: color-mix(in srgb, var(--color-surface-800, #1e293b) 80%, transparent);
+  color: var(--color-surface-100, #f1f5f9);
+}
+.stream-nav-btn.primary {
+  border-color: color-mix(in srgb, var(--color-accent-cyan, #22d3ee) 50%, transparent);
+  color: var(--color-accent-cyan, #22d3ee);
+}
+.stream-nav-btn.primary:hover {
+  background: color-mix(in srgb, var(--color-accent-cyan, #22d3ee) 15%, transparent);
+}
+.stream-nav-btn svg {
+  width: 14px;
+  height: 14px;
 }
 
 /* evidence 卡 */

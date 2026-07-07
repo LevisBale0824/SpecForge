@@ -3,6 +3,7 @@ import { computed, ref, watchEffect } from "vue";
 import { useI18n } from "vue-i18n";
 import { stripSystemReminder, useMessages } from "../composables/useMessages";
 import { renderMarkdown, renderStreaming } from "../composables/useMarkdown";
+import { useArtifactModal } from "../composables/useArtifactModal";
 import { useSessions } from "../composables/useSessions";
 import {
   extractCommand,
@@ -447,6 +448,35 @@ function toolStatusColor(block: { state: ToolState }): string {
 function onJump(sessionId: string): void {
   emit("navigate-session", sessionId);
 }
+
+// Detect `openspec/changes/<id>/tasks.md` paths in user message text so they
+// can be rendered as clickable chips that open a modal with the rendered file.
+// Works on plain-text user messages (which are NOT passed through markdown).
+type TextSegment =
+  | { kind: "text"; value: string }
+  | { kind: "tasks-md"; value: string; changeId: string };
+
+const TASKS_MD_RE = /openspec\/changes\/([\w.-]+)\/tasks\.md/g;
+
+function splitUserText(text: string): TextSegment[] {
+  if (!text) return [];
+  const out: TextSegment[] = [];
+  let last = 0;
+  TASKS_MD_RE.lastIndex = 0;
+  let m: RegExpExecArray | null;
+  while ((m = TASKS_MD_RE.exec(text)) !== null) {
+    if (m.index > last) out.push({ kind: "text", value: text.slice(last, m.index) });
+    out.push({ kind: "tasks-md", value: m[0], changeId: m[1] });
+    last = m.index + m[0].length;
+  }
+  if (last < text.length) out.push({ kind: "text", value: text.slice(last) });
+  return out;
+}
+
+const artifactModal = useArtifactModal();
+function openTasksMd(changeId: string) {
+  artifactModal.openTasksMd(changeId);
+}
 </script>
 
 <template>
@@ -458,7 +488,17 @@ function onJump(sessionId: string): void {
       <!-- Text -->
       <div v-if="item.kind === 'text' && item.html" class="md-content" v-html="item.html" />
       <div v-else-if="item.kind === 'text'" class="whitespace-pre-wrap break-words">
-        {{ item.text }}
+        <template v-for="(seg, segIdx) in splitUserText(item.text)" :key="segIdx">
+          <a
+            v-if="seg.kind === 'tasks-md'"
+            class="artifact-link"
+            href="javascript:void(0)"
+            :title="seg.value"
+            @click.prevent="openTasksMd(seg.changeId)"
+            >{{ seg.value }}</a
+          >
+          <template v-else>{{ seg.value }}</template>
+        </template>
       </div>
 
       <!-- Reasoning -->
@@ -735,6 +775,19 @@ function onJump(sessionId: string): void {
 </template>
 
 <style scoped>
+.artifact-link {
+  color: var(--color-accent-cyan, #22d3ee);
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-underline-offset: 2px;
+  cursor: pointer;
+  font-family: var(--font-mono, monospace);
+  font-size: 0.95em;
+}
+.artifact-link:hover {
+  text-decoration-style: solid;
+}
+
 .thinking-dot {
   width: 6px;
   height: 6px;

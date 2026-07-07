@@ -362,6 +362,7 @@ type GuiChange = {
   hasDesign: boolean;
   taskPath: string;
   proposalPath: string;
+  tasksRaw?: string;
 };
 type GuiReadStateResult = {
   rootPath: string;
@@ -502,6 +503,7 @@ function readChangeDir(rootPath: string, relDir: string, archived: boolean): Gui
     hasDesign: fs.existsSync(designAbs),
     taskPath: tasksRel,
     proposalPath: proposalRel,
+    tasksRaw: tasksMd || undefined,
   };
 }
 

@@ -25,14 +25,40 @@
 
 **必须用文件写入工具(Write / MultiEdit / bash heredoc)把内容落盘到 `openspec/changes/{{changeId}}/tasks.md`,不允许只把 markdown 贴在对话里。**
 
-`tasks.md` 每个任务:
+### 任务格式
 
-- 稳定 ID(如 1.1、1.2)
-- 关联的 AC / requirement(标注 `satisfies: REQ-xxx`)
-- 验证命令(lint / test / build / 手动验收)
-- 依赖(`dependsOn: 1.1`)
+每个任务为一行 checkbox 列表项,后接若干缩进子字段。仅下列子字段会被识别;自造键名或拼写错误将被忽略,可能导致 Verify 阶段判定 requirement 未覆盖。
 
-按依赖构建 DAG;独立任务可并行。任务粒度:每个任务应能被一条验证命令证明完成。不要"顺手"扩 scope —— 缺的需求先回到 Propose。
+```
+- [ ] <ID> <标题>
+  - Requirement: <requirement 名>
+  - Verification: <验证命令>
+  - Estimate: <分钟数>
+  - Depends on: <前置任务 ID>
+  - Result: <完成证据>
+```
+
+| 子字段         | 任务级          | 释义                                                                |
+| -------------- | --------------- | ------------------------------------------------------------------- |
+| `Requirement`  | 可选,见覆盖规则 | 本任务满足的验收点,取 contract.md 中对应 requirement 的 `name` 原文 |
+| `Verification` | 推荐            | 可执行命令或手动验收步骤,作为完成判据                               |
+| `Estimate`     | 可选            | 预估工时,整数分钟                                                   |
+| `Depends on`   | 可选            | 前置任务 ID,逗号分隔,用于构建 DAG                                   |
+| `Result`       | 完成时回填      | 命令输出或证据摘要                                                  |
+
+- checkbox 标记:`- [ ]` 未完成,`- [x]` 已完成。
+- `<ID>` 形如 `<组号>.<序号>`(如 `1.1`、`2.3`),全局唯一且稳定。
+- 子字段须缩进并以 `- ` 起首;键名大小写不敏感,但 `Depends on` 为空格分隔的双词,非驼峰。
+
+### Requirement 覆盖规则
+
+contract.md 中**每一条** MUST / SHALL requirement,须至少由一个状态为 completed 的任务,经 `- Requirement: <name>` 绑定其完整 `name`,方视为已覆盖。Verify 阶段据此判定;任一 MUST / SHALL 缺少对应 completed 绑定,verdict 须为 NOT_READY。
+
+- `name` 取 contract.md 中该 requirement 的 `name` 字段原文,通常为含全角标点与破折号的中文陈述句;须逐字相等,禁止缩写、改写或代之以 `REQ-xxx` 等自造标识。
+- 单个任务的 `Requirement` 为单值,仅能绑定一个 requirement;若一份实现同时满足多条,应拆分为多个任务分别绑定,或择最贴切者绑定。
+- 非 MUST / SHALL 的事务性任务(调研、脚手架等)无须绑定。
+
+按依赖关系构建 DAG;无依赖任务可并行。任务粒度以“可由单一验证命令证明完成”为准。不得借机扩大 scope;发现遗漏的 requirement 应回 Propose 阶段补充。
 
 ## 子步骤 2:TDD 实现(一次一个 task)
 

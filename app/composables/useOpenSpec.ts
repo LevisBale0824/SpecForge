@@ -280,6 +280,7 @@ async function readChangeViaFsa(
     hasDesign,
     taskPath: `${dirPath}/tasks.md`,
     proposalPath: `${dirPath}/proposal.md`,
+    tasksRaw: tasksMd ?? undefined,
   };
   // Note: rootName used implicitly via rootHandle; referenced to silence lint.
   void rootName;
@@ -488,7 +489,7 @@ async function archiveChange(changeId: string): Promise<{ ok: boolean; reason?: 
   if (isElectron()) {
     const project = useProject();
     const root = state.rootPath || project.state.directoryPath;
-    const r = await runProjectGate(root, `openspec archive ${changeId}`);
+    const r = await runProjectGate(root, `openspec archive ${changeId} -y`);
     if (r?.exitCode !== 0) {
       return { ok: false, reason: r?.stderr?.slice(0, 300) || "openspec archive 失败" };
     }
