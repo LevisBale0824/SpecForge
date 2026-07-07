@@ -246,6 +246,40 @@ function onNewSession() {
   router.push({ name: "chat" });
 }
 
+function isWorkflowStageSession(sessionId: string): boolean {
+  if (!sessionId) return false;
+  return computeHiddenStageSessions(
+    backend.sessions.value,
+    stageSessions.stageSessionIds.value,
+  ).has(sessionId);
+}
+
+function ensureChatDoesNotShowWorkflowSession(): void {
+  const cur = backend.selectedSessionId.value;
+  const last = lastChatSessionId.value;
+  const canRestoreLast =
+    Boolean(last) &&
+    backend.sessions.value.some((session) => session.id === last) &&
+    !isWorkflowStageSession(last);
+
+  if (canRestoreLast && cur !== last) {
+    backend.selectSession(last);
+    return;
+  }
+
+  if (isWorkflowStageSession(cur) || !cur) {
+    backend.startNewSession();
+  }
+}
+
+watch(
+  () => route.name,
+  (name) => {
+    if (name === "chat") ensureChatDoesNotShowWorkflowSession();
+  },
+  { flush: "post" },
+);
+
 function onOpenChat() {
   activeDiff.value = null;
   activeFilePath.value = null;
@@ -256,17 +290,7 @@ function onOpenChat() {
   // (如在 /workflow 刷新后)时,旧逻辑会带着 stage session 直接进 chat,导致阶段对话
   // 内容被展示。命中 stage session 或无可用会话时,开新会话而非沿用 stage session。
   // 同样适用于 stage session 的子 agent(沿祖先链查找),共用 computeHiddenStageSessions。
-  const cur = backend.selectedSessionId.value;
-  const onStageSession =
-    Boolean(cur) &&
-    computeHiddenStageSessions(backend.sessions.value, stageSessions.stageSessionIds.value).has(
-      cur,
-    );
-  if (lastChatSessionId.value && cur !== lastChatSessionId.value) {
-    backend.selectSession(lastChatSessionId.value);
-  } else if (onStageSession || !cur) {
-    backend.startNewSession();
-  }
+  ensureChatDoesNotShowWorkflowSession();
   router.push({ name: "chat" });
 }
 

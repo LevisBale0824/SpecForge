@@ -75,7 +75,7 @@ export function computeHiddenStageSessions(
   sessions: SessionInfo[],
   extraStageIds?: ReadonlySet<string>,
 ): Set<string> {
-  const stage = new Set<string>();
+  const stage = new Set<string>(extraStageIds ?? []);
   const parentOf = new Map<string, string | undefined>();
   for (const s of sessions) {
     parentOf.set(s.id, s.parentID);
@@ -83,7 +83,7 @@ export function computeHiddenStageSessions(
       stage.add(s.id);
     }
   }
-  const hidden = new Set<string>();
+  const hidden = new Set<string>(stage);
   for (const s of sessions) {
     if (stage.has(s.id)) {
       hidden.add(s.id);

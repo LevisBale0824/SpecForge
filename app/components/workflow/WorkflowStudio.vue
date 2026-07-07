@@ -887,6 +887,11 @@ function refreshVerifyWarnings() {
 type DraftStage = "explore" | "propose" | "apply" | "review" | "archive";
 async function draft(stage: DraftStage) {
   if (archiving.value) return;
+  const startedChangeId = changeId.value;
+  if ((stage === "apply" || stage === "review" || stage === "archive") && !startedChangeId) {
+    draftMsg.value = t("workflow.studio.gate.applyNoChange.title");
+    return;
+  }
   const isFirst = !injected.value[stage];
   if (!isFirst && !need.value.trim()) {
     draftMsg.value = t("workflow.studio.msg.needInput");
@@ -911,11 +916,11 @@ async function draft(stage: DraftStage) {
   const sent = await backend.sendPrompt(text, []);
   if (sent) {
     rememberStageSession(stage, backend.selectedSessionId.value);
-    const currentChangeId = selectedChange.value?.id;
+    const currentChangeId = selectedChange.value?.id ?? startedChangeId;
     if (currentChangeId) {
       changeTiers.value[currentChangeId] = wf.state.value.tier;
       localStorage.setItem(CHANGE_TIERS_KEY, JSON.stringify(changeTiers.value));
-    } else {
+    } else if ((stage === "explore" || stage === "propose") && !requestedChangeId.value) {
       creatingDraftChange.value = true;
     }
   }
