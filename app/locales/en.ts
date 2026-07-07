@@ -289,6 +289,9 @@ export default {
       verifyWarnFoot:
         "These risks don't block Run Gates, but the verdict should be NOT_READY. For stale contracts, rebuild in Propose; for uncovered requirements, add tasks in Apply.",
       verdict: "Verdict",
+      gatePending: "pending",
+      gateRunning: "running",
+      gateRunningNow: "Running",
       gateSkip: "skip",
       gatePassed: "✓ 0",
       gateFailed: "✗ {code}",

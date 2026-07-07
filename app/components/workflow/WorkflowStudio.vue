@@ -4,6 +4,7 @@ import { useRoute, useRouter } from "vue-router";
 import { useI18n } from "vue-i18n";
 import { useWorkflow } from "../../plugins/workflowPlugin";
 import { useOpenSpec } from "../../composables/useOpenSpec";
+import type { GateProgressEvent } from "../../composables/useOpenSpec";
 import { useBackend } from "../../composables/useBackend";
 import { useMessages, stripSystemReminder } from "../../composables/useMessages";
 import { getStagePrompt } from "../../composables/useStageRunner";
@@ -15,7 +16,13 @@ import { useDisplayNames } from "../../composables/useDisplayNames";
 import MessageContent from "../MessageContent.vue";
 import ConfirmDialog from "../ConfirmDialog.vue";
 import { TIER_LABELS, stagesForTier, type StepName, type WorkflowTier } from "../../types/workflow";
-import type { ExecutionContract, ContractStaleResult } from "../../types/openspec";
+import type {
+  ExecutionContract,
+  ContractStaleResult,
+  GateLayer,
+  GateResult,
+  GateVerdict,
+} from "../../types/openspec";
 import {
   encodeStageSuffix,
   decodeStageBinding,
@@ -115,6 +122,63 @@ const showIntro = computed(() => !wf.enabled.value || route.query.intro === "1")
 const evidence = computed(() =>
   changeId.value ? openspec.state.evidence[changeId.value] : undefined,
 );
+
+type GateRunStatus = "pending" | "running" | "pass" | "fail" | "skip";
+type GateRow = {
+  layer: GateLayer;
+  command: string;
+  status: GateRunStatus;
+  exitCode: number | null;
+  durationMs: number;
+  outputSnippet?: string;
+};
+
+const GATE_PLAN: { layer: GateLayer; command: (id: string) => string }[] = [
+  { layer: "spec", command: (id) => `openspec validate${id ? ` ${id}` : ""} --strict` },
+  { layer: "lint", command: () => "npm run lint" },
+  { layer: "test", command: () => "npm test" },
+  { layer: "build", command: () => "npm run build" },
+];
+
+const liveGates = ref<Partial<Record<GateLayer, GateRow>>>({});
+
+function rowFromResult(result: GateResult): GateRow {
+  return {
+    layer: result.layer,
+    command: result.command,
+    status: result.exitCode === null ? "skip" : result.passed ? "pass" : "fail",
+    exitCode: result.exitCode,
+    durationMs: result.durationMs,
+    outputSnippet: result.outputSnippet,
+  };
+}
+
+const gateRows = computed<GateRow[]>(() =>
+  GATE_PLAN.map((planned) => {
+    const layer = planned.layer;
+    const live = liveGates.value[layer];
+    if (live) return live;
+    const saved = evidence.value?.gates.find((g) => g.layer === layer);
+    if (saved) return rowFromResult(saved);
+    return {
+      layer,
+      command: planned.command(changeId.value),
+      status: "pending",
+      exitCode: null,
+      durationMs: 0,
+    };
+  }),
+);
+
+const runningGate = computed(() => gateRows.value.find((g) => g.status === "running"));
+const displayedVerdict = computed<GateVerdict | "PENDING" | "RUNNING">(() => {
+  if (gating.value || runningGate.value) return "RUNNING";
+  return evidence.value?.verdict ?? "PENDING";
+});
+
+watch(changeId, () => {
+  liveGates.value = {};
+});
 
 type StageGateTone = "ready" | "review" | "blocked" | "info";
 type StageGateActionKind = "next" | "generate-tasks" | "start-work" | "run-tasks" | "draft-propose";
@@ -935,9 +999,45 @@ function sendForCurrent() {
 async function runGates() {
   if (!changeId.value) return;
   refreshVerifyWarnings();
+  liveGates.value = Object.fromEntries(
+    GATE_PLAN.map((g) => [
+      g.layer,
+      {
+        layer: g.layer,
+        command: g.command(changeId.value),
+        status: "pending",
+        exitCode: null,
+        durationMs: 0,
+      } satisfies GateRow,
+    ]),
+  ) as Partial<Record<GateLayer, GateRow>>;
   gating.value = true;
   try {
-    await openspec.runGates(changeId.value);
+    await openspec.runGates(changeId.value, {
+      onGateUpdate(event: GateProgressEvent) {
+        liveGates.value = {
+          ...liveGates.value,
+          [event.layer]:
+            event.status === "running"
+              ? {
+                  layer: event.layer,
+                  command: event.command,
+                  status: "running",
+                  exitCode: null,
+                  durationMs: 0,
+                }
+              : event.result
+                ? rowFromResult(event.result)
+                : {
+                    layer: event.layer,
+                    command: event.command,
+                    status: "skip",
+                    exitCode: null,
+                    durationMs: 0,
+                  },
+        };
+      },
+    });
   } finally {
     gating.value = false;
   }
@@ -1020,8 +1120,18 @@ async function cleanupWorkflowSessions(key: string) {
 
 function verdictColor(v: string): string {
   if (v === "READY") return "var(--color-accent-emerald, #34d399)";
+  if (v === "RUNNING") return "var(--color-accent-cyan, #22d3ee)";
+  if (v === "PENDING") return "var(--color-surface-500, #64748b)";
   if (v === "CONDITIONAL") return "var(--color-accent-amber, #fbbf24)";
   return "var(--color-accent-rose, #f43f5e)";
+}
+
+function gateStatusText(g: GateRow): string {
+  if (g.status === "pending") return t("workflow.studio.gatePending");
+  if (g.status === "running") return t("workflow.studio.gateRunning");
+  if (g.status === "skip") return t("workflow.studio.gateSkip");
+  if (g.status === "pass") return t("workflow.studio.gatePassed");
+  return t("workflow.studio.gateFailed", { code: g.exitCode });
 }
 </script>
 
@@ -1325,30 +1435,29 @@ function verdictColor(v: string): string {
               <div class="vw-foot">{{ t("workflow.studio.verifyWarnFoot") }}</div>
             </div>
 
-            <!-- verify 真实 evidence -->
-            <div v-if="cur === 'verify' && evidence" class="evidence-card">
+            <!-- verify gates -->
+            <div v-if="cur === 'verify'" class="evidence-card">
               <div class="ev-head">
                 <span class="ev-label">{{ t("workflow.studio.verdict") }}</span>
                 <span
                   class="verdict"
                   :style="{
-                    color: verdictColor(evidence.verdict),
-                    borderColor: verdictColor(evidence.verdict),
+                    color: verdictColor(displayedVerdict),
+                    borderColor: verdictColor(displayedVerdict),
                   }"
-                  >{{ evidence.verdict }}</span
+                  >{{ displayedVerdict }}</span
                 >
+                <span v-if="runningGate" class="ev-running">
+                  {{ t("workflow.studio.gateRunningNow") }}
+                  <code>{{ runningGate.command }}</code>
+                </span>
               </div>
-              <div v-for="g in evidence.gates" :key="g.layer" class="grow">
+              <div v-for="g in gateRows" :key="g.layer" class="grow" :class="`gate-${g.status}`">
                 <span class="gl">{{ g.layer }}</span>
                 <code class="gc">{{ g.command }}</code>
-                <span class="gx" :class="g.exitCode === null ? 'skip' : g.passed ? 'pass' : 'fail'">
-                  {{
-                    g.exitCode === null
-                      ? t("workflow.studio.gateSkip")
-                      : g.passed
-                        ? t("workflow.studio.gatePassed")
-                        : t("workflow.studio.gateFailed", { code: g.exitCode })
-                  }}
+                <span class="gx" :class="g.status">
+                  <span v-if="g.status === 'running'" class="gate-spinner" />
+                  {{ gateStatusText(g) }}
                 </span>
               </div>
             </div>
@@ -2342,6 +2451,22 @@ function verdictColor(v: string): string {
   color: var(--color-surface-500, #64748b);
   font-weight: 600;
 }
+.ev-running {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: var(--color-surface-400, #94a3b8);
+  font-size: 11px;
+}
+.ev-running code {
+  max-width: 420px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--color-accent-cyan, #22d3ee);
+  font-family: var(--font-mono, monospace);
+}
 .verdict {
   font-size: 11px;
   font-weight: 700;
@@ -2359,9 +2484,15 @@ function verdictColor(v: string): string {
   font-family: var(--font-mono, monospace);
   font-size: 12px;
   border-bottom: 1px solid color-mix(in srgb, var(--color-surface-800, #1e293b) 55%, transparent);
+  transition:
+    background 160ms ease,
+    border-color 160ms ease;
 }
 .grow:last-child {
   border-bottom: none;
+}
+.grow.gate-running {
+  background: color-mix(in srgb, var(--color-accent-cyan, #22d3ee) 8%, transparent);
 }
 .gl {
   color: var(--color-accent-violet, #a78bfa);
@@ -2375,8 +2506,18 @@ function verdictColor(v: string): string {
   white-space: nowrap;
 }
 .gx {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
   font-weight: 700;
   font-size: 12px;
+}
+.gx.pending {
+  color: var(--color-surface-500, #64748b);
+}
+.gx.running {
+  color: var(--color-accent-cyan, #22d3ee);
 }
 .gx.pass {
   color: var(--color-accent-emerald, #34d399);
@@ -2386,6 +2527,19 @@ function verdictColor(v: string): string {
 }
 .gx.skip {
   color: var(--color-surface-600, #475569);
+}
+.gate-spinner {
+  width: 10px;
+  height: 10px;
+  border: 2px solid color-mix(in srgb, var(--color-accent-cyan, #22d3ee) 28%, transparent);
+  border-top-color: var(--color-accent-cyan, #22d3ee);
+  border-radius: 50%;
+  animation: gateSpin 800ms linear infinite;
+}
+@keyframes gateSpin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .stage-gate {

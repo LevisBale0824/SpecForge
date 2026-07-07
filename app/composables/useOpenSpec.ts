@@ -47,6 +47,17 @@ import type {
   OpenSpecValidationResult,
 } from "../types/openspec";
 
+export type GateProgressEvent = {
+  layer: GateLayer;
+  command: string;
+  status: "running" | "done";
+  result?: GateResult;
+};
+
+export type RunGatesOptions = {
+  onGateUpdate?: (event: GateProgressEvent) => void;
+};
+
 const state = reactive<OpenSpecState>({
   rootPath: "",
   initialized: false,
@@ -427,7 +438,10 @@ const DEFAULT_GATES: { layer: GateLayer; command: string }[] = [
   { layer: "build", command: "npm run build" },
 ];
 
-async function runGates(changeId?: string): Promise<EvidenceFile | null> {
+async function runGates(
+  changeId?: string,
+  options: RunGatesOptions = {},
+): Promise<EvidenceFile | null> {
   const project = useProject();
   const root = state.rootPath || project.state.directoryPath;
   if (!root) return null;
@@ -435,29 +449,38 @@ async function runGates(changeId?: string): Promise<EvidenceFile | null> {
   const key = changeId ?? "_global";
   const gates: GateResult[] = [];
 
+  const specCommand = `openspec validate${changeId ? ` ${changeId}` : ""} --strict`;
+  options.onGateUpdate?.({ layer: "spec", command: specCommand, status: "running" });
   await runValidate(changeId);
   const v = state.validation[key];
-  gates.push({
+  const specGate: GateResult = {
     layer: "spec",
-    command: `openspec validate${changeId ? ` ${changeId}` : ""} --strict`,
+    command: specCommand,
     exitCode: v?.cliAvailable ? (v.passed ? 0 : 1) : null,
     passed: v?.passed ?? false,
     durationMs: 0,
     outputSnippet: v?.rawOutput?.slice(0, 500),
-  });
+  };
+  gates.push(specGate);
+  options.onGateUpdate?.({ layer: "spec", command: specCommand, status: "done", result: specGate });
 
-  if (isElectron()) {
-    for (const g of DEFAULT_GATES) {
-      const r = await runProjectGate(root, g.command);
-      gates.push({
-        layer: g.layer,
-        command: g.command,
-        exitCode: r?.exitCode ?? null,
-        passed: r?.exitCode === 0,
-        durationMs: r?.durationMs ?? 0,
-        outputSnippet: (r?.stderr || r?.stdout || "").slice(0, 500),
-      });
-    }
+  for (const g of DEFAULT_GATES) {
+    options.onGateUpdate?.({ ...g, status: "running" });
+    const r = isElectron() ? await runProjectGate(root, g.command) : null;
+    const gate: GateResult = {
+      layer: g.layer,
+      command: g.command,
+      exitCode: r?.exitCode ?? null,
+      passed: r?.exitCode === 0,
+      durationMs: r?.durationMs ?? 0,
+      outputSnippet: (
+        r?.stderr ||
+        r?.stdout ||
+        (!isElectron() ? "Electron IPC unavailable" : "")
+      ).slice(0, 500),
+    };
+    gates.push(gate);
+    options.onGateUpdate?.({ ...g, status: "done", result: gate });
   }
 
   const anyFailed = gates.some((g) => g.exitCode !== null && !g.passed);

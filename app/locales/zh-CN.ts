@@ -274,6 +274,9 @@ export default {
       verifyWarnFoot:
         "这些风险不阻断 Run Gates,但 verdict 应判为 NOT_READY。 契约过期请回 Propose 重建;未覆盖请回 Apply 补 task",
       verdict: "Verdict",
+      gatePending: "待校验",
+      gateRunning: "运行中",
+      gateRunningNow: "正在执行",
       gateSkip: "skip",
       gatePassed: "✓ 0",
       gateFailed: "✗ {code}",

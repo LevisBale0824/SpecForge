@@ -1226,7 +1226,7 @@ function registerIpcHandlers() {
   async function runShell(
     directory: string,
     command: string,
-  ): Promise<{ stdout: string; stderr: string; code: number; durationMs: number }> {
+  ): Promise<{ stdout: string; stderr: string; exitCode: number; durationMs: number }> {
     const start = Date.now();
     return new Promise((resolve) => {
       const proc = spawn(command, {
@@ -1242,7 +1242,7 @@ function registerIpcHandlers() {
         resolve({
           stdout: Buffer.concat(out).toString("utf8"),
           stderr: Buffer.concat(err).toString("utf8"),
-          code,
+          exitCode: code,
           durationMs: Date.now() - start,
         });
       proc.on("error", () => finalize(1));
