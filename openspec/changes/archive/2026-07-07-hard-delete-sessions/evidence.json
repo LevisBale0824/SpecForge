@@ -1,0 +1,39 @@
+{
+  "changeId": "hard-delete-sessions",
+  "verdict": "CONDITIONAL",
+  "gates": [
+    {
+      "layer": "spec",
+      "command": "openspec validate hard-delete-sessions --strict",
+      "exitCode": 0,
+      "passed": true,
+      "durationMs": 0,
+      "outputSnippet": "Change 'hard-delete-sessions' is valid"
+    },
+    {
+      "layer": "lint",
+      "command": "npm run lint",
+      "exitCode": null,
+      "passed": false,
+      "durationMs": 13977,
+      "outputSnippet": "npm warn Unknown env config \"electron-builder-binaries-mirror\". This will stop working in the next major version of npm.\nnpm warn Unknown env config \"electron-mirror\". This will stop working in the next major version of npm.\nnpm warn Unknown env config \"npm-globalconfig\". This will stop working in the next major version of npm.\nnpm warn Unknown env config \"verify-deps-before-run\". This will stop working in the next major version of npm.\nnpm warn Unknown env config \"_jsr-registry\". This will stop"
+    },
+    {
+      "layer": "test",
+      "command": "npm test",
+      "exitCode": null,
+      "passed": false,
+      "durationMs": 1989,
+      "outputSnippet": "npm warn Unknown env config \"electron-builder-binaries-mirror\". This will stop working in the next major version of npm.\nnpm warn Unknown env config \"electron-mirror\". This will stop working in the next major version of npm.\nnpm warn Unknown env config \"npm-globalconfig\". This will stop working in the next major version of npm.\nnpm warn Unknown env config \"verify-deps-before-run\". This will stop working in the next major version of npm.\nnpm warn Unknown env config \"_jsr-registry\". This will stop"
+    },
+    {
+      "layer": "build",
+      "command": "npm run build",
+      "exitCode": null,
+      "passed": false,
+      "durationMs": 14462,
+      "outputSnippet": "npm warn Unknown env config \"electron-builder-binaries-mirror\". This will stop working in the next major version of npm.\nnpm warn Unknown env config \"electron-mirror\". This will stop working in the next major version of npm.\nnpm warn Unknown env config \"npm-globalconfig\". This will stop working in the next major version of npm.\nnpm warn Unknown env config \"verify-deps-before-run\". This will stop working in the next major version of npm.\nnpm warn Unknown env config \"_jsr-registry\". This will stop"
+    }
+  ],
+  "ranAt": 1783385737231
+}
