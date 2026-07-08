@@ -249,6 +249,7 @@ export default {
       archiving: "归档中…",
       needActiveChange: "需要先有 active change",
       notReadyWarn: "⚠ NOT_READY — gate 将阻止归档",
+      archiveNeedEvidence: "尚无 evidence — 请先到 verify 阶段运行 gates",
       placeholderExplore: "描述需求 / 回答 grilling… (Enter 发送)",
       placeholderPropose: "先描述改动（必填）…",
       placeholderStage: "{label} 阶段 — 输入指令 / 补充… (首次发送注入阶段指令)",

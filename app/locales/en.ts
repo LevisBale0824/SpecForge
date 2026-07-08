@@ -264,6 +264,7 @@ export default {
       archiving: "Archiving…",
       needActiveChange: "An active change is required first",
       notReadyWarn: "⚠ NOT_READY — gates will block archiving",
+      archiveNeedEvidence: "No evidence yet — run gates in the verify stage first",
       placeholderExplore: "Describe the need / answer grilling… (Enter to send)",
       placeholderPropose: "Describe the change first (required)…",
       placeholderStage:

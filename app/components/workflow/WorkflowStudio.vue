@@ -1660,6 +1660,56 @@ function applyTaskDetail(task: ApplyTaskRow): string {
                 </span>
               </div>
             </div>
+
+            <!-- archive 归档前检查与进度(信息上移,composer 只留按钮) -->
+            <div v-if="cur === 'archive'" class="evidence-card">
+              <div class="ev-head">
+                <span class="ev-label">{{ t("workflow.studio.verdict") }}</span>
+                <span
+                  class="verdict"
+                  :style="{
+                    color: verdictColor(displayedVerdict),
+                    borderColor: verdictColor(displayedVerdict),
+                  }"
+                  >{{ displayedVerdict }}</span
+                >
+              </div>
+              <span v-if="!evidence" class="gate-note">{{
+                t("workflow.studio.archiveNeedEvidence")
+              }}</span>
+              <span v-else-if="evidence.verdict === 'NOT_READY'" class="gate-note">{{
+                t("workflow.studio.notReadyWarn")
+              }}</span>
+              <span v-if="archiveMsg" :class="archiveMsg.ok ? 'composer-hint ok' : 'gate-note'">{{
+                archiveMsg.text
+              }}</span>
+              <div
+                v-if="archiving || Object.keys(archiveProgress).length"
+                class="archive-progress"
+                aria-live="polite"
+              >
+                <div
+                  v-for="step in ARCHIVE_PLAN"
+                  :key="step"
+                  class="archive-step"
+                  :class="`archive-${archiveProgress[step]?.status ?? 'pending'}`"
+                >
+                  <span class="archive-dot">
+                    <span v-if="archiveProgress[step]?.status === 'running'" class="gate-spinner" />
+                    <span v-else-if="archiveProgress[step]?.status === 'done'">✓</span>
+                    <span v-else-if="archiveProgress[step]?.status === 'failed'">✗</span>
+                    <span v-else>○</span>
+                  </span>
+                  <span class="archive-label">{{ archiveStepText(step) }}</span>
+                  <code v-if="archiveProgress[step]?.command" class="archive-command">
+                    {{ archiveProgress[step]?.command }}
+                  </code>
+                  <span class="archive-state">{{
+                    archiveStatusText(archiveProgress[step]?.status ?? "pending")
+                  }}</span>
+                </div>
+              </div>
+            </div>
           </div>
 
           <!-- 滚动控件 -->
@@ -1753,50 +1803,9 @@ function applyTaskDetail(task: ApplyTaskRow): string {
             }}</span>
           </template>
           <template v-else-if="cur === 'archive'">
-            <input
-              v-model="need"
-              :disabled="archiving"
-              :placeholder="t('workflow.studio.placeholderStage', { label: stageLabel(cur) })"
-              @keydown.enter="sendForCurrent"
-            />
-            <button class="btn violet" :disabled="archiving" @click="sendForCurrent">
-              {{ t("workflow.studio.send") }}
-            </button>
             <button class="btn ghost" :disabled="archiving || !changeId" @click="doArchive">
               {{ archiving ? t("workflow.studio.archiving") : t("workflow.studio.archive") }}
             </button>
-            <span v-if="evidence?.verdict === 'NOT_READY'" class="gate-note">{{
-              t("workflow.studio.notReadyWarn")
-            }}</span>
-            <span v-if="archiveMsg" :class="archiveMsg.ok ? 'composer-hint ok' : 'gate-note'">{{
-              archiveMsg.text
-            }}</span>
-            <div
-              v-if="archiving || Object.keys(archiveProgress).length"
-              class="archive-progress"
-              aria-live="polite"
-            >
-              <div
-                v-for="step in ARCHIVE_PLAN"
-                :key="step"
-                class="archive-step"
-                :class="`archive-${archiveProgress[step]?.status ?? 'pending'}`"
-              >
-                <span class="archive-dot">
-                  <span v-if="archiveProgress[step]?.status === 'running'" class="gate-spinner" />
-                  <span v-else-if="archiveProgress[step]?.status === 'done'">✓</span>
-                  <span v-else-if="archiveProgress[step]?.status === 'failed'">✗</span>
-                  <span v-else>○</span>
-                </span>
-                <span class="archive-label">{{ archiveStepText(step) }}</span>
-                <code v-if="archiveProgress[step]?.command" class="archive-command">
-                  {{ archiveProgress[step]?.command }}
-                </code>
-                <span class="archive-state">{{
-                  archiveStatusText(archiveProgress[step]?.status ?? "pending")
-                }}</span>
-              </div>
-            </div>
           </template>
           <span v-if="draftMsg" class="composer-hint warn">{{ draftMsg }}</span>
           <button
