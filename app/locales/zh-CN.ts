@@ -311,6 +311,8 @@ export default {
       warn: {
         contractStale: "契约过期({reason}):{detail}",
         requirementsUncovered: "验收点未覆盖:{items}(无对应 completed task)",
+        scenariosUncovered:
+          "{requirement} 的 scenario 未覆盖:{items}(须有 completed task 显式绑定 - Scenario:)",
       },
       gate: {
         exploreReview: {

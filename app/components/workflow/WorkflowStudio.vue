@@ -1013,9 +1013,19 @@ function refreshVerifyWarnings() {
     );
   }
   const cov = checkRequirementsCoverage(selectedChange.value, contract.value);
-  if (cov.uncovered.length > 0) {
+  const missingReqs = cov.gaps
+    .filter((g) => g.missingScenarios.length === 0)
+    .map((g) => g.requirement);
+  const scnGaps = cov.gaps.filter((g) => g.missingScenarios.length > 0);
+  if (missingReqs.length > 0) {
+    warns.push(t("workflow.studio.warn.requirementsUncovered", { items: missingReqs.join(", ") }));
+  }
+  for (const gap of scnGaps) {
     warns.push(
-      t("workflow.studio.warn.requirementsUncovered", { items: cov.uncovered.join(", ") }),
+      t("workflow.studio.warn.scenariosUncovered", {
+        requirement: gap.requirement,
+        items: gap.missingScenarios.join(", "),
+      }),
     );
   }
   verifyWarnings.value = warns;
@@ -1466,6 +1476,11 @@ function applyTaskDetail(task: ApplyTaskRow): string {
                   <span class="cc-level" :class="r.level.toLowerCase()">{{ r.level }}</span>
                   {{ r.name }}
                   <span class="cc-src">{{ r.source }}</span>
+                  <div v-if="r.scenarios?.length" class="cc-scenarios">
+                    <span v-for="s in r.scenarios" :key="s.name" class="cc-scenario"
+                      >◇ {{ s.name }}</span
+                    >
+                  </div>
                 </div>
               </div>
               <div class="cc-section">
@@ -2329,6 +2344,7 @@ function applyTaskDetail(task: ApplyTaskRow): string {
 .cc-item.mon {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 6px;
 }
 .cc-check {
@@ -2365,6 +2381,20 @@ function applyTaskDetail(task: ApplyTaskRow): string {
   color: var(--color-surface-500, #64748b);
   font-size: 10px;
   margin-left: auto;
+}
+.cc-scenarios {
+  flex-basis: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 4px 0 2px;
+  padding-left: 4px;
+  border-left: 1px dashed var(--color-surface-700, #334155);
+}
+.cc-scenario {
+  color: var(--color-surface-400, #94a3b8);
+  font-size: 11px;
+  font-family: var(--font-mono, monospace);
 }
 .verify-warn-card {
   align-self: flex-start;

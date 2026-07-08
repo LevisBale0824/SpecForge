@@ -97,6 +97,8 @@ export interface OpenSpecTask {
   groupTitle: string;
   /** 关联的 requirement name(可选) */
   requirement?: string;
+  /** 关联的 scenario name(可选,与 requirement 配合用于 scenario 级覆盖率检查) */
+  scenario?: string;
   /** 验证命令(可选) */
   verification?: string;
   /** 工时估算(分钟,可选) */
@@ -292,6 +294,10 @@ export interface ContractRequirement {
   level: SpecLevel;
   /** 相对 openspec 根的来源路径 */
   source: string;
+  /** 该 requirement 下的 scenario 名(取自 `#### Scenario: <Name>`)。
+   *  覆盖率检查升级为 scenario 级:每个 scenario 须有 completed task 绑定。
+   *  空数组 = 旧契约或 spec 无 scenario,回退到 requirement 级检查。 */
+  scenarios: { name: string }[];
 }
 
 /** 契约过期检测结果 */

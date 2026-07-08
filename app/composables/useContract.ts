@@ -51,6 +51,7 @@ function extractRequirements(change: OpenSpecChange): ContractRequirement[] {
         name: dr.name,
         level: (levelMatch?.[1] as SpecLevel) ?? "SHALL",
         source: delta.path,
+        scenarios: (dr.requirement?.scenarios ?? []).map((s) => ({ name: s.name })),
       });
     }
   }
@@ -87,7 +88,10 @@ function computeSourceHash(opts: { proposalRaw: string; change: OpenSpecChange }
   const reqDump = opts.change.deltaSpecs
     ?.map((d) =>
       d.requirements
-        ?.map((r) => `${d.capability}:${r.op}:${r.name}:${r.requirement?.text ?? ""}`)
+        ?.map((r) => {
+          const scn = r.requirement?.scenarios?.map((s) => s.name).join(",") ?? "";
+          return `${d.capability}:${r.op}:${r.name}:${r.requirement?.text ?? ""}:${scn}`;
+        })
         .join("\n"),
     )
     .join("\n");
@@ -213,26 +217,71 @@ export function useContract() {
 }
 
 /**
- * 计算契约的 Requirements 覆盖情况:每个 SHALL/MUST 是否有对应 completed task。
- * 用于 Verify 阶段前置门禁:未覆盖 → verdict 应为 NOT_READY。
+ * 计算契约的 Requirements 覆盖情况,支持 scenario 级追溯。
+ *
+ * 覆盖判定分层:
+ * - Requirement 级:每个 SHALL/MUST 须有 completed task 以 `- Requirement: <name>` 绑定
+ * - Scenario 级:若 task 显式绑定了任一 `- Scenario: <name>`,则该 requirement 进入
+ *   严格模式,每个 scenario 都须有显式绑定;否则宽松回退 —— 只要 requirement 有
+ *   completed task 即视为覆盖全部 scenario(兼容存量 tasks.md)
+ * - 旧契约(contract.requirements[].scenarios 为空)→ 回退到 requirement 级
+ *
+ * 用于 Verify 阶段前置门禁:任一未覆盖 → verdict 应为 NOT_READY。
  */
+export interface CoverageGap {
+  /** 整个 requirement 无 completed task 绑定(missingScenarios 为空)，
+   *  或 requirement 下有 scenario 被显式绑定但部分 scenario 漏绑(missingScenarios 非空)。 */
+  requirement: string;
+  /** 未覆盖的 scenario 名;空数组表示该 requirement 整体无 task 绑定。 */
+  missingScenarios: string[];
+}
+
 export function checkRequirementsCoverage(
   change: OpenSpecChange | undefined,
   contract: ExecutionContract | null | undefined,
-): { covered: string[]; uncovered: string[] } {
+): { covered: string[]; uncovered: string[]; gaps: CoverageGap[] } {
   if (!change || !contract?.requirements?.length) {
-    return { covered: [], uncovered: contract?.requirements?.map((r) => r.name) ?? [] };
+    return {
+      covered: [],
+      uncovered: contract?.requirements?.map((r) => r.name) ?? [],
+      gaps: [],
+    };
   }
-  const completedTaskReqs = new Set(
-    change.tasks
-      .filter((t) => t.status === "completed" && t.requirement)
-      .map((t) => t.requirement as string),
-  );
   const covered: string[] = [];
   const uncovered: string[] = [];
+  const gaps: CoverageGap[] = [];
+
   for (const r of contract.requirements) {
-    if (completedTaskReqs.has(r.name)) covered.push(r.name);
-    else uncovered.push(r.name);
+    const tasksForReq = change.tasks.filter(
+      (t) => t.status === "completed" && t.requirement === r.name,
+    );
+    if (tasksForReq.length === 0) {
+      uncovered.push(r.name);
+      gaps.push({ requirement: r.name, missingScenarios: [] });
+      continue;
+    }
+    const scenarioNames = (r.scenarios ?? []).map((s) => s.name);
+    if (scenarioNames.length === 0) {
+      // 旧契约或 spec 无 scenario → requirement 级判定
+      covered.push(r.name);
+      continue;
+    }
+    const explicitScenarios = new Set(
+      tasksForReq.map((t) => t.scenario).filter(Boolean) as string[],
+    );
+    // 宽松回退:所有 task 都没显式绑 scenario → 视为覆盖全部(兼容存量 tasks.md)
+    if (explicitScenarios.size === 0) {
+      covered.push(r.name);
+      continue;
+    }
+    // 严格模式:每个 scenario 须有显式绑定
+    const missing = scenarioNames.filter((s) => !explicitScenarios.has(s));
+    if (missing.length === 0) {
+      covered.push(r.name);
+    } else {
+      uncovered.push(r.name);
+      gaps.push({ requirement: r.name, missingScenarios: missing });
+    }
   }
-  return { covered, uncovered };
+  return { covered, uncovered, gaps };
 }

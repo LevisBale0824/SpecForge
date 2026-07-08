@@ -326,6 +326,8 @@ export default {
       warn: {
         contractStale: "Contract stale ({reason}): {detail}",
         requirementsUncovered: "Requirements uncovered: {items} (no matching completed task)",
+        scenariosUncovered:
+          "{requirement} scenarios uncovered: {items} (need a completed task with explicit - Scenario: binding)",
       },
       gate: {
         exploreReview: {

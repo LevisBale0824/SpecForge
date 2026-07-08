@@ -377,14 +377,16 @@ export function parseTasks(md: string): ParsedTasks {
 
     if (!currentTask) continue;
 
-    // 缩进的子字段:Requirement / Verification / Estimate / Depends on / Result
+    // 缩进的子字段:Requirement / Scenario / Verification / Estimate / Depends on / Result
     const trimmed = line.trim();
     const reqM = /^-\s*Requirement:\s*(.+)$/i.exec(trimmed);
+    const scnM = /^-\s*Scenario:\s*(.+)$/i.exec(trimmed);
     const verM = /^-\s*Verification:\s*`?([^`]+?)`?\s*$/i.exec(trimmed);
     const estM = /^-\s*Estimate:\s*(\d+)\s*(?:min|minutes)?\s*$/i.exec(trimmed);
     const depM = /^-\s*Depends\s+on:\s*(.+)$/i.exec(trimmed);
     const resM = /^-\s*Result:\s*(.+)$/i.exec(trimmed);
     if (reqM) currentTask.requirement = reqM[1].trim();
+    else if (scnM) currentTask.scenario = scnM[1].trim();
     else if (verM) currentTask.verification = verM[1].trim();
     else if (estM) currentTask.estimate = parseInt(estM[1], 10);
     else if (depM)
