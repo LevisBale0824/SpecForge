@@ -260,8 +260,6 @@ export default {
       requirements: "Requirements ({count})",
       verify: "Verify",
       risks: "Risks",
-      tddRed: "RED · 写测试",
-      tddGreen: "GREEN · 通过",
       sddTitle: "SDD · 子代理任务",
       sddRunAll: "▶ 运行全部待办",
       sddSummary: "{done}/{total} 完成 · {running} 运行 · {failed} 失败",

@@ -275,8 +275,6 @@ export default {
       requirements: "Requirements ({count})",
       verify: "Verify",
       risks: "Risks",
-      tddRed: "RED · Write test",
-      tddGreen: "GREEN · Pass",
       sddTitle: "SDD · Sub-agent tasks",
       sddRunAll: "▶ Run all pending",
       sddSummary: "{done}/{total} done · {running} running · {failed} failed",

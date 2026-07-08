@@ -726,14 +726,6 @@ const messages = computed(() =>
     })),
 );
 
-// tddRed/tddGreen still key off text content (tool/exit-code mentions) so
-// they keep working now that messages no longer carry the text inline.
-const messageTexts = computed(() => messages.value.map((m) => extractText(m.id)));
-const tddRed = computed(() => messageTexts.value.some((t) => /fail|✗|exit [^0]/.test(t)));
-const tddGreen = computed(() =>
-  messageTexts.value.some((t) => /pass.*[✓]|[✓].*pass|exit 0/.test(t)),
-);
-
 // ── 头像与显示名(与 ChatView 同源) ──────────────────────────────────────────
 const { agentName, userName } = useDisplayNames();
 const avatarBaseUrl = import.meta.env.BASE_URL;
@@ -1487,19 +1479,6 @@ function applyTaskDetail(task: ApplyTaskRow): string {
                 <span class="cc-sl">{{ t("workflow.studio.risks") }}</span>
                 <div v-for="(r, i) in contract.risks" :key="i" class="cc-item warn">⚠ {{ r }}</div>
               </div>
-            </div>
-
-            <!-- Apply TDD 可视化 -->
-            <div v-if="cur === 'apply'" class="tdd-bar">
-              <span class="tdd-item" :class="tddRed ? 'red' : ''">
-                <span class="tdd-light" :class="tddRed ? 'red' : ''"></span
-                >{{ t("workflow.studio.tddRed") }}
-              </span>
-              <span class="tdd-line" :class="tddGreen ? 'green' : tddRed ? 'progress' : ''"></span>
-              <span class="tdd-item" :class="tddGreen ? 'green' : ''">
-                <span class="tdd-light" :class="tddGreen ? 'green' : ''"></span
-                >{{ t("workflow.studio.tddGreen") }}
-              </span>
             </div>
 
             <!-- SDD Task Runner(apply 阶段) -->
@@ -2541,63 +2520,6 @@ function applyTaskDetail(task: ApplyTaskRow): string {
 }
 .sdd-exit.running {
   color: var(--color-accent-amber, #fbbf24);
-}
-
-.tdd-bar {
-  align-self: flex-start;
-  margin-left: 41px;
-  display: flex;
-  align-items: center;
-  gap: 0;
-  padding: 10px 14px;
-  border: 1px solid var(--color-surface-800, #1e293b);
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--color-surface-950, #020617) 50%, transparent);
-  font-size: 12px;
-  font-family: var(--font-mono, monospace);
-}
-.tdd-item {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--color-surface-500, #64748b);
-}
-.tdd-item.red {
-  color: var(--color-accent-rose, #f43f5e);
-}
-.tdd-item.green {
-  color: var(--color-accent-emerald, #34d399);
-}
-.tdd-light {
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  border: 2px solid var(--color-surface-700, #334155);
-  background: var(--color-surface-950, #020617);
-  transition: all 0.3s;
-}
-.tdd-light.red {
-  border-color: var(--color-accent-rose, #f43f5e);
-  background: var(--color-accent-rose, #f43f5e);
-  box-shadow: 0 0 6px color-mix(in srgb, var(--color-accent-rose, #f43f5e) 50%, transparent);
-}
-.tdd-light.green {
-  border-color: var(--color-accent-emerald, #34d399);
-  background: var(--color-accent-emerald, #34d399);
-  box-shadow: 0 0 6px color-mix(in srgb, var(--color-accent-emerald, #34d399) 50%, transparent);
-}
-.tdd-line {
-  width: 40px;
-  height: 2px;
-  background: var(--color-surface-700, #334155);
-  margin: 0 12px;
-  transition: background 0.3s;
-}
-.tdd-line.progress {
-  background: var(--color-accent-rose, #f43f5e);
-}
-.tdd-line.green {
-  background: var(--color-accent-emerald, #34d399);
 }
 
 .review-card {
