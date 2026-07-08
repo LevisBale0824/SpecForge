@@ -14,7 +14,13 @@ import { useTaskRunner } from "../../composables/useTaskRunner";
 import { useAutoScroller, type ScrollMode } from "../../composables/useAutoScroller";
 import { useDisplayNames } from "../../composables/useDisplayNames";
 import MessageContent from "../MessageContent.vue";
-import { TIER_LABELS, stagesForTier, type StepName, type WorkflowTier } from "../../types/workflow";
+import {
+  STEP_ORDER,
+  TIER_LABELS,
+  stagesForTier,
+  type StepName,
+  type WorkflowTier,
+} from "../../types/workflow";
 import type {
   ExecutionContract,
   ContractStaleResult,
@@ -506,10 +512,21 @@ async function enterStage(stage: StepName, opts: { advance?: boolean } = {}) {
 function stageForChange(): StepName {
   const change = selectedChange.value;
   if (!change) return wf.state.value.activeStep;
-  if (openspec.state.evidence[change.id]) return "verify";
-  if (change.taskStats.total > 0) return "apply";
-  if (change.deltaSpecs.length > 0 || change.proposal) return "propose";
-  return "explore";
+  let inferred: StepName;
+  if (openspec.state.evidence[change.id]) inferred = "verify";
+  else if (change.taskStats.total > 0) inferred = "apply";
+  else if (change.deltaSpecs.length > 0 || change.proposal) inferred = "propose";
+  else inferred = "explore";
+  // Guard: never regress below a stage the user has already advanced to.
+  // stageForChange reflects on-disk artifacts, which lag in-flight operations
+  // (e.g. proposal being generated but not yet written). Without this guard,
+  // a refresh mid-flight could bounce the user back to an earlier stage and
+  // trip "请先输入" because injected[earlierStage] is still true.
+  const current = wf.state.value.activeStep;
+  if (STEP_ORDER.indexOf(current) > STEP_ORDER.indexOf(inferred)) {
+    return current;
+  }
+  return inferred;
 }
 
 function tierForChange(stage: StepName): WorkflowTier {
@@ -584,14 +601,15 @@ watch(
   },
   { immediate: true },
 );
-watch(
-  () => [
-    requestedChangeId.value,
-    openspec.state.activeChanges.length,
-    openspec.state.lastRefreshedAt,
-  ],
-  openSelectedChange,
-);
+// Only re-open when the user selects a different change (or the route changes).
+// Do NOT re-run on openspec state refreshes for the already-open change:
+// stageForChange() infers stage from on-disk artifacts, which lag behind
+// in-flight operations (e.g. proposal not yet written while the LLM is
+// generating). Re-running openSelectedChange mid-flight downgrades the stage
+// and bounces the user back (e.g. propose -> explore), leaving injected[]
+// stale and the next send hitting "请先输入".
+// Change data (proposal, tasks, evidence) stays reactive via selectedChange.
+watch(() => requestedChangeId.value, openSelectedChange);
 // Route returned to no-?change= while we have a stashed draft snapshot (user
 // clicked "探索中" after opening an active change). Restore the draft's
 // workflow state and re-select its bound explore session so the conversation
