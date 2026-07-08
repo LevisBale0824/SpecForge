@@ -195,6 +195,9 @@ export default {
     start: "Start",
     retry: "Retry",
     next: "Next Step",
+    resetSession: "Session stuck? Force reset",
+    resetSessionHint:
+      "Backend may have skipped the session-idle signal, blocking sends. Click to force the session back to idle.",
     intro: {
       kicker: "Spec Explore",
       title: "A structured workflow from idea to ship",
@@ -328,6 +331,8 @@ export default {
         requirementsUncovered: "Requirements uncovered: {items} (no matching completed task)",
         scenariosUncovered:
           "{requirement} scenarios uncovered: {items} (need a completed task with explicit - Scenario: binding)",
+        scenariosUncoveredSummary:
+          "{count} requirements have uncovered scenarios ({total} total): {items} — see Apply-stage contract-card for details",
       },
       gate: {
         exploreReview: {

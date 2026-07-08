@@ -5,8 +5,10 @@ import { useI18n } from "vue-i18n";
 import { useWorkflow } from "../../plugins/workflowPlugin";
 import { useOpenSpec } from "../../composables/useOpenSpec";
 import type { ArchiveProgressEvent, GateProgressEvent } from "../../composables/useOpenSpec";
+import { inferGateLayer } from "../../composables/useOpenSpec";
 import { useBackend } from "../../composables/useBackend";
 import { useMessages, stripSystemReminder } from "../../composables/useMessages";
+import { useSessionStatus } from "../../composables/useSessionStatus";
 import { getStagePrompt } from "../../composables/useStageRunner";
 import { useStageSessions } from "../../composables/useStageSessions";
 import { useContract, checkRequirementsCoverage } from "../../composables/useContract";
@@ -41,6 +43,7 @@ const wf = useWorkflow();
 const openspec = useOpenSpec();
 const backend = useBackend();
 const msgStore = useMessages();
+const sessionStatus = useSessionStatus(backend.selectedSessionId);
 const { generateContract, loadContract, checkStale } = useContract();
 const taskRunner = useTaskRunner();
 
@@ -168,7 +171,7 @@ const GATE_PLAN: { layer: GateLayer; command: (id: string) => string }[] = [
   { layer: "build", command: () => "npm run build" },
 ];
 
-const liveGates = ref<Partial<Record<GateLayer, GateRow>>>({});
+const liveGates = ref<GateRow[]>([]);
 
 function rowFromResult(result: GateResult): GateRow {
   return {
@@ -181,17 +184,35 @@ function rowFromResult(result: GateResult): GateRow {
   };
 }
 
+/** 计划中的 gate 顺序：spec 永远在最前；其后是 contract.verify（推断 layer），回退默认三件套 */
+const gatePlan = computed<{ layer: GateLayer; command: string }[]>(() => {
+  const spec: { layer: GateLayer; command: string } = {
+    layer: "spec",
+    command: `openspec validate${changeId.value ? ` ${changeId.value}` : ""} --strict`,
+  };
+  const verify = contract.value?.verify;
+  if (verify && verify.length > 0) {
+    return [spec, ...verify.map((v) => ({ layer: inferGateLayer(v.command), command: v.command }))];
+  }
+  return [
+    spec,
+    ...GATE_PLAN.filter((p) => p.layer !== "spec").map((p) => ({
+      layer: p.layer,
+      command: p.command(changeId.value),
+    })),
+  ];
+});
+
 const gateRows = computed<GateRow[]>(() =>
-  GATE_PLAN.map((planned) => {
-    const layer = planned.layer;
-    const live = liveGates.value[layer];
+  gatePlan.value.map((planned) => {
+    const live = liveGates.value.find((g) => g.command === planned.command);
     if (live) return live;
-    const saved = evidence.value?.gates.find((g) => g.layer === layer);
+    const saved = evidence.value?.gates.find((g) => g.command === planned.command);
     if (saved) return rowFromResult(saved);
     return {
-      layer,
-      command: planned.command(changeId.value),
-      status: "pending",
+      layer: planned.layer,
+      command: planned.command,
+      status: "pending" as GateRunStatus,
       exitCode: null,
       durationMs: 0,
     };
@@ -205,7 +226,7 @@ const displayedVerdict = computed<GateVerdict | "PENDING" | "RUNNING">(() => {
 });
 
 watch(changeId, () => {
-  liveGates.value = {};
+  liveGates.value = [];
   if (!taskRunner.busy.value) {
     taskRunner.reset();
   }
@@ -726,6 +747,12 @@ const messages = computed(() =>
     })),
 );
 
+// 当前会话是否有消息仍在 streaming(用于逃生舱按钮:streaming 中不显示,
+// 避免"假结束"判定误伤正常长回复——POST 已返回但 SSE 仍在推 delta)
+const hasStreamingMessage = computed(() =>
+  messages.value.some((m) => msgStore.getStatus(m.id) === "streaming"),
+);
+
 // ── 头像与显示名(与 ChatView 同源) ──────────────────────────────────────────
 const { agentName, userName } = useDisplayNames();
 const avatarBaseUrl = import.meta.env.BASE_URL;
@@ -1020,11 +1047,23 @@ function refreshVerifyWarnings() {
   if (missingReqs.length > 0) {
     warns.push(t("workflow.studio.warn.requirementsUncovered", { items: missingReqs.join(", ") }));
   }
-  for (const gap of scnGaps) {
+  if (scnGaps.length === 1) {
+    // 单个 gap 给详情(具体 scenario 名),方便定位
     warns.push(
       t("workflow.studio.warn.scenariosUncovered", {
-        requirement: gap.requirement,
-        items: gap.missingScenarios.join(", "),
+        requirement: scnGaps[0].requirement,
+        items: scnGaps[0].missingScenarios.join(", "),
+      }),
+    );
+  } else if (scnGaps.length > 1) {
+    // 多个 gap 合并成一条摘要,避免 N 个 requirement × M 个 scenario 的笛卡尔噪音
+    const total = scnGaps.reduce((n, g) => n + g.missingScenarios.length, 0);
+    const items = scnGaps.map((g) => `${g.requirement}(${g.missingScenarios.length})`).join(", ");
+    warns.push(
+      t("workflow.studio.warn.scenariosUncoveredSummary", {
+        count: scnGaps.length,
+        total,
+        items,
       }),
     );
   }
@@ -1055,7 +1094,9 @@ async function draft(stage: DraftStage) {
     : need.value;
   injected.value[stage] = true;
   draftMsg.value = isFirst ? t("workflow.studio.msg.injected") : t("workflow.studio.msg.sent");
-  if (!wf.state.value.label) {
+  // label 仅用于草稿模式 SidePanel "探索中" 区块标题;活跃 change 已显示在
+  // "活跃探索",这里再写 label 会让 "探索中" 冒出来并显示成 apply 消息。
+  if (!startedChangeId && !wf.state.value.label) {
     wf.state.value.label = need.value.slice(0, 40);
   }
   need.value = "";
@@ -1078,33 +1119,41 @@ function sendForCurrent() {
     draft(s);
   }
 }
+
+/**
+ * 逃生舱:会话状态卡死时强制恢复。
+ * 触发条件 = backend.isBusy && !backend.isSending(HTTP 已返回但会话仍被判 busy,
+ * 即"假结束")。后端漏发 session.status=idle 时,InputPanel/composer 的发送门会
+ * 阻塞所有后续输入。这里主动调 markIdle + markActiveToolPartsCompleted 对齐状态。
+ */
+function resetSessionStatus() {
+  const sid = backend.selectedSessionId.value;
+  if (!sid) return;
+  sessionStatus.markIdle(sid);
+  msgStore.markActiveToolPartsCompleted(sid);
+}
 async function runGates() {
   if (!changeId.value) return;
   refreshVerifyWarnings();
-  liveGates.value = Object.fromEntries(
-    GATE_PLAN.map((g) => [
-      g.layer,
-      {
-        layer: g.layer,
-        command: g.command(changeId.value),
-        status: "pending",
-        exitCode: null,
-        durationMs: 0,
-      } satisfies GateRow,
-    ]),
-  ) as Partial<Record<GateLayer, GateRow>>;
+  liveGates.value = gatePlan.value.map((planned) => ({
+    layer: planned.layer,
+    command: planned.command,
+    status: "pending",
+    exitCode: null,
+    durationMs: 0,
+  }));
   gating.value = true;
   try {
     await openspec.runGates(changeId.value, {
+      verifyCommands: contract.value?.verify,
       onGateUpdate(event: GateProgressEvent) {
-        liveGates.value = {
-          ...liveGates.value,
-          [event.layer]:
-            event.status === "running"
+        const next = liveGates.value.map((row) =>
+          row.command === event.command
+            ? event.status === "running"
               ? {
                   layer: event.layer,
                   command: event.command,
-                  status: "running",
+                  status: "running" as GateRunStatus,
                   exitCode: null,
                   durationMs: 0,
                 }
@@ -1113,11 +1162,13 @@ async function runGates() {
                 : {
                     layer: event.layer,
                     command: event.command,
-                    status: "skip",
+                    status: "skip" as GateRunStatus,
                     exitCode: null,
                     durationMs: 0,
-                  },
-        };
+                  }
+            : row,
+        );
+        liveGates.value = next;
       },
     });
   } finally {
@@ -1600,7 +1651,7 @@ function applyTaskDetail(task: ApplyTaskRow): string {
                   <code>{{ runningGate.command }}</code>
                 </span>
               </div>
-              <div v-for="g in gateRows" :key="g.layer" class="grow" :class="`gate-${g.status}`">
+              <div v-for="g in gateRows" :key="g.command" class="grow" :class="`gate-${g.status}`">
                 <span class="gl">{{ g.layer }}</span>
                 <code class="gc">{{ g.command }}</code>
                 <span class="gx" :class="g.status">
@@ -1748,6 +1799,15 @@ function applyTaskDetail(task: ApplyTaskRow): string {
             </div>
           </template>
           <span v-if="draftMsg" class="composer-hint warn">{{ draftMsg }}</span>
+          <button
+            v-if="backend.isBusy.value && !backend.isSending.value && !hasStreamingMessage"
+            type="button"
+            class="composer-reset-btn"
+            :title="t('workflow.studio.resetSessionHint')"
+            @click="resetSessionStatus"
+          >
+            {{ t("workflow.studio.resetSession") }}
+          </button>
         </div>
 
         <!-- 阶段门禁(composer 下方,基于真实产物状态显示) -->
@@ -2915,6 +2975,22 @@ function applyTaskDetail(task: ApplyTaskRow): string {
 }
 .composer-hint.ok {
   color: var(--color-accent-emerald, #34d399);
+}
+.composer-reset-btn {
+  margin-left: auto;
+  padding: 4px 10px;
+  font-size: 11px;
+  font-family: var(--font-mono, monospace);
+  color: var(--color-accent-amber, #fbbf24);
+  background: transparent;
+  border: 1px solid var(--color-surface-700, #334155);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.composer-reset-btn:hover {
+  border-color: var(--color-accent-amber, #fbbf24);
+  background: color-mix(in srgb, var(--color-accent-amber, #fbbf24) 12%, transparent);
 }
 .btn {
   border: none;

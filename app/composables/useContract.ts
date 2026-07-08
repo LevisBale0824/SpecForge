@@ -121,7 +121,12 @@ export function useContract() {
     const proposalRaw = change.proposal?.raw ?? "";
     const proposal: OpenSpecProposal | undefined = change.proposal;
     const scope = inferScope(need, proposalRaw);
-    const verify = DEFAULT_GATES.map((g) => ({ command: g.command, description: g.desc }));
+    // 若磁盘上已有契约且声明了 verify 命令，沿用之，避免重新生成时把项目特定的命令覆盖回默认 npm 三件套
+    const existing = await loadContract(changeId);
+    const verify =
+      existing?.verify && existing.verify.length > 0
+        ? existing.verify
+        : DEFAULT_GATES.map((g) => ({ command: g.command, description: g.desc }));
     const contract: ExecutionContract = {
       changeId,
       need: need || describeChange(changeId),

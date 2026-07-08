@@ -201,10 +201,12 @@ function migrateDraftSelections(realSessionId: string): void {
 // slower machines while still recovering from a crashed backend in
 // reasonable time.
 const IDLE_FALLBACK_GRACE_MS = 30000;
-// A tool may legitimately run for minutes (builds/tests/lint). While one is
+// A tool may legitimately run for a while (builds/tests/lint). While one is
 // still executing (or a message is streaming), re-arm instead of forcing
-// idle — otherwise we'd mis-mark a mid-build tool as completed.
-const IDLE_FALLBACK_MAX_MS = 5 * 60 * 1000;
+// idle — otherwise we'd mis-mark a mid-build tool as completed. 2min caps
+// the worst-case stuck wait; with SSE-reconnect reconcile + the manual
+// reset hatch, longer waits are no longer necessary and hurt UX.
+const IDLE_FALLBACK_MAX_MS = 2 * 60 * 1000;
 const idleFallbackTimers = new Map<string, ReturnType<typeof setTimeout>>();
 const idleFallbackFirstArmed = new Map<string, number>();
 const CONNECTION_LOST_GRACE_MS = 3000;
@@ -505,6 +507,9 @@ ge.on("connection.reconnected", () => {
     activation.connectionState.value = "ready";
     activation.errorMessage.value = "";
   }
+  // 重连窗口可能丢失 session.status=idle(假结束主要成因):用后端权威状态
+  // 覆盖前端推断。best-effort,失败静默,不阻塞重连恢复。
+  void reconcileSessionStatus();
 });
 
 // Pull the persisted session list from the backend so previously-created
@@ -553,6 +558,56 @@ const isSessionBusy = computed(() => sessionStatus.isBusy.value || hasActiveTool
 // Bind once to the global SSE bus so we capture every session's status event
 // (including sub-agent sessions whose sessionID differs from the active one).
 sessionStatus.bindGlobal(ge);
+
+/**
+ * SSE 重连后用后端权威状态 reconcile 前端 statusBySession。
+ *
+ * 触发点:connection.reconnected 事件。重连窗口期间若后端发了 session.status=idle
+ * 但事件丢失,前端会永久卡 busy(假结束)。这里向 backend 拉权威状态覆盖。
+ *
+ * 数据源优先级:
+ *  1. getSessionStatusMap()(OpenCode/Zero 守护进程,返回所有会话状态映射)
+ *  2. getSession()(CLI bridge,返回单个 BridgeSession 含 status 字段)
+ *
+ * 状态映射:backend "busy"→markBusy;"idle"/"error"→markIdle + 清工具部分
+ * (前端无 "error" 类型,"error" 按 idle 处理,让用户能继续操作)。
+ *
+ * best-effort:任何失败静默,不影响重连恢复。
+ */
+async function reconcileSessionStatus(): Promise<void> {
+  try {
+    const sid = selectedSessionId.value;
+    if (!sid) return;
+    const adapter = getActiveBackendAdapter();
+    const dir = activeDirectory.value;
+
+    if (adapter.getSessionStatusMap) {
+      const map = (await adapter.getSessionStatusMap(dir)) as Record<string, unknown> | undefined;
+      const entry = map?.[sid];
+      if (entry != null) {
+        applyReconciledStatus(sid, entry);
+        return;
+      }
+    }
+
+    if (adapter.getSession) {
+      const session = (await adapter.getSession(sid, dir)) as { status?: string } | undefined;
+      if (session?.status) applyReconciledStatus(sid, session.status);
+    }
+  } catch {
+    // best-effort:reconcile 失败不阻塞重连恢复
+  }
+}
+
+function applyReconciledStatus(sessionId: string, raw: unknown): void {
+  const type = typeof raw === "string" ? raw : (raw as { type?: string })?.type;
+  if (type === "busy") {
+    sessionStatus.markBusy(sessionId);
+  } else if (type === "idle" || type === "error") {
+    sessionStatus.markIdle(sessionId);
+    msgStore.markActiveToolPartsCompleted(sessionId);
+  }
+}
 const pendingDiffRefresh = new Map<string, number>();
 let pendingWorkspaceDiffRefresh: number | undefined;
 

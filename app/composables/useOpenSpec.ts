@@ -56,7 +56,23 @@ export type GateProgressEvent = {
 
 export type RunGatesOptions = {
   onGateUpdate?: (event: GateProgressEvent) => void;
+  /** 来自 contract.verify 的命令清单；提供则覆盖默认 npm 三件套 */
+  verifyCommands?: { command: string; description?: string }[];
 };
+
+/**
+ * 从命令文本启发式推断 gate layer。
+ * contract.verify 里可能写 `cd frontend && npm run lint`、`pytest`、`latexmk` 等，
+ * 用此函数把它们归到 UI 的 spec/lint/test/build 四类里。
+ */
+export function inferGateLayer(command: string): GateLayer {
+  const c = command.toLowerCase();
+  if (/(^|[\s/&])lint\b|eslint|oxlint|biome\s+check|ruff\b|flake8|pylint/.test(c)) return "lint";
+  if (/(^|[\s/&])test\b|pytest|jest\b|vitest|cargo\s+test|go\s+test/.test(c)) return "test";
+  if (/(^|[\s/&])build\b|vite\s+build|tsc\b|cargo\s+build|go\s+build|latexmk|\bmake\b/.test(c))
+    return "build";
+  return "build";
+}
 
 export type ArchiveProgressStep = "check" | "command" | "refresh" | "done" | "failed";
 
@@ -477,7 +493,11 @@ async function runGates(
   gates.push(specGate);
   options.onGateUpdate?.({ layer: "spec", command: specCommand, status: "done", result: specGate });
 
-  for (const g of DEFAULT_GATES) {
+  const userGates: { layer: GateLayer; command: string }[] = options.verifyCommands?.length
+    ? options.verifyCommands.map((v) => ({ layer: inferGateLayer(v.command), command: v.command }))
+    : DEFAULT_GATES;
+
+  for (const g of userGates) {
     options.onGateUpdate?.({ ...g, status: "running" });
     const r = isElectron() ? await runProjectGate(root, g.command) : null;
     const gate: GateResult = {

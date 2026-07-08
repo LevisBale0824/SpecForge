@@ -189,6 +189,8 @@ export default {
     start: "开始",
     retry: "重试",
     next: "下一步",
+    resetSession: "会话状态异常?强制恢复",
+    resetSessionHint: "后端可能漏发了会话空闲信号,导致发送被阻塞。点击强制将会话状态对齐为空闲。",
     intro: {
       kicker: "Spec 探索",
       title: "从需求到上线的结构化工作流",
@@ -313,6 +315,8 @@ export default {
         requirementsUncovered: "验收点未覆盖:{items}(无对应 completed task)",
         scenariosUncovered:
           "{requirement} 的 scenario 未覆盖:{items}(须有 completed task 显式绑定 - Scenario:)",
+        scenariosUncoveredSummary:
+          "{count} 个验收点的 scenario 未覆盖(共漏 {total} 个):{items} —— 详情见 Apply 阶段 contract-card",
       },
       gate: {
         exploreReview: {
