@@ -7,7 +7,6 @@ import { useAutoScroller, type ScrollMode } from "../composables/useAutoScroller
 import { useDisplayNames } from "../composables/useDisplayNames";
 import { useBackend } from "../composables/useBackend";
 import { useI18n } from "vue-i18n";
-import { formatCost } from "../utils/tokenStats";
 
 defineEmits<{
   "navigate-session": [sessionId: string];
@@ -92,20 +91,22 @@ const currentSessionId = computed(() => {
 
 const sessionStats = computed(() => msgStore.getSessionUsageStats(currentSessionId.value).value);
 
-const assistantMessageCount = computed(
-  () => allMessages.value.filter((m) => m.role === "assistant").length,
-);
+const segmentTotals = computed(() => {
+  const bars = sessionStats.value.bars;
+  let input = 0;
+  let output = 0;
+  let reasoning = 0;
+  let cache = 0;
+  for (const b of bars) {
+    input += b.segments.input;
+    output += b.segments.output;
+    reasoning += b.segments.reasoning;
+    cache += b.segments.cache;
+  }
+  return { input, output, reasoning, cache };
+});
 
-const showBasedOnN = computed(
-  () =>
-    sessionStats.value.countedMessages > 0 &&
-    sessionStats.value.countedMessages < assistantMessageCount.value,
-);
-
-const barMaxBars = ref(20);
-function onBarCountChange(n: number) {
-  barMaxBars.value = n;
-}
+const tokenPanelCollapsed = ref(false);
 
 const containerEl = ref<HTMLElement>();
 const scrollMode = ref<ScrollMode>("follow");
@@ -213,39 +214,134 @@ async function copyMessage(msgId: string) {
   <div class="relative flex min-h-0 flex-1">
     <div
       ref="containerEl"
-      class="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-5 py-5 md:px-10 lg:px-14 [overscroll-behavior:contain] [overflow-anchor:none]"
+      class="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-5 pb-5 md:px-10 lg:px-14 [overscroll-behavior:contain] [overflow-anchor:none]"
     >
-      <!-- Token usage sticky header -->
+      <!-- Token usage sticky header (collapsible) -->
       <div
-        v-if="currentSessionId"
-        class="sticky top-0 z-10 -mx-5 mb-3 border-b border-surface-800/80 bg-surface-950/95 px-5 py-2 backdrop-blur md:-mx-10 md:px-10 lg:-mx-14 lg:px-14"
+        class="sticky top-0 z-10 -mx-5 mb-3 border-b border-surface-800/80 bg-surface-950/95 px-5 backdrop-blur transition-[padding] duration-200 md:-mx-10 md:px-10 lg:-mx-14 lg:px-14"
+        :class="tokenPanelCollapsed ? 'py-1.5' : 'py-3'"
       >
-        <div class="flex items-center gap-3">
-          <div class="flex flex-shrink-0 flex-col gap-0.5">
-            <span class="text-[10px] text-surface-600">{{
-              t("chat.tokenUsage.sessionTotal")
-            }}</span>
+        <!-- Collapsed: single compact line -->
+        <button
+          v-if="tokenPanelCollapsed"
+          type="button"
+          class="flex w-full items-center justify-between"
+          @click="tokenPanelCollapsed = false"
+        >
+          <div class="flex items-center gap-2">
+            <span class="font-mono text-sm font-bold tabular-nums text-surface-100">
+              {{ sessionStats.totalTokens.toLocaleString() }}
+            </span>
+            <span class="text-[10px] text-surface-600">{{ t("chat.tokenUsage.tokens") }}</span>
+          </div>
+          <div class="flex items-center gap-3 font-mono text-[10px] tabular-nums text-surface-600">
+            <span class="flex items-center gap-1">
+              <span class="seg-dot seg-input" />
+              {{ segmentTotals.input.toLocaleString() }}
+            </span>
+            <span class="flex items-center gap-1">
+              <span class="seg-dot seg-output" />
+              {{ segmentTotals.output.toLocaleString() }}
+            </span>
+            <span class="flex items-center gap-1">
+              <span class="seg-dot seg-reasoning" />
+              {{ segmentTotals.reasoning.toLocaleString() }}
+            </span>
+            <span class="flex items-center gap-1">
+              <span class="seg-dot seg-cache" />
+              {{ segmentTotals.cache.toLocaleString() }}
+            </span>
+            <svg
+              class="text-surface-600 transition-transform"
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <polyline points="9 18 15 12 9 6" />
+            </svg>
+          </div>
+        </button>
+
+        <!-- Expanded: full panel -->
+        <div v-else class="flex items-center gap-5">
+          <!-- Bar chart -->
+          <div class="min-w-0 flex-1">
+            <TokenBarChart :bars="sessionStats.bars" />
+          </div>
+
+          <!-- Divider -->
+          <div class="h-12 w-px flex-shrink-0 bg-surface-800" />
+
+          <!-- Stats panel (right) -->
+          <div class="flex flex-shrink-0 flex-col items-end gap-1.5">
+            <!-- Row 1: total + collapse toggle -->
             <div class="flex items-baseline gap-2">
-              <span class="font-mono text-sm font-semibold tabular-nums text-surface-200">
+              <span class="text-xs font-medium text-surface-500">{{
+                t("chat.tokenUsage.sessionTotal")
+              }}</span>
+              <span class="font-mono text-xl font-bold leading-none tabular-nums text-surface-50">
                 {{ sessionStats.totalTokens.toLocaleString() }}
               </span>
-              <span
-                v-if="sessionStats.totalCost > 0"
-                class="font-mono text-[11px] tabular-nums text-accent-amber/80"
+              <span class="text-[10px] text-surface-600">{{ t("chat.tokenUsage.tokens") }}</span>
+              <button
+                type="button"
+                class="ml-1 flex items-center text-surface-600 transition-colors hover:text-surface-400"
+                :title="t('chat.tokenUsage.collapse')"
+                @click="tokenPanelCollapsed = true"
               >
-                {{ formatCost(sessionStats.totalCost) }}
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <polyline points="6 9 12 15 18 9" />
+                </svg>
+              </button>
+            </div>
+            <!-- Row 2: input + output -->
+            <div class="flex items-center gap-4 font-mono text-xs tabular-nums leading-none">
+              <span class="flex items-center gap-1.5">
+                <span class="seg-dot seg-input" />
+                <span class="text-surface-500">{{ t("chat.tokenUsage.input") }}</span>
+                <span class="seg-val seg-input-val">{{
+                  segmentTotals.input.toLocaleString()
+                }}</span>
+              </span>
+              <span class="flex items-center gap-1.5">
+                <span class="seg-dot seg-output" />
+                <span class="text-surface-500">{{ t("chat.tokenUsage.output") }}</span>
+                <span class="seg-val seg-output-val">{{
+                  segmentTotals.output.toLocaleString()
+                }}</span>
               </span>
             </div>
-          </div>
-          <div v-if="showBasedOnN" class="flex-shrink-0 text-[9px] text-surface-600">
-            {{ t("chat.tokenUsage.basedOnN", { n: sessionStats.countedMessages }) }}
-          </div>
-          <div class="min-w-0 flex-1">
-            <TokenBarChart
-              :bars="sessionStats.bars"
-              :max-bars="barMaxBars"
-              @update:max-bars="onBarCountChange"
-            />
+            <!-- Row 3: reasoning + cache -->
+            <div class="flex items-center gap-4 font-mono text-xs tabular-nums leading-none">
+              <span class="flex items-center gap-1.5">
+                <span class="seg-dot seg-reasoning" />
+                <span class="text-surface-500">{{ t("chat.tokenUsage.reasoning") }}</span>
+                <span class="seg-val seg-reasoning-val">{{
+                  segmentTotals.reasoning.toLocaleString()
+                }}</span>
+              </span>
+              <span class="flex items-center gap-1.5">
+                <span class="seg-dot seg-cache" />
+                <span class="text-surface-500">{{ t("chat.tokenUsage.cache") }}</span>
+                <span class="seg-val seg-cache-val">{{
+                  segmentTotals.cache.toLocaleString()
+                }}</span>
+              </span>
+            </div>
           </div>
         </div>
       </div>
@@ -451,3 +547,52 @@ async function copyMessage(msgId: string) {
     </div>
   </div>
 </template>
+
+<style scoped>
+.seg-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 9999px;
+  flex-shrink: 0;
+}
+.seg-dot.seg-output {
+  background: color-mix(in srgb, var(--color-accent-emerald, #34d399) 95%, transparent);
+}
+.seg-dot.seg-reasoning {
+  background: color-mix(in srgb, var(--color-accent-indigo, #818cf8) 80%, transparent);
+}
+.seg-dot.seg-input {
+  background: color-mix(in srgb, var(--color-accent-cyan, #22d3ee) 65%, transparent);
+}
+.seg-dot.seg-cache {
+  background: color-mix(in srgb, var(--color-surface-600, #52525b) 45%, transparent);
+}
+.seg-val {
+  font-weight: 600;
+}
+.seg-output-val {
+  color: color-mix(
+    in srgb,
+    var(--color-accent-emerald, #34d399) 85%,
+    var(--color-surface-200, #e4e4e7)
+  );
+}
+.seg-reasoning-val {
+  color: color-mix(
+    in srgb,
+    var(--color-accent-indigo, #818cf8) 75%,
+    var(--color-surface-200, #e4e4e7)
+  );
+}
+.seg-input-val {
+  color: color-mix(
+    in srgb,
+    var(--color-accent-cyan, #22d3ee) 70%,
+    var(--color-surface-200, #e4e4e7)
+  );
+}
+.seg-cache-val {
+  color: var(--color-surface-400, #a1a1aa);
+}
+</style>

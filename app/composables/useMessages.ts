@@ -17,7 +17,7 @@ import type {
   MessageStatus,
   MessageUsage,
 } from "../types/message";
-import { calcTotalTokens, type SessionUsageStats } from "../utils/tokenStats";
+import { calcTotalTokens, calcSegments, type SessionUsageStats } from "../utils/tokenStats";
 import type {
   FileDiff,
   MessageInfo,
@@ -786,7 +786,12 @@ function getSessionUsageStats(sessionId: string): ComputedRef<SessionUsageStats>
       const tokens = calcTotalTokens(usage.tokens);
       totalTokens += tokens;
       totalCost += usage.cost ?? 0;
-      bars.push({ messageId: msg.id, tokens, cost: usage.cost });
+      bars.push({
+        messageId: msg.id,
+        tokens,
+        cost: usage.cost,
+        segments: calcSegments(usage.tokens),
+      });
     }
     return {
       totalTokens,

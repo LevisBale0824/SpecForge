@@ -5,7 +5,6 @@ import { stripSystemReminder, useMessages } from "../composables/useMessages";
 import { renderMarkdown, renderStreaming } from "../composables/useMarkdown";
 import { useArtifactModal } from "../composables/useArtifactModal";
 import { useSessions } from "../composables/useSessions";
-import { formatCost } from "../utils/tokenStats";
 import {
   extractCommand,
   extractEditDiffs,
@@ -76,10 +75,6 @@ const hasCache = computed(
     usage.value?.tokens.cache !== undefined &&
     ((usage.value.tokens.cache.read ?? 0) > 0 || (usage.value.tokens.cache.write ?? 0) > 0),
 );
-const expandedCache = ref(false);
-function toggleCache() {
-  expandedCache.value = !expandedCache.value;
-}
 
 // Resolve a human-readable title for a tool call based on its name and input.
 function resolveToolTitle(tool: string, state: ToolState): string | undefined {
@@ -789,28 +784,14 @@ function openTasksMd(changeId: string) {
         <span class="text-surface-600">⚡</span>
         {{ t("chat.tokenUsage.reasoning") }} {{ usage.tokens.reasoning.toLocaleString() }}
       </span>
-      <span v-if="usage.cost !== undefined" class="tabular-nums text-accent-amber/80">
-        💰 {{ t("chat.tokenUsage.cost") }} {{ formatCost(usage.cost) }}
+      <span v-if="hasCache && usage.tokens.cache" class="tabular-nums text-surface-600">
+        {{ t("chat.tokenUsage.cacheRead") }}
+        {{ usage.tokens.cache.read.toLocaleString() }}
       </span>
-      <button
-        v-if="hasCache"
-        type="button"
-        class="text-surface-600 transition-colors hover:text-surface-300"
-        @click="toggleCache"
-      >
-        {{ expandedCache ? "▾" : "▸" }}
-        {{ t("chat.tokenUsage.cacheToggle") }}
-      </button>
-      <template v-if="expandedCache && usage.tokens.cache">
-        <span class="tabular-nums text-surface-600">
-          {{ t("chat.tokenUsage.cacheRead") }}
-          {{ usage.tokens.cache.read.toLocaleString() }}
-        </span>
-        <span class="tabular-nums text-surface-600">
-          {{ t("chat.tokenUsage.cacheWrite") }}
-          {{ usage.tokens.cache.write.toLocaleString() }}
-        </span>
-      </template>
+      <span v-if="hasCache && usage.tokens.cache" class="tabular-nums text-surface-600">
+        {{ t("chat.tokenUsage.cacheWrite") }}
+        {{ usage.tokens.cache.write.toLocaleString() }}
+      </span>
     </div>
 
     <div v-if="showThinking" class="flex items-center gap-1.5 py-1.5">

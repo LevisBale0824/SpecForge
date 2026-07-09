@@ -1,30 +1,15 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { useI18n } from "vue-i18n";
-import type { UsageBar } from "../utils/tokenStats";
+import type { TokenSegments, UsageBar } from "../utils/tokenStats";
 
-const props = withDefaults(
-  defineProps<{
-    bars: UsageBar[];
-    maxBars?: number;
-    barCountOptions?: number[];
-  }>(),
-  {
-    maxBars: 20,
-    barCountOptions: () => [10, 20, 50],
-  },
-);
-
-const emit = defineEmits<{
-  "update:maxBars": [value: number];
+const props = defineProps<{
+  bars: UsageBar[];
 }>();
 
 const { t } = useI18n();
 
-const visibleBars = computed(() => {
-  const slice = props.bars.slice(-props.maxBars);
-  return slice;
-});
+const visibleBars = computed(() => props.bars.slice(-50));
 
 const maxToken = computed(() => {
   if (visibleBars.value.length === 0) return 1;
@@ -35,46 +20,57 @@ function barHeightPct(tokens: number): number {
   return Math.max((tokens / maxToken.value) * 100, 2);
 }
 
-function selectBarCount(n: number) {
-  emit("update:maxBars", n);
+const SEGMENT_KEYS: Array<{ key: keyof TokenSegments }> = [
+  { key: "cache" },
+  { key: "input" },
+  { key: "reasoning" },
+  { key: "output" },
+];
+
+function segmentsOf(bar: UsageBar) {
+  const seg = bar.segments;
+  return SEGMENT_KEYS.map((s) => ({
+    key: s.key,
+    heightPct: bar.tokens > 0 && seg ? (seg[s.key] / bar.tokens) * 100 : 0,
+  }));
+}
+
+function barTooltip(bar: UsageBar): string {
+  const s = bar.segments ?? { input: 0, output: 0, reasoning: 0, cache: 0 };
+  const parts = [`${bar.tokens.toLocaleString()} ${t("chat.tokenUsage.tokens")}`];
+  if (s.input > 0) parts.push(`${t("chat.tokenUsage.input")} ${s.input.toLocaleString()}`);
+  if (s.output > 0) parts.push(`${t("chat.tokenUsage.output")} ${s.output.toLocaleString()}`);
+  if (s.reasoning > 0)
+    parts.push(`${t("chat.tokenUsage.reasoning")} ${s.reasoning.toLocaleString()}`);
+  if (s.cache > 0) parts.push(`${t("chat.tokenUsage.cache")} ${s.cache.toLocaleString()}`);
+  return parts.join(" · ");
 }
 </script>
 
 <template>
-  <div class="flex w-full items-center gap-2 overflow-hidden">
-    <div class="flex min-w-0 flex-1 items-end gap-[2px]" style="height: 36px">
-      <template v-if="visibleBars.length === 0">
-        <span class="self-center text-[10px] text-surface-600">
-          {{ t("chat.tokenUsage.emptyState") }}
-        </span>
-      </template>
-      <template v-else>
-        <div
-          v-for="bar in visibleBars"
-          :key="bar.messageId"
-          class="token-bar"
-          :style="{ height: barHeightPct(bar.tokens) + '%' }"
-          :title="bar.tokens.toLocaleString() + ' tokens'"
-        />
-      </template>
-    </div>
-    <div class="flex flex-shrink-0 items-center gap-0.5 rounded border border-surface-700/60 p-0.5">
-      <button
-        v-for="opt in barCountOptions"
-        :key="opt"
-        type="button"
-        class="rounded px-1.5 py-0.5 text-[10px] font-medium tabular-nums transition-colors"
-        :class="
-          maxBars === opt
-            ? 'bg-accent-emerald/20 text-accent-emerald'
-            : 'text-surface-500 hover:text-surface-300'
-        "
-        :aria-pressed="maxBars === opt"
-        @click="selectBarCount(opt)"
+  <div class="flex w-full items-end gap-[3px] overflow-hidden" style="height: 48px">
+    <template v-if="visibleBars.length === 0">
+      <span class="self-center text-[10px] text-surface-600">
+        {{ t("chat.tokenUsage.emptyState") }}
+      </span>
+    </template>
+    <template v-else>
+      <div
+        v-for="bar in visibleBars"
+        :key="bar.messageId"
+        class="token-bar"
+        :style="{ height: barHeightPct(bar.tokens) + '%' }"
+        :title="barTooltip(bar)"
       >
-        {{ opt }}
-      </button>
-    </div>
+        <div
+          v-for="seg in segmentsOf(bar)"
+          :key="seg.key"
+          class="token-seg"
+          :class="'seg-' + seg.key"
+          :style="{ height: seg.heightPct + '%' }"
+        />
+      </div>
+    </template>
   </div>
 </template>
 
@@ -82,13 +78,33 @@ function selectBarCount(n: number) {
 .token-bar {
   flex: 1 1 0;
   min-width: 2px;
-  max-width: 12px;
+  max-width: 14px;
   border-radius: 2px 2px 0 0;
-  background: linear-gradient(
-    to top,
-    color-mix(in srgb, var(--color-accent-emerald, #34d399) 60%, transparent),
-    color-mix(in srgb, var(--color-accent-emerald, #34d399) 90%, transparent)
-  );
-  transition: height 0.15s ease-out;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  transition:
+    height 0.15s ease-out,
+    filter 0.15s ease-out;
+}
+.token-bar:hover {
+  filter: brightness(1.3);
+}
+.token-seg {
+  width: 100%;
+  flex-shrink: 0;
+}
+.seg-output {
+  background: color-mix(in srgb, var(--color-accent-emerald, #34d399) 95%, transparent);
+}
+.seg-reasoning {
+  background: color-mix(in srgb, var(--color-accent-indigo, #818cf8) 80%, transparent);
+}
+.seg-input {
+  background: color-mix(in srgb, var(--color-accent-cyan, #22d3ee) 65%, transparent);
+}
+.seg-cache {
+  background: color-mix(in srgb, var(--color-surface-600, #52525b) 45%, transparent);
 }
 </style>

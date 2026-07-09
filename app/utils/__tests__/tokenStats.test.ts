@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { calcTotalTokens, formatCost } from "../tokenStats";
+import { calcTotalTokens, calcSegments, formatCost } from "../tokenStats";
 import type { MessageTokens } from "../../types/message";
 
 function tokens(
@@ -50,6 +50,41 @@ describe("calcTotalTokens", () => {
       cache: { read: 1000, write: 0 },
     };
     expect(calcTotalTokens(t)).toBe(1200);
+  });
+});
+
+describe("calcSegments", () => {
+  it("segments input/output/reasoning without cache", () => {
+    expect(calcSegments(tokens(100, 200, 50))).toEqual({
+      input: 100,
+      output: 200,
+      reasoning: 50,
+      cache: 0,
+    });
+  });
+
+  it("merges cache read + write into single cache segment", () => {
+    expect(calcSegments(tokens(100, 200, 50, { read: 500, write: 30 }))).toEqual({
+      input: 100,
+      output: 200,
+      reasoning: 50,
+      cache: 530,
+    });
+  });
+
+  it("segment sum equals calcTotalTokens", () => {
+    const t = tokens(100, 200, 50, { read: 500, write: 30 });
+    const seg = calcSegments(t);
+    expect(seg.input + seg.output + seg.reasoning + seg.cache).toBe(calcTotalTokens(t));
+  });
+
+  it("returns all-zero segments for zero tokens", () => {
+    expect(calcSegments(tokens(0, 0, 0))).toEqual({
+      input: 0,
+      output: 0,
+      reasoning: 0,
+      cache: 0,
+    });
   });
 });
 
