@@ -769,7 +769,7 @@ function openTasksMd(changeId: string) {
     </template>
 
     <div
-      v-if="usage"
+      v-if="usage && !showThinking"
       class="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-surface-700/50 pt-1.5 text-[10px] text-surface-500"
     >
       <span class="tabular-nums">
