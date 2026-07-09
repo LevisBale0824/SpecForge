@@ -768,8 +768,21 @@ function openTasksMd(changeId: string) {
       </div>
     </template>
 
+    <div v-if="showThinking" class="flex items-center gap-1.5 py-1.5">
+      <span class="thinking-dot" />
+      <span class="thinking-dot" />
+      <span class="thinking-dot" />
+      <span class="ml-1 text-[11px] text-surface-400">
+        正在思考<span
+          v-if="usage && usage.tokens.reasoning > 0"
+          class="ml-1 tabular-nums text-surface-600"
+          >· ⚡ {{ usage.tokens.reasoning.toLocaleString() }}</span
+        >
+      </span>
+    </div>
+
     <div
-      v-if="usage && !showThinking"
+      v-if="usage"
       class="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-surface-700/50 pt-1.5 text-[10px] text-surface-500"
     >
       <span class="tabular-nums">
@@ -792,13 +805,6 @@ function openTasksMd(changeId: string) {
         {{ t("chat.tokenUsage.cacheWrite") }}
         {{ usage.tokens.cache.write.toLocaleString() }}
       </span>
-    </div>
-
-    <div v-if="showThinking" class="flex items-center gap-1.5 py-1.5">
-      <span class="thinking-dot" />
-      <span class="thinking-dot" />
-      <span class="thinking-dot" />
-      <span class="ml-1 text-[11px] text-surface-400">正在思考</span>
     </div>
 
     <div v-if="isError" class="mt-1 text-xs text-accent-rose">
