@@ -1,12 +1,11 @@
 <script setup lang="ts">
-import { ref, watch, onMounted, onUnmounted, nextTick } from "vue";
+import { ref, computed, watch, onMounted, onUnmounted, nextTick } from "vue";
 import TopBar from "./components/TopBar.vue";
 import SidePanel from "./components/SidePanel.vue";
 import StatusBar from "./components/StatusBar.vue";
 import InputPanel from "./components/InputPanel.vue";
 import FloatingWindow from "./components/FloatingWindow.vue";
 import SettingsPanel from "./components/SettingsPanel.vue";
-import HelpModal from "./components/HelpModal.vue";
 import ConsolePanel from "./components/ConsolePanel.vue";
 import DiffViewer from "./components/DiffViewer.vue";
 import FileViewer from "./components/FileViewer.vue";
@@ -47,8 +46,11 @@ const sidebarResize = useResizable({
   max: 600,
 });
 const sidePanelWidth = sidebarResize.size;
+const sidePanelCollapsed = ref(false);
+const effectiveSidePanelWidth = computed(() =>
+  sidePanelCollapsed.value ? 44 : sidePanelWidth.value,
+);
 const showSettings = ref(false);
-const showHelp = ref(false);
 const showConsole = ref(false);
 const showOpenSpecDialog = ref(false);
 const specDetailTarget = ref<SpecTarget | null>(null);
@@ -411,8 +413,7 @@ function submitManualPath() {
     <!-- Top Bar -->
     <TopBar
       :console-active="showConsole"
-      @toggle-settings="showSettings = !showSettings"
-      @toggle-help="showHelp = !showHelp"
+      :settings-active="showSettings"
       @toggle-console="toggleConsole"
       @open-folder="handleOpenFolder"
     />
@@ -421,7 +422,7 @@ function submitManualPath() {
     <div class="flex flex-1 overflow-hidden">
       <!-- Side Panel -->
       <SidePanel
-        :style="{ width: `${sidePanelWidth}px` }"
+        :style="{ width: `${effectiveSidePanelWidth}px` }"
         class="flex-shrink-0 border-r border-surface-800"
         :sessions="backend.sessions.value"
         :active-session-id="backend.selectedSessionId.value"
@@ -442,9 +443,11 @@ function submitManualPath() {
         @open-spec-detail="onOpenSpecDetail"
         @open-tier-picker="showTierPicker = true"
         @refresh-files="onRefreshFiles"
+        @collapse-change="sidePanelCollapsed = $event"
       />
       <!-- Sidebar drag handle -->
       <div
+        v-if="!sidePanelCollapsed"
         class="group relative w-1 flex-shrink-0 cursor-col-resize bg-surface-800/40 transition-colors hover:bg-accent-cyan/40"
         :class="sidebarResize.isDragging.value ? '!bg-accent-cyan/60' : ''"
         title="??????"
@@ -575,8 +578,6 @@ function submitManualPath() {
 
     <!-- Settings Modal -->
     <SettingsPanel v-model="showSettings" />
-    <!-- Help / quick-start carousel -->
-    <HelpModal v-model="showHelp" />
     <!-- Auto-updater global toast -->
     <UpdateToast />
     <!-- Auto-updater prompt dialog (available/progress/downloaded) -->

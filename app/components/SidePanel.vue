@@ -25,7 +25,25 @@ const openspec = useOpenSpec();
 const wf = useWorkflow();
 
 const sideTab = ref<"sessions" | "spec" | "files" | "changes">("sessions");
+const collapsed = ref(false);
 const fileSearch = ref("");
+
+type RailTab = "sessions" | "spec" | "files" | "changes";
+
+function selectTab(tab: RailTab): void {
+  if (sideTab.value === tab && !collapsed.value) {
+    collapsed.value = true;
+    emit("collapse-change", true);
+    return;
+  }
+  if (collapsed.value) {
+    collapsed.value = false;
+    emit("collapse-change", false);
+  }
+  sideTab.value = tab;
+  if (tab === "sessions") emit("open-chat");
+  else if (tab === "spec") openWorkflow(undefined, true);
+}
 
 const props = withDefaults(
   defineProps<{
@@ -59,6 +77,7 @@ const emit = defineEmits<{
   "open-spec-detail": [target: SpecTarget];
   "open-tier-picker": [];
   "refresh-files": [];
+  "collapse-change": [collapsed: boolean];
 }>();
 
 const displayWorkflowTitle = computed(() => {
@@ -187,17 +206,14 @@ function handleOpenDiff(diff: MessageDiffEntry) {
     </div>
 
     <template v-else>
-      <div class="side-content-shell">
+      <div class="side-content-shell" :class="{ collapsed }">
         <nav class="side-rail" aria-label="Sidebar navigation">
           <button
             type="button"
             class="rail-button"
             :class="{ active: sideTab === 'sessions' }"
             title="会话"
-            @click="
-              sideTab = 'sessions';
-              emit('open-chat');
-            "
+            @click="selectTab('sessions')"
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
               <path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z" />
@@ -209,10 +225,7 @@ function handleOpenDiff(diff: MessageDiffEntry) {
             class="rail-button spec"
             :class="{ active: sideTab === 'spec' }"
             title="Spec 探索"
-            @click="
-              sideTab = 'spec';
-              openWorkflow(undefined, true);
-            "
+            @click="selectTab('spec')"
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
               <path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.74V16h8v-1.26A7 7 0 0 0 12 2z" />
@@ -226,7 +239,7 @@ function handleOpenDiff(diff: MessageDiffEntry) {
             class="rail-button"
             :class="{ active: sideTab === 'files' }"
             title="文件"
-            @click="sideTab = 'files'"
+            @click="selectTab('files')"
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
               <path
@@ -239,7 +252,7 @@ function handleOpenDiff(diff: MessageDiffEntry) {
             class="rail-button"
             :class="{ active: sideTab === 'changes' }"
             title="修改（Diff）"
-            @click="sideTab = 'changes'"
+            @click="selectTab('changes')"
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
               <path d="M16 3h5v5M8 3H3v5M21 16v5h-5M3 16v5h5M10 7l4 10M14 7l-4 10" />
@@ -658,6 +671,14 @@ function handleOpenDiff(diff: MessageDiffEntry) {
   display: grid;
   grid-template-columns: 44px minmax(0, 1fr);
   border-top: 1px solid color-mix(in srgb, var(--color-surface-700, #334155) 24%, transparent);
+}
+
+.side-content-shell.collapsed {
+  grid-template-columns: 44px;
+}
+
+.side-content-shell.collapsed .side-pane-host {
+  display: none;
 }
 
 .side-rail {
