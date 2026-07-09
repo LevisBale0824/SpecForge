@@ -5,6 +5,7 @@ import { stripSystemReminder, useMessages } from "../composables/useMessages";
 import { renderMarkdown, renderStreaming } from "../composables/useMarkdown";
 import { useArtifactModal } from "../composables/useArtifactModal";
 import { useSessions } from "../composables/useSessions";
+import { formatCost } from "../utils/tokenStats";
 import {
   extractCommand,
   extractEditDiffs,
@@ -68,6 +69,17 @@ const isUser = computed(() => msgStore.get(props.messageId)?.role === "user");
 const isStreaming = computed(() => status.value === "streaming");
 const isError = computed(() => status.value === "error");
 const error = computed(() => msgStore.getError(props.messageId));
+
+const usage = computed(() => msgStore.getUsage(props.messageId));
+const hasCache = computed(
+  () =>
+    usage.value?.tokens.cache !== undefined &&
+    ((usage.value.tokens.cache.read ?? 0) > 0 || (usage.value.tokens.cache.write ?? 0) > 0),
+);
+const expandedCache = ref(false);
+function toggleCache() {
+  expandedCache.value = !expandedCache.value;
+}
 
 // Resolve a human-readable title for a tool call based on its name and input.
 function resolveToolTitle(tool: string, state: ToolState): string | undefined {
@@ -760,6 +772,46 @@ function openTasksMd(changeId: string) {
         </div>
       </div>
     </template>
+
+    <div
+      v-if="usage"
+      class="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-surface-700/50 pt-1.5 text-[10px] text-surface-500"
+    >
+      <span class="tabular-nums">
+        <span class="text-surface-600">↑</span>
+        {{ t("chat.tokenUsage.input") }} {{ usage.tokens.input.toLocaleString() }}
+      </span>
+      <span class="tabular-nums">
+        <span class="text-surface-600">↓</span>
+        {{ t("chat.tokenUsage.output") }} {{ usage.tokens.output.toLocaleString() }}
+      </span>
+      <span v-if="usage.tokens.reasoning > 0" class="tabular-nums">
+        <span class="text-surface-600">⚡</span>
+        {{ t("chat.tokenUsage.reasoning") }} {{ usage.tokens.reasoning.toLocaleString() }}
+      </span>
+      <span v-if="usage.cost !== undefined" class="tabular-nums text-accent-amber/80">
+        💰 {{ t("chat.tokenUsage.cost") }} {{ formatCost(usage.cost) }}
+      </span>
+      <button
+        v-if="hasCache"
+        type="button"
+        class="text-surface-600 transition-colors hover:text-surface-300"
+        @click="toggleCache"
+      >
+        {{ expandedCache ? "▾" : "▸" }}
+        {{ t("chat.tokenUsage.cacheToggle") }}
+      </button>
+      <template v-if="expandedCache && usage.tokens.cache">
+        <span class="tabular-nums text-surface-600">
+          {{ t("chat.tokenUsage.cacheRead") }}
+          {{ usage.tokens.cache.read.toLocaleString() }}
+        </span>
+        <span class="tabular-nums text-surface-600">
+          {{ t("chat.tokenUsage.cacheWrite") }}
+          {{ usage.tokens.cache.write.toLocaleString() }}
+        </span>
+      </template>
+    </div>
 
     <div v-if="showThinking" class="flex items-center gap-1.5 py-1.5">
       <span class="thinking-dot" />

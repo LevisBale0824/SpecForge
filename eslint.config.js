@@ -15,6 +15,7 @@ export default [
       "cli-bridge/**",
       "node_modules/**",
       "**/node_modules/**",
+      ".generated/**",
       "app/workers/render-worker.ts",
     ],
   },

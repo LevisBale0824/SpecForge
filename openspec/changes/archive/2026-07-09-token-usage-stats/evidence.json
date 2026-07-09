@@ -1,0 +1,39 @@
+{
+  "changeId": "token-usage-stats",
+  "verdict": "READY",
+  "gates": [
+    {
+      "layer": "spec",
+      "command": "openspec validate token-usage-stats --strict",
+      "exitCode": 0,
+      "passed": true,
+      "durationMs": 0,
+      "outputSnippet": "Change 'token-usage-stats' is valid"
+    },
+    {
+      "layer": "lint",
+      "command": "npm run lint",
+      "exitCode": 0,
+      "passed": true,
+      "durationMs": 3462,
+      "outputSnippet": "npm warn Unknown project config \"electron_mirror\". This will stop working in the next major version of npm.\nnpm warn Unknown project config \"electron_builder_binaries_mirror\". This will stop working in the next major version of npm.\n"
+    },
+    {
+      "layer": "test",
+      "command": "npm test",
+      "exitCode": 0,
+      "passed": true,
+      "durationMs": 2006,
+      "outputSnippet": "npm warn Unknown project config \"electron_mirror\". This will stop working in the next major version of npm.\nnpm warn Unknown project config \"electron_builder_binaries_mirror\". This will stop working in the next major version of npm.\n"
+    },
+    {
+      "layer": "build",
+      "command": "npm run build",
+      "exitCode": 0,
+      "passed": true,
+      "durationMs": 7406,
+      "outputSnippet": "npm warn Unknown project config \"electron_mirror\". This will stop working in the next major version of npm.\nnpm warn Unknown project config \"electron_builder_binaries_mirror\". This will stop working in the next major version of npm.\n\u001b[33m[plugin vite:reporter] \n(!) D:/code/SpecForge/app/utils/electronBridge.ts is dynamically imported by D:/code/SpecForge/app/components/SettingsPanel.vue?vue&type=script&setup=true&lang.ts, D:/code/SpecForge/app/composables/useBackend.ts, D:/code/SpecForge/app/com"
+    }
+  ],
+  "ranAt": 1783614777174
+}

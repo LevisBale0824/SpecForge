@@ -1,15 +1,21 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
 import MessageContent from "./MessageContent.vue";
+import TokenBarChart from "./TokenBarChart.vue";
 import { stripSystemReminder, useMessages } from "../composables/useMessages";
 import { useAutoScroller, type ScrollMode } from "../composables/useAutoScroller";
 import { useDisplayNames } from "../composables/useDisplayNames";
+import { useBackend } from "../composables/useBackend";
+import { useI18n } from "vue-i18n";
+import { formatCost } from "../utils/tokenStats";
 
 defineEmits<{
   "navigate-session": [sessionId: string];
 }>();
 
 const msgStore = useMessages();
+const backend = useBackend();
+const { t } = useI18n();
 const { agentName, userName } = useDisplayNames();
 
 // Public-dir asset URLs must be prefixed with BASE_URL so they resolve under
@@ -73,9 +79,33 @@ const allMessages = computed(() => {
     .map((message) => ({
       id: message.id,
       role: message.role,
+      sessionID: message.sessionID,
       created: message.time?.created,
     }));
 });
+
+const currentSessionId = computed(() => {
+  if (backend.selectedSessionId.value) return backend.selectedSessionId.value;
+  const firstAssistant = allMessages.value.find((m) => m.role === "assistant");
+  return firstAssistant?.sessionID ?? "";
+});
+
+const sessionStats = computed(() => msgStore.getSessionUsageStats(currentSessionId.value).value);
+
+const assistantMessageCount = computed(
+  () => allMessages.value.filter((m) => m.role === "assistant").length,
+);
+
+const showBasedOnN = computed(
+  () =>
+    sessionStats.value.countedMessages > 0 &&
+    sessionStats.value.countedMessages < assistantMessageCount.value,
+);
+
+const barMaxBars = ref(20);
+function onBarCountChange(n: number) {
+  barMaxBars.value = n;
+}
 
 const containerEl = ref<HTMLElement>();
 const scrollMode = ref<ScrollMode>("follow");
@@ -185,6 +215,41 @@ async function copyMessage(msgId: string) {
       ref="containerEl"
       class="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-5 py-5 md:px-10 lg:px-14 [overscroll-behavior:contain] [overflow-anchor:none]"
     >
+      <!-- Token usage sticky header -->
+      <div
+        v-if="currentSessionId"
+        class="sticky top-0 z-10 -mx-5 mb-3 border-b border-surface-800/80 bg-surface-950/95 px-5 py-2 backdrop-blur md:-mx-10 md:px-10 lg:-mx-14 lg:px-14"
+      >
+        <div class="flex items-center gap-3">
+          <div class="flex flex-shrink-0 flex-col gap-0.5">
+            <span class="text-[10px] text-surface-600">{{
+              t("chat.tokenUsage.sessionTotal")
+            }}</span>
+            <div class="flex items-baseline gap-2">
+              <span class="font-mono text-sm font-semibold tabular-nums text-surface-200">
+                {{ sessionStats.totalTokens.toLocaleString() }}
+              </span>
+              <span
+                v-if="sessionStats.totalCost > 0"
+                class="font-mono text-[11px] tabular-nums text-accent-amber/80"
+              >
+                {{ formatCost(sessionStats.totalCost) }}
+              </span>
+            </div>
+          </div>
+          <div v-if="showBasedOnN" class="flex-shrink-0 text-[9px] text-surface-600">
+            {{ t("chat.tokenUsage.basedOnN", { n: sessionStats.countedMessages }) }}
+          </div>
+          <div class="min-w-0 flex-1">
+            <TokenBarChart
+              :bars="sessionStats.bars"
+              :max-bars="barMaxBars"
+              @update:max-bars="onBarCountChange"
+            />
+          </div>
+        </div>
+      </div>
+
       <!-- Empty state -->
       <div
         v-if="allMessages.length === 0"

@@ -10,13 +10,14 @@
 // ---------------------------------------------------------------------------
 
 import { computed, readonly, shallowRef, triggerRef } from "vue";
-import type { ShallowRef } from "vue";
+import type { ComputedRef, ShallowRef } from "vue";
 import type {
   MessageAttachment,
   MessageDiffEntry,
   MessageStatus,
   MessageUsage,
 } from "../types/message";
+import { calcTotalTokens, type SessionUsageStats } from "../utils/tokenStats";
 import type {
   FileDiff,
   MessageInfo,
@@ -773,6 +774,29 @@ function getUsage(id: string): MessageUsage | undefined {
   return normalizeUsage(get(id));
 }
 
+function getSessionUsageStats(sessionId: string): ComputedRef<SessionUsageStats> {
+  return computed(() => {
+    const assistants = list().filter((m) => m.sessionID === sessionId && m.role === "assistant");
+    let totalTokens = 0;
+    let totalCost = 0;
+    const bars: SessionUsageStats["bars"] = [];
+    for (const msg of assistants) {
+      const usage = getUsage(msg.id);
+      if (!usage) continue;
+      const tokens = calcTotalTokens(usage.tokens);
+      totalTokens += tokens;
+      totalCost += usage.cost ?? 0;
+      bars.push({ messageId: msg.id, tokens, cost: usage.cost });
+    }
+    return {
+      totalTokens,
+      totalCost,
+      countedMessages: bars.length,
+      bars,
+    };
+  });
+}
+
 function getStatus(id: string): MessageStatus {
   return resolveStatus(get(id));
 }
@@ -1111,6 +1135,7 @@ export function useMessages() {
     getTextContent,
     getImageAttachments,
     getUsage,
+    getSessionUsageStats,
     getStatus,
     getError,
     isDisplayable,
