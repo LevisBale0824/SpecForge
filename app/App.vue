@@ -2,6 +2,7 @@
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from "vue";
 import TopBar from "./components/TopBar.vue";
 import SidePanel from "./components/SidePanel.vue";
+import SpecDrawer from "./components/SpecDrawer.vue";
 import StatusBar from "./components/StatusBar.vue";
 import InputPanel from "./components/InputPanel.vue";
 import FloatingWindow from "./components/FloatingWindow.vue";
@@ -21,6 +22,7 @@ import { useI18n } from "vue-i18n";
 import { useFloatingWindows } from "./composables/useFloatingWindows";
 import { useProject } from "./composables/useProject";
 import { useBackend } from "./composables/useBackend";
+import { useMessages } from "./composables/useMessages";
 import { computeHiddenStageSessions } from "./utils/stageTitleEncoding";
 import { useOpenSpec } from "./composables/useOpenSpec";
 import { useStageSessions } from "./composables/useStageSessions";
@@ -52,6 +54,7 @@ const effectiveSidePanelWidth = computed(() =>
 );
 const showSettings = ref(false);
 const showConsole = ref(false);
+const showSpecDrawer = ref(false);
 const showOpenSpecDialog = ref(false);
 const specDetailTarget = ref<SpecTarget | null>(null);
 const showTierPicker = ref(false);
@@ -88,14 +91,16 @@ const activeFilePath = ref<string | null>(null);
 // restores it instead of surfacing the workflow's stage session (crosstalk).
 const lastChatSessionId = ref("");
 
-// Auto-close the diff viewer when the opened file is no longer in the
-// workspace diffs (e.g. user deleted or reverted it externally). Only
-// triggers when workspaceDiffs is non-empty so session-originated diffs
-// (opened when there are no workspace changes) are left alone.
+const msgStore = useMessages();
+
 watch(
-  () => backend.workspaceDiffs.value,
-  (diffs) => {
-    if (!activeDiff.value || diffs.length === 0) return;
+  () => msgStore.contentVersion.value,
+  () => {
+    if (!activeDiff.value) return;
+    const sessionId = backend.selectedSessionId.value;
+    if (!sessionId) return;
+    const diffs = msgStore.getSessionDiffs(sessionId);
+    if (!diffs) return;
     const stillExists = diffs.some((d) => d.file === activeDiff.value!.file);
     if (!stillExists) activeDiff.value = null;
   },
@@ -106,6 +111,13 @@ const openspec = useOpenSpec();
 const wf = useWorkflow();
 const stageSessions = useStageSessions();
 let unsubOpenFolder: (() => void) | null = null;
+
+watch(
+  () => project.state.directoryPath,
+  (newPath) => {
+    if (newPath) openspec.scheduleRefresh(100);
+  },
+);
 
 // On window focus / tab visibility: assume the user might have modified files
 // externally (rm/mv/CLI). Without a fs watcher, polling on focus is the
@@ -129,16 +141,29 @@ onMounted(() => {
   window.addEventListener("resize", updateExtent);
   window.addEventListener("focus", onFocusRefresh);
   document.addEventListener("visibilitychange", onVisibilityChange);
+  window.addEventListener("keydown", onKeyDown);
   unsubOpenFolder = onOpenFolder((dirPath) => {
     project.openDirectoryPath(dirPath);
     router.push({ name: "chat" });
   });
+  project.restoreLastSession();
 });
+
+function onKeyDown(e: KeyboardEvent) {
+  if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === "s") {
+    e.preventDefault();
+    showSpecDrawer.value = !showSpecDrawer.value;
+  }
+  if (e.key === "Escape" && showSpecDrawer.value) {
+    showSpecDrawer.value = false;
+  }
+}
 
 onUnmounted(() => {
   window.removeEventListener("resize", updateExtent);
   window.removeEventListener("focus", onFocusRefresh);
   document.removeEventListener("visibilitychange", onVisibilityChange);
+  window.removeEventListener("keydown", onKeyDown);
   unsubOpenFolder?.();
 });
 
@@ -150,26 +175,25 @@ function onWindowClose(key: string) {
   fw.close(key);
 }
 
-function onSelectSession(sessionId: string) {
-  // Selecting a session means leaving the diff/file view, deactivate any
-  // active file tab and return to the chat.
+async function onSelectSession(sessionId: string) {
   activeDiff.value = null;
   activeFilePath.value = null;
   showOpenSpecDialog.value = false;
   specDetailTarget.value = null;
+
+  const session = backend.sessions.value.find((s) => s.id === sessionId);
+  if (session?.directory) {
+    const norm = (p: string) => p.trim().replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
+    const sessionDir = session.directory;
+    const currentDir = project.state.directoryPath;
+    if (currentDir && norm(currentDir) !== norm(sessionDir)) {
+      project.switchProject(sessionDir);
+      await nextTick();
+    }
+  }
+
   backend.selectSession(sessionId);
   router.push({ name: "chat" });
-}
-
-function onRefreshFiles(): void {
-  // Manual refresh from the sidebar Files header. Re-reads already-loaded
-  // directory nodes, invalidates the @ mention cache, and re-syncs the diff
-  // + OpenSpec panels. Mirrors onFocusRefresh but immediate (no debounce)
-  // and triggered on demand so the user sees new/deleted files at once.
-  project.scheduleRefreshTree(0);
-  openspec.scheduleRefresh(0);
-  backend.scheduleWorkspaceDiffRefresh(0);
-  backend.reloadFileIndex();
 }
 
 async function onDeleteSession(sessionId: string) {
@@ -324,23 +348,6 @@ function onPickTier(tier: WorkflowTier) {
   router.push({ name: "workflow" });
 }
 
-function onOpenDiff(diff: MessageDiffEntry) {
-  showOpenSpecDialog.value = false;
-  specDetailTarget.value = null;
-  activeDiff.value = diff;
-}
-
-function onOpenFile(path: string) {
-  showOpenSpecDialog.value = false;
-  specDetailTarget.value = null;
-  // Tab behavior: dedupe by path, push if new, always activate. Mirrors
-  // VSCode-style behavior: clicking a file in the explorer opens or focuses a tab.
-  if (!openFiles.value.includes(path)) {
-    openFiles.value = [...openFiles.value, path];
-  }
-  activeFilePath.value = path;
-}
-
 function onSelectFile(path: string) {
   activeFilePath.value = path;
 }
@@ -414,8 +421,8 @@ function submitManualPath() {
     <TopBar
       :console-active="showConsole"
       :settings-active="showSettings"
+      @toggle-settings="showSettings = !showSettings"
       @toggle-console="toggleConsole"
-      @open-folder="handleOpenFolder"
     />
 
     <!-- Main Content -->
@@ -426,7 +433,6 @@ function submitManualPath() {
         class="flex-shrink-0 border-r border-surface-800"
         :sessions="backend.sessions.value"
         :active-session-id="backend.selectedSessionId.value"
-        :workspace-diffs="backend.workspaceDiffs.value"
         :status-of="backend.statusOf"
         :spec-detail-target="specDetailTarget"
         @select-session="onSelectSession"
@@ -436,14 +442,10 @@ function submitManualPath() {
         @abort-session="onAbortSession"
         @new-session="onNewSession"
         @open-chat="onOpenChat"
-        @open-diff="onOpenDiff"
-        @open-file="onOpenFile"
         @open-folder="handleOpenFolder"
         @open-workflow="onOpenWorkflow"
         @open-spec-detail="onOpenSpecDetail"
         @open-tier-picker="showTierPicker = true"
-        @refresh-files="onRefreshFiles"
-        @collapse-change="sidePanelCollapsed = $event"
       />
       <!-- Sidebar drag handle -->
       <div
@@ -636,6 +638,31 @@ function submitManualPath() {
       />
     </div>
 
+    <!-- Spec Drawer FAB + Drawer -->
+    <Teleport to="body">
+      <button
+        v-if="project.state.directoryPath"
+        class="spec-fab"
+        title="Spec 探索 (Ctrl+Shift+S)"
+        @click="showSpecDrawer = true"
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+          <path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.74V16h8v-1.26A7 7 0 0 0 12 2z" />
+        </svg>
+      </button>
+    </Teleport>
+
+    <SpecDrawer
+      :open="showSpecDrawer"
+      :spec-detail-target="specDetailTarget"
+      @close="showSpecDrawer = false"
+      @open-workflow="onOpenWorkflow"
+      @open-spec-detail="onOpenSpecDetail"
+      @open-tier-picker="showTierPicker = true"
+      @delete-workflow-draft="onDeleteWorkflowDraft"
+      @delete-active-change="onDeleteActiveChange"
+    />
+
     <!-- Manual path dialog (browser fallback for Open Project) -->
     <Teleport to="body">
       <div
@@ -805,5 +832,39 @@ function submitManualPath() {
   flex: 1;
   min-height: 0;
   overflow: hidden;
+}
+
+.spec-fab {
+  position: fixed;
+  bottom: 56px;
+  right: 16px;
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--color-accent-violet, #a78bfa) 35%, transparent);
+  background: color-mix(
+    in srgb,
+    var(--color-accent-violet, #a78bfa) 14%,
+    var(--color-surface-900, #0f172a)
+  );
+  color: var(--color-accent-violet, #a78bfa);
+  cursor: pointer;
+  box-shadow: 0 4px 24px color-mix(in srgb, var(--color-accent-violet, #a78bfa) 20%, transparent);
+  transition: all 0.2s;
+  z-index: 8000;
+}
+
+.spec-fab:hover {
+  transform: scale(1.06);
+  box-shadow: 0 6px 32px color-mix(in srgb, var(--color-accent-violet, #a78bfa) 30%, transparent);
+}
+
+.spec-fab svg {
+  width: 20px;
+  height: 20px;
+  stroke-width: 1.8;
 }
 </style>

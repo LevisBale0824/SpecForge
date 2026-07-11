@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
-import { useProject } from "../composables/useProject";
 import { useBackend } from "../composables/useBackend";
 import { useUpdate } from "../composables/useUpdate";
 import {
@@ -14,24 +13,22 @@ import {
 } from "../utils/electronBridge";
 
 const { t } = useI18n();
-const project = useProject();
 const backend = useBackend();
 const update = useUpdate();
-const projectState = computed(() => project.state);
 const inElectron = isElectron();
+
+const props = withDefaults(
+  defineProps<{
+    consoleActive?: boolean;
+    settingsActive?: boolean;
+  }>(),
+  { consoleActive: false, settingsActive: false },
+);
 
 const emit = defineEmits<{
   "toggle-settings": [];
   "toggle-console": [];
-  "open-folder": [];
 }>();
-
-const props = defineProps<{
-  consoleActive?: boolean;
-  settingsActive?: boolean;
-}>();
-
-const projectName = computed(() => projectState.value.directoryName || "");
 
 // Show a subtle dot on the settings gear when an update is ready to install.
 const updateReady = computed(() => update.state.value.status === "downloaded");
@@ -61,10 +58,6 @@ onMounted(async () => {
 onUnmounted(() => {
   unsubMaximize?.();
 });
-
-function openFolder() {
-  emit("open-folder");
-}
 </script>
 
 <template>
@@ -108,29 +101,6 @@ function openFolder() {
         <circle cx="128" cy="128" r="8" fill="#0f172a" />
       </svg>
       <span class="text-sm font-semibold text-surface-200 flex-shrink-0">{{ t("app.title") }}</span>
-      <template v-if="projectName">
-        <span class="text-surface-600">/</span>
-        <button
-          class="flex items-center gap-1 text-xs text-surface-300 hover:text-accent-cyan transition-colors truncate min-w-0"
-          :title="projectState.directoryPath"
-          @click="openFolder"
-        >
-          <svg
-            class="w-3.5 h-3.5 flex-shrink-0"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"
-            />
-          </svg>
-          <span class="truncate">{{ projectName }}</span>
-        </button>
-      </template>
     </div>
 
     <!-- Right: Agent label + Settings + Window controls -->

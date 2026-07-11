@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watchEffect } from "vue";
+import { computed, ref, watch, watchEffect } from "vue";
 import { useI18n } from "vue-i18n";
 import { stripSystemReminder, useMessages } from "../composables/useMessages";
 import { renderMarkdown, renderStreaming } from "../composables/useMarkdown";
@@ -19,7 +19,7 @@ import {
   resolveReadWritePath,
   toolColor,
 } from "./ToolWindow/utils";
-import type { MessagePart, ToolState } from "../types/sse";
+import type { MessagePart, TextPart, ToolState } from "../types/sse";
 import type { MessageDiffEntry } from "../types/message";
 import DiffViewer from "./DiffViewer.vue";
 
@@ -189,6 +189,36 @@ function resolveSubSessions(blocks: DisplayBlock[]): void {
   }
 }
 
+const textHtmlCache = ref<Record<string, string>>({});
+let renderDebounce: ReturnType<typeof setTimeout> | null = null;
+
+watch(
+  () => {
+    return msgStore
+      .getParts(props.messageId)
+      .filter((p): p is TextPart => p.type === "text" && !p.synthetic)
+      .map((p) => `${p.id}:${p.text.length}`)
+      .join(",");
+  },
+  () => {
+    if (renderDebounce) clearTimeout(renderDebounce);
+    renderDebounce = setTimeout(
+      () => {
+        const cache: Record<string, string> = {};
+        for (const part of msgStore.getParts(props.messageId)) {
+          if (part.type !== "text" || part.synthetic) continue;
+          const text = stripSystemReminder(part.text);
+          if (!text.trim()) continue;
+          cache[part.id] = isStreaming.value ? renderStreaming(text) : renderMarkdown(text);
+        }
+        textHtmlCache.value = cache;
+      },
+      isStreaming.value ? 80 : 0,
+    );
+  },
+  { immediate: true, flush: "post" },
+);
+
 const inlineBlocks = computed<DisplayBlock[]>(() => {
   const blocks: DisplayBlock[] = [];
   for (const part of msgStore.getParts(props.messageId)) {
@@ -196,11 +226,7 @@ const inlineBlocks = computed<DisplayBlock[]>(() => {
       if (part.synthetic) continue;
       const text = stripSystemReminder(part.text);
       if (!text.trim()) continue;
-      const html = isUser.value
-        ? undefined
-        : isStreaming.value
-          ? renderStreaming(text)
-          : renderMarkdown(text);
+      const html = isUser.value ? undefined : textHtmlCache.value[part.id];
       blocks.push({ kind: "text", id: part.id, text, html });
     } else if (part.type === "reasoning") {
       const text = part.text?.trim();

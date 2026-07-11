@@ -61,7 +61,14 @@ function autoResize() {
   el.style.height = "auto";
   el.style.height = `${Math.min(el.scrollHeight, MAX_TEXTAREA_HEIGHT_PX)}px`;
 }
-watch(inputText, () => nextTick(autoResize));
+let resizeRaf: number | null = null;
+watch(inputText, () => {
+  if (resizeRaf !== null) cancelAnimationFrame(resizeRaf);
+  resizeRaf = requestAnimationFrame(() => {
+    resizeRaf = null;
+    autoResize();
+  });
+});
 
 // ── Slash command menu state ──────────────────────────────────────────────
 const showMenu = ref(false);
@@ -116,7 +123,14 @@ const filteredCount = computed(() => {
 const filteredFileCount = computed(() => {
   const q = fileQuery.value.trim().toLowerCase();
   if (!q) return Math.min(files.value.length, 100);
-  return files.value.filter((f) => f.toLowerCase().includes(q)).slice(0, 100).length;
+  let count = 0;
+  for (const f of files.value) {
+    if (f.toLowerCase().includes(q)) {
+      count++;
+      if (count >= 100) break;
+    }
+  }
+  return count;
 });
 
 // ── Input handling ────────────────────────────────────────────────────────
@@ -503,7 +517,7 @@ async function handleSend() {
          user can't write to. -->
     <div
       v-if="isChildSession"
-      class="max-w-5xl mx-auto rounded-lg border border-surface-700 bg-surface-800/60 px-4 py-4 flex items-center gap-3"
+      class="w-full max-w-3xl mx-auto rounded-lg border border-surface-700 bg-surface-800/60 px-4 py-4 flex items-center gap-3"
     >
       <svg
         class="w-5 h-5 shrink-0 text-surface-400"
@@ -544,12 +558,12 @@ async function handleSend() {
     </div>
 
     <template v-else>
-      <div class="flex items-center gap-2 max-w-5xl mx-auto mb-2.5">
+      <div class="flex items-center gap-2 w-full max-w-3xl mx-auto mb-2.5">
         <ModelPicker :session-id="pickerSessionId" />
         <AgentPicker :session-id="pickerSessionId" />
       </div>
       <div
-        class="relative flex items-stretch gap-2.5 max-w-5xl mx-auto"
+        class="relative flex items-stretch gap-2.5 w-full max-w-3xl mx-auto"
         @dragenter="onDragEnter"
         @dragover="onDragOver"
         @dragleave="onDragLeave"

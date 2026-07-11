@@ -2,8 +2,9 @@
 // Project Store — shared state for opened project directory
 // ---------------------------------------------------------------------------
 
-import { reactive } from "vue";
+import { reactive, ref } from "vue";
 import { isElectron, selectDirectory, readDirectory } from "../utils/electronBridge";
+import { storageGet, storageSet } from "../utils/storageKeys";
 import type { DirEntry } from "../types/electron";
 
 export type FileNode = {
@@ -75,6 +76,44 @@ const state = reactive<ProjectState>({
   loading: false,
   error: "",
 });
+
+const STORAGE_KEY = "projects:opened";
+const ACTIVE_KEY = "projects:active";
+
+const openedDirectories = ref<string[]>([]);
+
+function loadPersisted(): void {
+  const raw = storageGet(STORAGE_KEY);
+  if (raw) {
+    try {
+      const dirs = JSON.parse(raw);
+      if (Array.isArray(dirs)) {
+        openedDirectories.value = dirs.filter((d) => typeof d === "string");
+      }
+    } catch (e) {
+      void e;
+    }
+  }
+}
+
+function persistOpened(): void {
+  storageSet(STORAGE_KEY, JSON.stringify(openedDirectories.value));
+}
+
+function persistActive(path: string): void {
+  if (path) storageSet(ACTIVE_KEY, path);
+  else storageSet(ACTIVE_KEY, "");
+}
+
+loadPersisted();
+
+function normalizeDir(path: string): string {
+  return path.trim().replace(/\\/g, "/").replace(/\/+$/, "");
+}
+
+function dirName(path: string): string {
+  return path.split(/[/\\]/).pop() || path;
+}
 
 async function readDirectoryFromHandle(
   handle: FileSystemDirectoryHandle,
@@ -206,13 +245,18 @@ export function useProject() {
   }
 
   function openDirectoryPath(path: string) {
-    // In Electron, defer to the IPC-backed loader so the tree actually populates.
+    const normalized = normalizeDir(path);
+    if (!openedDirectories.value.includes(normalized)) {
+      openedDirectories.value = [...openedDirectories.value, normalized];
+      persistOpened();
+    }
+    persistActive(normalized);
     if (isElectron()) {
       void openDirectoryPathElectron(path);
       return;
     }
     state.rootHandle = null;
-    state.directoryName = path.split(/[/\\]/).pop() || path;
+    state.directoryName = dirName(path);
     state.directoryPath = path;
     state.root = null;
     state.loading = false;
@@ -265,6 +309,40 @@ export function useProject() {
     state.root = null;
     state.loading = false;
     state.error = "";
+    openedDirectories.value = [];
+    persistOpened();
+    persistActive("");
+  }
+
+  function closeProject(path: string) {
+    const normalized = normalizeDir(path);
+    openedDirectories.value = openedDirectories.value.filter((d) => d !== normalized);
+    persistOpened();
+    if (normalizeDir(state.directoryPath) === normalized) {
+      const next = openedDirectories.value[0];
+      if (next) {
+        openDirectoryPath(next);
+      } else {
+        clearProject();
+      }
+    }
+  }
+
+  function switchProject(path: string) {
+    if (normalizeDir(state.directoryPath) === normalizeDir(path)) return;
+    openDirectoryPath(path);
+  }
+
+  function restoreLastSession(): void {
+    if (openedDirectories.value.length === 0) return;
+    if (state.directoryPath) return;
+    let target: string | undefined;
+    const saved = storageGet(ACTIVE_KEY);
+    if (saved) target = saved;
+    if (!target || !openedDirectories.value.includes(target)) {
+      target = openedDirectories.value[0];
+    }
+    if (target) openDirectoryPath(target);
   }
 
   async function openDirectoryNative(): Promise<boolean> {
@@ -277,11 +355,15 @@ export function useProject() {
 
   return {
     state,
+    openedDirectories,
     openDirectoryHandle,
     openDirectoryNative,
     toggleNode,
     openDirectoryPath,
     clearProject,
+    closeProject,
+    switchProject,
+    restoreLastSession,
     refreshTree,
     scheduleRefreshTree,
   };

@@ -1,0 +1,1210 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SpecForge — 侧边栏重设计方案</title>
+<style>
+  :root {
+    --bg-950: #020617;
+    --bg-900: #0f172a;
+    --bg-800: #1e293b;
+    --bg-700: #334155;
+    --text-50: #f8fafc;
+    --text-100: #f1f5f9;
+    --text-200: #e2e8f0;
+    --text-300: #cbd5e1;
+    --text-400: #94a3b8;
+    --text-500: #64748b;
+    --text-600: #475569;
+    --cyan: #22d3ee;
+    --violet: #a78bfa;
+    --emerald: #34d399;
+    --amber: #f59e0b;
+    --rose: #f43f5e;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; overflow: hidden; }
+  body {
+    font-family: -apple-system, "Segoe UI", system-ui, sans-serif;
+    background: var(--bg-950);
+    color: var(--text-200);
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ── Top Switcher ── */
+  .switcher {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 10px;
+    background: var(--bg-900);
+    border-bottom: 1px solid var(--bg-800);
+  }
+  .switcher-title {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-400);
+    margin-right: 8px;
+    white-space: nowrap;
+  }
+  .switcher-btn {
+    padding: 5px 12px;
+    border: 1px solid var(--bg-700);
+    border-radius: 8px;
+    background: transparent;
+    color: var(--text-400);
+    font-size: 12px;
+    cursor: pointer;
+    transition: all .15s;
+  }
+  .switcher-btn:hover { color: var(--text-200); border-color: var(--text-600); }
+  .switcher-btn.active {
+    color: var(--cyan);
+    border-color: color-mix(in srgb, var(--cyan) 40%, transparent);
+    background: color-mix(in srgb, var(--cyan) 8%, transparent);
+  }
+
+  /* ── Prototype Container ── */
+  .proto {
+    flex: 1;
+    display: none;
+    min-height: 0;
+  }
+  .proto.active { display: flex; }
+
+  /* ── Shared Components ── */
+  .topbar {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    padding: 0 12px;
+    height: 36px;
+    background: var(--bg-900);
+    border-bottom: 1px solid var(--bg-800);
+    font-size: 12px;
+    gap: 8px;
+  }
+  .topbar-logo {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-weight: 600;
+    color: var(--text-200);
+  }
+  .topbar-logo svg { width: 16px; height: 16px; }
+  .topbar-agent {
+    margin-left: auto;
+    padding: 2px 8px;
+    border-radius: 6px;
+    background: color-mix(in srgb, var(--emerald) 10%, transparent);
+    color: var(--emerald);
+    font-size: 10px;
+    font-weight: 600;
+  }
+
+  /* ── Sidebar ── */
+  .sidebar {
+    width: 260px;
+    flex-shrink: 0;
+    background: linear-gradient(180deg, color-mix(in srgb, var(--bg-800) 60%, transparent), var(--bg-900));
+    border-right: 1px solid var(--bg-800);
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    padding: 6px;
+  }
+
+  .project-group {
+    margin-bottom: 2px;
+  }
+  .project-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 8px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background .12s;
+  }
+  .project-header:hover { background: color-mix(in srgb, var(--bg-800) 50%, transparent); }
+  .project-header.active {
+    background: color-mix(in srgb, var(--cyan) 6%, transparent);
+  }
+  .project-header.active .project-name { color: var(--text-50); }
+  .project-header:not(.active) { opacity: .65; }
+
+  .chevron {
+    width: 14px; height: 14px;
+    flex-shrink: 0;
+    color: var(--text-500);
+    transition: transform .15s;
+  }
+  .project-group.collapsed .chevron { transform: rotate(-90deg); }
+  .folder-icon {
+    width: 16px; height: 16px;
+    flex-shrink: 0;
+    color: var(--cyan);
+  }
+  .project-name {
+    flex: 1; min-width: 0;
+    font-size: 13px; font-weight: 600;
+    color: var(--text-100);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .project-actions {
+    display: flex; gap: 1px;
+    opacity: 0;
+    transition: opacity .15s;
+  }
+  .project-header:hover .project-actions { opacity: 1; }
+  .icon-btn {
+    width: 24px; height: 24px;
+    display: inline-flex; align-items: center; justify-content: center;
+    border: none; border-radius: 6px;
+    background: transparent; color: var(--text-500);
+    cursor: pointer; transition: all .12s;
+  }
+  .icon-btn:hover { color: var(--text-100); background: color-mix(in srgb, var(--bg-700) 40%, transparent); }
+  .icon-btn.danger:hover { color: var(--rose); background: color-mix(in srgb, var(--rose) 12%, transparent); }
+  .icon-btn svg { width: 14px; height: 14px; stroke-width: 2; }
+
+  .session-list { padding: 2px 0 6px; }
+  .session-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 22px 5px 30px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background .1s;
+  }
+  .session-item:hover { background: color-mix(in srgb, var(--bg-800) 40%, transparent); }
+  .session-item.selected {
+    background: color-mix(in srgb, var(--cyan) 10%, transparent);
+  }
+  .session-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    background: var(--text-600);
+  }
+  .session-dot.busy { background: var(--amber); box-shadow: 0 0 6px color-mix(in srgb, var(--amber) 60%, transparent); }
+  .session-dot.done { background: var(--emerald); }
+  .session-title {
+    flex: 1; min-width: 0;
+    font-size: 12px;
+    color: var(--text-300);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .session-item.selected .session-title { color: var(--cyan); }
+
+  /* ── Spec items ── */
+  .spec-divider {
+    height: 1px;
+    margin: 4px 12px;
+    background: color-mix(in srgb, var(--bg-700) 25%, transparent);
+  }
+  .spec-section { padding: 0 6px 6px; }
+  .spec-section-label {
+    padding: 6px 10px 4px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    color: var(--text-500);
+  }
+  .spec-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 8px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background .1s;
+  }
+  .spec-item:hover { background: color-mix(in srgb, var(--bg-800) 50%, transparent); }
+  .spec-marker {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .spec-marker.emerald { background: var(--emerald); }
+  .spec-marker.amber { background: var(--amber); }
+  .spec-marker.violet { background: var(--violet); }
+  .spec-id {
+    flex: 1; min-width: 0;
+    font-size: 12px;
+    color: var(--text-300);
+    font-family: "SF Mono", "Cascadia Code", monospace;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .spec-progress {
+    font-size: 10px;
+    color: var(--text-500);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* ── Add Project Button ── */
+  .add-project {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 8px;
+    margin-top: 4px;
+    border: 1px dashed color-mix(in srgb, var(--text-600) 40%, transparent);
+    border-radius: 8px;
+    background: transparent;
+    color: var(--text-500);
+    font-size: 12px;
+    cursor: pointer;
+    transition: all .12s;
+  }
+  .add-project:hover {
+    color: var(--cyan);
+    border-color: color-mix(in srgb, var(--cyan) 30%, transparent);
+    background: color-mix(in srgb, var(--cyan) 5%, transparent);
+  }
+  .add-project svg { width: 14px; height: 14px; stroke-width: 2; }
+
+  /* ── Main Content Area ── */
+  .main {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    background: var(--bg-950);
+  }
+  .chat-area {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .msg-bubble {
+    max-width: 70%;
+    padding: 10px 14px;
+    border-radius: 10px;
+    font-size: 13px;
+    line-height: 1.6;
+  }
+  .msg-bubble.assistant {
+    align-self: flex-start;
+    background: var(--bg-800);
+    color: var(--text-200);
+  }
+  .msg-bubble.user {
+    align-self: flex-end;
+    background: color-mix(in srgb, var(--cyan) 10%, transparent);
+    color: var(--text-100);
+    border: 1px solid color-mix(in srgb, var(--cyan) 15%, transparent);
+  }
+  .msg-label {
+    font-size: 10px;
+    font-weight: 700;
+    margin-bottom: 4px;
+  }
+  .msg-bubble.assistant .msg-label { color: var(--emerald); }
+  .msg-bubble.user .msg-label { color: var(--cyan); }
+
+  .input-bar {
+    flex-shrink: 0;
+    padding: 12px 24px;
+    border-top: 1px solid var(--bg-800);
+    background: var(--bg-900);
+  }
+  .input-mock {
+    padding: 10px 14px;
+    border: 1px solid var(--bg-700);
+    border-radius: 10px;
+    color: var(--text-500);
+    font-size: 13px;
+    background: var(--bg-800);
+  }
+
+  /* ── Right Panel (Option B) ── */
+  .right-panel {
+    width: 300px;
+    flex-shrink: 0;
+    background: var(--bg-900);
+    border-left: 1px solid var(--bg-800);
+    display: flex;
+    flex-direction: column;
+  }
+  .right-panel-tabs {
+    display: flex;
+    gap: 2px;
+    padding: 6px 8px 0;
+    border-bottom: 1px solid var(--bg-800);
+  }
+  .rp-tab {
+    padding: 6px 12px;
+    border: none;
+    border-bottom: 2px solid transparent;
+    background: transparent;
+    color: var(--text-500);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all .12s;
+  }
+  .rp-tab:hover { color: var(--text-200); }
+  .rp-tab.active {
+    color: var(--violet);
+    border-bottom-color: var(--violet);
+  }
+  .rp-tab.active.diff { color: var(--emerald); border-bottom-color: var(--emerald); }
+  .rp-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px;
+  }
+
+  /* ── Spec Entry Button (Option A) ── */
+  .spec-entry {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 10px;
+    margin: 4px 6px 6px;
+    border: 1px solid color-mix(in srgb, var(--violet) 20%, transparent);
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--violet) 5%, transparent);
+    color: var(--violet);
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all .12s;
+  }
+  .spec-entry:hover {
+    background: color-mix(in srgb, var(--violet) 12%, transparent);
+    border-color: color-mix(in srgb, var(--violet) 35%, transparent);
+  }
+  .spec-entry-icon { width: 14px; height: 14px; flex-shrink: 0; }
+  .spec-entry-label { flex: 1; }
+  .spec-entry-badge {
+    padding: 1px 7px;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--violet) 20%, transparent);
+    font-size: 10px;
+    font-weight: 700;
+  }
+  .spec-entry-arrow { color: var(--text-500); }
+
+  /* ── Collapsible Spec (Option C) ── */
+  .spec-collapse-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 10px 5px 22px;
+    cursor: pointer;
+    transition: background .1s;
+    border-radius: 6px;
+  }
+  .spec-collapse-header:hover { background: color-mix(in srgb, var(--bg-800) 40%, transparent); }
+  .spec-collapse-header .label {
+    flex: 1;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-400);
+  }
+  .spec-collapse-header .count {
+    padding: 1px 6px;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--violet) 15%, transparent);
+    color: var(--violet);
+    font-size: 10px;
+    font-weight: 700;
+  }
+  .spec-collapse-body { display: none; padding-left: 12px; }
+  .spec-collapse-body.open { display: block; }
+
+  /* ── Diff File List ── */
+  .diff-file {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 8px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background .1s;
+  }
+  .diff-file:hover { background: color-mix(in srgb, var(--bg-800) 50%, transparent); }
+  .diff-file-name {
+    flex: 1; min-width: 0;
+    font-size: 12px;
+    font-family: "SF Mono", "Cascadia Code", monospace;
+    color: var(--text-300);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .diff-add { color: var(--emerald); font-size: 10px; font-weight: 600; }
+  .diff-del { color: var(--rose); font-size: 10px; font-weight: 600; }
+
+  /* ── Workflow View (Option A main area) ── */
+  .workflow-view {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px 32px;
+  }
+  .workflow-header {
+    margin-bottom: 20px;
+  }
+  .workflow-title {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--text-50);
+    margin-bottom: 4px;
+  }
+  .workflow-subtitle {
+    font-size: 12px;
+    color: var(--text-500);
+  }
+  .workflow-card {
+    padding: 14px 16px;
+    border: 1px solid color-mix(in srgb, var(--bg-700) 50%, transparent);
+    border-radius: 12px;
+    background: color-mix(in srgb, var(--bg-800) 30%, transparent);
+    margin-bottom: 8px;
+    cursor: pointer;
+    transition: all .12s;
+  }
+  .workflow-card:hover {
+    border-color: color-mix(in srgb, var(--violet) 30%, transparent);
+    background: color-mix(in srgb, var(--violet) 5%, transparent);
+  }
+  .workflow-card.selected {
+    border-color: color-mix(in srgb, var(--violet) 50%, transparent);
+    background: color-mix(in srgb, var(--violet) 8%, transparent);
+  }
+  .workflow-card-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 6px;
+  }
+  .workflow-card-id {
+    font-size: 14px;
+    font-weight: 600;
+    font-family: "SF Mono", "Cascadia Code", monospace;
+    color: var(--text-100);
+  }
+  .workflow-card-progress {
+    margin-left: auto;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--emerald) 15%, transparent);
+    color: var(--emerald);
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .workflow-card-desc {
+    font-size: 12px;
+    color: var(--text-400);
+    line-height: 1.5;
+  }
+
+  /* ═══ D: Slide-in Drawer ═══ */
+  .fab-trigger {
+    position: absolute;
+    bottom: 16px;
+    right: 16px;
+    width: 44px; height: 44px;
+    border-radius: 14px;
+    border: 1px solid color-mix(in srgb, var(--violet) 35%, transparent);
+    background: color-mix(in srgb, var(--violet) 14%, var(--bg-900));
+    color: var(--violet);
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+    box-shadow: 0 4px 24px color-mix(in srgb, var(--violet) 20%, transparent);
+    transition: all .2s;
+    z-index: 50;
+  }
+  .fab-trigger:hover { transform: scale(1.06); box-shadow: 0 6px 32px color-mix(in srgb, var(--violet) 30%, transparent); }
+  .fab-trigger svg { width: 20px; height: 20px; }
+  .fab-badge {
+    position: absolute; top: -4px; right: -4px;
+    min-width: 18px; height: 18px;
+    border-radius: 999px;
+    background: var(--violet); color: var(--bg-950);
+    font-size: 10px; font-weight: 800;
+    display: flex; align-items: center; justify-content: center;
+    padding: 0 5px;
+  }
+  .drawer-overlay {
+    position: absolute; inset: 0;
+    background: rgba(2,6,17,.5);
+    backdrop-filter: blur(2px);
+    z-index: 90;
+    opacity: 0; pointer-events: none;
+    transition: opacity .2s;
+  }
+  .drawer-overlay.open { opacity: 1; pointer-events: auto; }
+  .spec-drawer {
+    position: absolute; top: 0; right: 0; bottom: 0;
+    width: 340px;
+    background: var(--bg-900);
+    border-left: 1px solid var(--bg-700);
+    z-index: 100;
+    transform: translateX(100%);
+    transition: transform .25s cubic-bezier(.32,.72,0,1);
+    display: flex; flex-direction: column;
+  }
+  .spec-drawer.open { transform: translateX(0); }
+  .drawer-header {
+    display: flex; align-items: center; gap: 8px;
+    padding: 14px 16px 10px;
+    border-bottom: 1px solid var(--bg-800);
+  }
+  .drawer-title { flex:1; font-size: 14px; font-weight: 700; color: var(--text-100); }
+  .drawer-body { flex: 1; overflow-y: auto; padding: 8px; }
+
+  /* ═══ E: Segmented Control ═══ */
+  .seg-control {
+    display: flex;
+    margin: 2px 8px 4px;
+    padding: 2px;
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--bg-800) 60%, transparent);
+    border: 1px solid color-mix(in srgb, var(--bg-700) 30%, transparent);
+  }
+  .seg-btn {
+    flex: 1;
+    padding: 4px 8px;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text-500);
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all .12s;
+    display: flex; align-items: center; justify-content: center; gap: 4px;
+  }
+  .seg-btn:hover { color: var(--text-200); }
+  .seg-btn.active {
+    background: color-mix(in srgb, var(--cyan) 12%, transparent);
+    color: var(--cyan);
+  }
+  .seg-btn.active.spec {
+    background: color-mix(in srgb, var(--violet) 12%, transparent);
+    color: var(--violet);
+  }
+  .seg-count {
+    padding: 0 5px;
+    border-radius: 999px;
+    background: color-mix(in srgb, currentColor 20%, transparent);
+    font-size: 9px; font-weight: 700;
+    min-width: 15px; text-align: center;
+  }
+  .seg-content { display: none; }
+  .seg-content.active { display: block; }
+
+  /* ═══ F: Inline Chip Bar ═══ */
+  .chip-bar {
+    display: flex; gap: 5px;
+    padding: 4px 10px 6px;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .chip-bar::-webkit-scrollbar { display: none; }
+  .spec-chip {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 3px 9px;
+    border-radius: 999px;
+    border: 1px solid color-mix(in srgb, var(--bg-700) 40%, transparent);
+    background: color-mix(in srgb, var(--bg-800) 40%, transparent);
+    color: var(--text-400);
+    font-size: 10px;
+    font-family: "SF Mono", "Cascadia Code", monospace;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: all .12s;
+    flex-shrink: 0;
+  }
+  .spec-chip:hover {
+    border-color: color-mix(in srgb, var(--violet) 30%, transparent);
+    color: var(--text-200);
+    background: color-mix(in srgb, var(--violet) 6%, transparent);
+  }
+  .spec-chip.active {
+    border-color: color-mix(in srgb, var(--emerald) 40%, transparent);
+    background: color-mix(in srgb, var(--emerald) 8%, transparent);
+    color: var(--emerald);
+  }
+  .spec-chip.archived {
+    border-color: color-mix(in srgb, var(--amber) 30%, transparent);
+    color: var(--amber);
+  }
+  .chip-dot {
+    width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0;
+    background: var(--emerald);
+  }
+  .spec-chip.archived .chip-dot { background: var(--amber); }
+  .chip-bar-label {
+    font-size: 9px; font-weight: 700; letter-spacing: .05em;
+    text-transform: uppercase; color: var(--text-600);
+    padding: 4px 0 0 10px;
+  }
+</style>
+</head>
+<body>
+
+<div class="switcher">
+  <span class="switcher-title">侧边栏重设计方案</span>
+  <button class="switcher-btn active" data-proto="A">方案 A：入口跳转</button>
+  <button class="switcher-btn" data-proto="B">方案 B：右侧面板</button>
+  <button class="switcher-btn" data-proto="C">方案 C：折叠分区</button>
+  <button class="switcher-btn" data-proto="D">方案 D：滑出抽屉</button>
+  <button class="switcher-btn" data-proto="E">方案 E：分段控件</button>
+  <button class="switcher-btn" data-proto="F">方案 F：标签条</button>
+</div>
+
+<!-- ═══════════════ Option A ═══════════════ -->
+<div class="proto active" id="proto-A">
+  <div class="sidebar">
+    <!-- Project 1 -->
+    <div class="project-group">
+      <div class="project-header active">
+        <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M6 9l6 6 6-6"/></svg>
+        <svg class="folder-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"/></svg>
+        <span class="project-name">SpecForge</span>
+        <div class="project-actions">
+          <button class="icon-btn" title="New session"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 5v14M5 12h14"/></svg></button>
+          <button class="icon-btn danger" title="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
+        </div>
+      </div>
+      <div class="session-list">
+        <div class="session-item selected">
+          <span class="session-dot busy"></span>
+          <span class="session-title">优化流式渲染性能</span>
+        </div>
+        <div class="session-item">
+          <span class="session-dot done"></span>
+          <span class="session-title">多项目侧边栏改造</span>
+        </div>
+        <div class="session-item">
+          <span class="session-dot"></span>
+          <span class="session-title">Web 模式自动连接</span>
+        </div>
+        <div class="session-item">
+          <span class="session-dot"></span>
+          <span class="session-title">Diff 数据源改为 session 级</span>
+        </div>
+      </div>
+      <!-- Spec entry button -->
+      <div class="spec-entry" onclick="alert('跳转 /workflow 路由')">
+        <svg class="spec-entry-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.74V16h8v-1.26A7 7 0 0 0 12 2z"/></svg>
+        <span class="spec-entry-label">Spec 探索</span>
+        <span class="spec-entry-badge">2</span>
+        <svg class="spec-entry-arrow" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M9 18l6-6-6-6"/></svg>
+      </div>
+    </div>
+
+    <!-- Project 2 -->
+    <div class="project-group collapsed">
+      <div class="project-header">
+        <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M6 9l6 6 6-6"/></svg>
+        <svg class="folder-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"/></svg>
+        <span class="project-name">my-blog</span>
+        <div class="project-actions">
+          <button class="icon-btn danger" title="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
+        </div>
+      </div>
+    </div>
+
+    <button class="add-project">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 5v14M5 12h14"/></svg>
+      <span>添加项目</span>
+    </button>
+  </div>
+
+  <div class="main">
+    <div class="topbar">
+      <div class="topbar-logo">
+        <svg viewBox="0 0 256 256"><circle cx="128" cy="128" r="112" fill="#22d3ee"/><path d="M96 80L48 128L96 176" stroke="white" stroke-width="24" fill="none"/><path d="M160 80L208 128L160 176" stroke="white" stroke-width="24" fill="none"/></svg>
+        SpecForge
+      </div>
+      <span class="topbar-agent">OpenCode</span>
+    </div>
+    <div class="chat-area">
+      <div class="msg-bubble user">
+        <div class="msg-label">User</div>
+        优化流式渲染的性能，目前每个 token 都会重新渲染 markdown
+      </div>
+      <div class="msg-bubble assistant">
+        <div class="msg-label">Agent</div>
+        方案：1. contentSignature O(n×m)→O(1)  2. renderStreaming 加 80ms debounce  3. 移除双重 delta 处理...
+      </div>
+    </div>
+    <div class="input-bar">
+      <div class="input-mock">输入消息或 @ 引用文件...</div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════ Option B ═══════════════ -->
+<div class="proto" id="proto-B">
+  <div class="sidebar">
+    <div class="project-group">
+      <div class="project-header active">
+        <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M6 9l6 6 6-6"/></svg>
+        <svg class="folder-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"/></svg>
+        <span class="project-name">SpecForge</span>
+        <div class="project-actions">
+          <button class="icon-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 5v14M5 12h14"/></svg></button>
+          <button class="icon-btn danger"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
+        </div>
+      </div>
+      <div class="session-list">
+        <div class="session-item selected">
+          <span class="session-dot busy"></span>
+          <span class="session-title">优化流式渲染性能</span>
+        </div>
+        <div class="session-item">
+          <span class="session-dot done"></span>
+          <span class="session-title">多项目侧边栏改造</span>
+        </div>
+        <div class="session-item">
+          <span class="session-dot"></span>
+          <span class="session-title">Web 模式自动连接</span>
+        </div>
+        <div class="session-item">
+          <span class="session-dot"></span>
+          <span class="session-title">Diff 数据源改为 session 级</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="project-group collapsed">
+      <div class="project-header">
+        <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M6 9l6 6 6-6"/></svg>
+        <svg class="folder-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"/></svg>
+        <span class="project-name">my-blog</span>
+      </div>
+    </div>
+
+    <button class="add-project">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 5v14M5 12h14"/></svg>
+      <span>添加项目</span>
+    </button>
+  </div>
+
+  <div class="main">
+    <div class="topbar">
+      <div class="topbar-logo">
+        <svg viewBox="0 0 256 256"><circle cx="128" cy="128" r="112" fill="#22d3ee"/><path d="M96 80L48 128L96 176" stroke="white" stroke-width="24" fill="none"/><path d="M160 80L208 128L160 176" stroke="white" stroke-width="24" fill="none"/></svg>
+        SpecForge
+      </div>
+      <span class="topbar-agent">OpenCode</span>
+    </div>
+    <div style="flex:1;display:flex;min-height:0;">
+      <div style="flex:1;display:flex;flex-direction:column;min-width:0;">
+        <div class="chat-area">
+          <div class="msg-bubble user">
+            <div class="msg-label">User</div>
+            优化流式渲染的性能
+          </div>
+          <div class="msg-bubble assistant">
+            <div class="msg-label">Agent</div>
+            已完成 contentVersion 替代 contentSignature，主线程占用降 80%+
+          </div>
+        </div>
+        <div class="input-bar">
+          <div class="input-mock">输入消息...</div>
+        </div>
+      </div>
+
+      <!-- Right Panel -->
+      <div class="right-panel">
+        <div class="right-panel-tabs">
+          <button class="rp-tab active" onclick="switchRpTab(this,'spec')">Spec 探索</button>
+          <button class="rp-tab" onclick="switchRpTab(this,'diff')">Diff</button>
+        </div>
+        <div class="rp-body" id="rp-spec">
+          <div class="spec-section-label">活跃探索</div>
+          <div class="spec-item" style="background:color-mix(in srgb, var(--violet) 8%, transparent); border-radius:6px;">
+            <span class="spec-marker emerald"></span>
+            <span class="spec-id">perf-streaming</span>
+            <span class="spec-progress">3/5</span>
+          </div>
+          <div class="spec-item">
+            <span class="spec-marker emerald"></span>
+            <span class="spec-id">multi-project</span>
+            <span class="spec-progress">5/7</span>
+          </div>
+          <div class="spec-section-label">已完成</div>
+          <div class="spec-item">
+            <span class="spec-marker amber"></span>
+            <span class="spec-id">web-autoconnect</span>
+          </div>
+          <div class="spec-section-label">现有能力</div>
+          <div class="spec-item">
+            <span class="spec-marker violet"></span>
+            <span class="spec-id">streaming-engine</span>
+            <span class="spec-progress">4 reqs</span>
+          </div>
+        </div>
+        <div class="rp-body" id="rp-diff" style="display:none;">
+          <div class="diff-file">
+            <span class="diff-file-name">app/composables/useMessages.ts</span>
+            <span class="diff-add">+42</span>
+            <span class="diff-del">-18</span>
+          </div>
+          <div class="diff-file">
+            <span class="diff-file-name">app/components/ChatView.vue</span>
+            <span class="diff-add">+12</span>
+            <span class="diff-del">-25</span>
+          </div>
+          <div class="diff-file">
+            <span class="diff-file-name">app/components/InputPanel.vue</span>
+            <span class="diff-add">+8</span>
+          </div>
+          <div class="diff-file">
+            <span class="diff-file-name">app/composables/useBackend.ts</span>
+            <span class="diff-add">+15</span>
+            <span class="diff-del">-30</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════ Option C ═══════════════ -->
+<div class="proto" id="proto-C">
+  <div class="sidebar">
+    <div class="project-group">
+      <div class="project-header active">
+        <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M6 9l6 6 6-6"/></svg>
+        <svg class="folder-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"/></svg>
+        <span class="project-name">SpecForge</span>
+        <div class="project-actions">
+          <button class="icon-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 5v14M5 12h14"/></svg></button>
+          <button class="icon-btn danger"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
+        </div>
+      </div>
+      <div class="session-list">
+        <div class="session-item selected">
+          <span class="session-dot busy"></span>
+          <span class="session-title">优化流式渲染性能</span>
+        </div>
+        <div class="session-item">
+          <span class="session-dot done"></span>
+          <span class="session-title">多项目侧边栏改造</span>
+        </div>
+        <div class="session-item">
+          <span class="session-dot"></span>
+          <span class="session-title">Web 模式自动连接</span>
+        </div>
+      </div>
+
+      <div class="spec-divider"></div>
+
+      <!-- Collapsed Spec -->
+      <div class="spec-collapse-header" onclick="this.nextElementSibling.classList.toggle('open')">
+        <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" style="width:12px;height:12px;"><path d="M6 9l6 6 6-6"/></svg>
+        <span class="label">Spec 探索</span>
+        <span class="count">2</span>
+      </div>
+      <div class="spec-collapse-body open">
+        <div class="spec-item" style="padding-left:34px;">
+          <span class="spec-marker emerald"></span>
+          <span class="spec-id">perf-streaming</span>
+          <span class="spec-progress">3/5</span>
+        </div>
+        <div class="spec-item" style="padding-left:34px;">
+          <span class="spec-marker emerald"></span>
+          <span class="spec-id">multi-project</span>
+          <span class="spec-progress">5/7</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="project-group collapsed">
+      <div class="project-header">
+        <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M6 9l6 6 6-6"/></svg>
+        <svg class="folder-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"/></svg>
+        <span class="project-name">my-blog</span>
+      </div>
+    </div>
+
+    <button class="add-project">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 5v14M5 12h14"/></svg>
+      <span>添加项目</span>
+    </button>
+  </div>
+
+  <div class="main">
+    <div class="topbar">
+      <div class="topbar-logo">
+        <svg viewBox="0 0 256 256"><circle cx="128" cy="128" r="112" fill="#22d3ee"/><path d="M96 80L48 128L96 176" stroke="white" stroke-width="24" fill="none"/><path d="M160 80L208 128L160 176" stroke="white" stroke-width="24" fill="none"/></svg>
+        SpecForge
+      </div>
+      <span class="topbar-agent">OpenCode</span>
+    </div>
+    <div class="chat-area">
+      <div class="msg-bubble user">
+        <div class="msg-label">User</div>
+        优化流式渲染的性能
+      </div>
+      <div class="msg-bubble assistant">
+        <div class="msg-label">Agent</div>
+        已完成 contentVersion 替代 contentSignature，每个 token 的计算从 O(n×m) 降为 O(1)...
+      </div>
+    </div>
+    <div class="input-bar">
+      <div class="input-mock">输入消息或 @ 引用文件...</div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════ Option D: Slide-in Drawer ═══════════════ -->
+<div class="proto" id="proto-D">
+  <div class="sidebar">
+    <div class="project-group">
+      <div class="project-header active">
+        <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M6 9l6 6 6-6"/></svg>
+        <svg class="folder-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"/></svg>
+        <span class="project-name">SpecForge</span>
+        <div class="project-actions">
+          <button class="icon-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 5v14M5 12h14"/></svg></button>
+          <button class="icon-btn danger"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
+        </div>
+      </div>
+      <div class="session-list">
+        <div class="session-item selected">
+          <span class="session-dot busy"></span>
+          <span class="session-title">优化流式渲染性能</span>
+        </div>
+        <div class="session-item"><span class="session-dot done"></span><span class="session-title">多项目侧边栏改造</span></div>
+        <div class="session-item"><span class="session-dot"></span><span class="session-title">Web 模式自动连接</span></div>
+        <div class="session-item"><span class="session-dot"></span><span class="session-title">Diff 改为 session 级</span></div>
+        <div class="session-item"><span class="session-dot"></span><span class="session-title">性能优化方案实施</span></div>
+      </div>
+    </div>
+    <div class="project-group collapsed">
+      <div class="project-header">
+        <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M6 9l6 6 6-6"/></svg>
+        <svg class="folder-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"/></svg>
+        <span class="project-name">my-blog</span>
+      </div>
+    </div>
+    <button class="add-project"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 5v14M5 12h14"/></svg><span>添加项目</span></button>
+  </div>
+  <div class="main" style="position:relative;">
+    <div class="topbar">
+      <div class="topbar-logo">
+        <svg viewBox="0 0 256 256"><circle cx="128" cy="128" r="112" fill="#22d3ee"/><path d="M96 80L48 128L96 176" stroke="white" stroke-width="24" fill="none"/><path d="M160 80L208 128L160 176" stroke="white" stroke-width="24" fill="none"/></svg>
+        SpecForge
+      </div>
+      <span class="topbar-agent">OpenCode</span>
+    </div>
+    <div class="chat-area">
+      <div class="msg-bubble user"><div class="msg-label">User</div>侧边栏现在很干净，Spec 探索在哪里？</div>
+      <div class="msg-bubble assistant"><div class="msg-label">Agent</div>右下角有 Spec 浮动按钮，点击弹出抽屉面板。也可用快捷键 Cmd+Shift+S 触发。</div>
+    </div>
+    <div class="input-bar"><div class="input-mock">输入消息...</div></div>
+    <!-- FAB trigger -->
+    <button class="fab-trigger" onclick="toggleDrawer()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.74V16h8v-1.26A7 7 0 0 0 12 2z"/></svg>
+      <span class="fab-badge">3</span>
+    </button>
+    <!-- Drawer overlay -->
+    <div class="drawer-overlay" id="drawer-overlay" onclick="toggleDrawer()"></div>
+    <!-- Drawer -->
+    <div class="spec-drawer" id="spec-drawer">
+      <div class="drawer-header">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--violet)"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.74V16h8v-1.26A7 7 0 0 0 12 2z"/></svg>
+        <span class="drawer-title">Spec 探索</span>
+        <button class="icon-btn" onclick="toggleDrawer()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
+      </div>
+      <div class="drawer-body">
+        <button class="spec-entry" style="margin-bottom:8px;width:100%;">
+          <svg class="spec-entry-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.5l1.9 5.6a4 4 0 0 0 2 2l5.6 1.9-5.6 1.9a4 4 0 0 0-2 2L12 21.5l-1.9-5.6a4 4 0 0 0-2-2L2.5 12l5.6-1.9a4 4 0 0 0 2-2L12 2.5z"/></svg>
+          <span>开始新的探索</span>
+        </button>
+        <div class="spec-section-label">活跃探索</div>
+        <div class="spec-item" style="background:color-mix(in srgb,var(--violet) 8%,transparent);border-radius:6px;"><span class="spec-marker emerald"></span><span class="spec-id">perf-streaming</span><span class="spec-progress">3/5</span></div>
+        <div class="spec-item"><span class="spec-marker emerald"></span><span class="spec-id">multi-project</span><span class="spec-progress">5/7</span></div>
+        <div class="spec-section-label">已完成</div>
+        <div class="spec-item"><span class="spec-marker amber">✓</span><span class="spec-id">web-autoconnect</span></div>
+        <div class="spec-section-label">现有能力</div>
+        <div class="spec-item"><span class="spec-marker violet">◆</span><span class="spec-id">streaming-engine</span><span class="spec-progress">4 reqs</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════ Option E: Segmented Control ═══════════════ -->
+<div class="proto" id="proto-E">
+  <div class="sidebar">
+    <div class="project-group">
+      <div class="project-header active">
+        <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M6 9l6 6 6-6"/></svg>
+        <svg class="folder-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"/></svg>
+        <span class="project-name">SpecForge</span>
+        <div class="project-actions">
+          <button class="icon-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 5v14M5 12h14"/></svg></button>
+          <button class="icon-btn danger"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
+        </div>
+      </div>
+      <!-- Segmented Control -->
+      <div class="seg-control">
+        <button class="seg-btn active" onclick="switchSeg(this,'E-sessions')">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"/></svg>
+          会话<span class="seg-count">4</span>
+        </button>
+        <button class="seg-btn spec" onclick="switchSeg(this,'E-spec')">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.74V16h8v-1.26A7 7 0 0 0 12 2z"/></svg>
+          Spec<span class="seg-count">3</span>
+        </button>
+      </div>
+      <!-- Sessions content -->
+      <div class="seg-content active" id="E-sessions">
+        <div class="session-list">
+          <div class="session-item selected"><span class="session-dot busy"></span><span class="session-title">优化流式渲染性能</span></div>
+          <div class="session-item"><span class="session-dot done"></span><span class="session-title">多项目侧边栏改造</span></div>
+          <div class="session-item"><span class="session-dot"></span><span class="session-title">Web 模式自动连接</span></div>
+          <div class="session-item"><span class="session-dot"></span><span class="session-title">Diff 改为 session 级</span></div>
+        </div>
+      </div>
+      <!-- Spec content -->
+      <div class="seg-content" id="E-spec">
+        <div style="padding:4px 6px;">
+          <button class="spec-entry" style="margin-bottom:6px;width:100%;box-sizing:border-box;">
+            <svg class="spec-entry-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.5l1.9 5.6a4 4 0 0 0 2 2l5.6 1.9-5.6 1.9a4 4 0 0 0-2 2L12 21.5l-1.9-5.6a4 4 0 0 0-2-2L2.5 12l5.6-1.9a4 4 0 0 0 2-2L12 2.5z"/></svg>
+            <span>开始新的探索</span>
+          </button>
+          <div class="spec-item"><span class="spec-marker emerald"></span><span class="spec-id">perf-streaming</span><span class="spec-progress">3/5</span></div>
+          <div class="spec-item"><span class="spec-marker emerald"></span><span class="spec-id">multi-project</span><span class="spec-progress">5/7</span></div>
+          <div class="spec-item"><span class="spec-marker amber">✓</span><span class="spec-id">web-autoconnect</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="project-group collapsed">
+      <div class="project-header">
+        <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M6 9l6 6 6-6"/></svg>
+        <svg class="folder-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"/></svg>
+        <span class="project-name">my-blog</span>
+      </div>
+    </div>
+    <button class="add-project"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 5v14M5 12h14"/></svg><span>添加项目</span></button>
+  </div>
+  <div class="main">
+    <div class="topbar">
+      <div class="topbar-logo">
+        <svg viewBox="0 0 256 256"><circle cx="128" cy="128" r="112" fill="#22d3ee"/><path d="M96 80L48 128L96 176" stroke="white" stroke-width="24" fill="none"/><path d="M160 80L208 128L160 176" stroke="white" stroke-width="24" fill="none"/></svg>
+        SpecForge
+      </div>
+      <span class="topbar-agent">OpenCode</span>
+    </div>
+    <div class="chat-area">
+      <div class="msg-bubble user"><div class="msg-label">User</div>每个项目下可以切换会话/Spec 视图</div>
+      <div class="msg-bubble assistant"><div class="msg-label">Agent</div>是的，分段控件让两种内容互斥显示，不抢占空间。</div>
+    </div>
+    <div class="input-bar"><div class="input-mock">输入消息...</div></div>
+  </div>
+</div>
+
+<!-- ═══════════════ Option F: Inline Chip Bar ═══════════════ -->
+<div class="proto" id="proto-F">
+  <div class="sidebar">
+    <div class="project-group">
+      <div class="project-header active">
+        <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M6 9l6 6 6-6"/></svg>
+        <svg class="folder-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"/></svg>
+        <span class="project-name">SpecForge</span>
+        <div class="project-actions">
+          <button class="icon-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 5v14M5 12h14"/></svg></button>
+          <button class="icon-btn danger"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
+        </div>
+      </div>
+      <div class="session-list">
+        <div class="session-item selected"><span class="session-dot busy"></span><span class="session-title">优化流式渲染性能</span></div>
+        <div class="session-item"><span class="session-dot done"></span><span class="session-title">多项目侧边栏改造</span></div>
+        <div class="session-item"><span class="session-dot"></span><span class="session-title">Web 模式自动连接</span></div>
+        <div class="session-item"><span class="session-dot"></span><span class="session-title">Diff 改为 session 级</span></div>
+      </div>
+      <!-- Chip bar -->
+      <div class="chip-bar-label">Spec 探索</div>
+      <div class="chip-bar">
+        <div class="spec-chip active"><span class="chip-dot"></span>perf-streaming 3/5</div>
+        <div class="spec-chip"><span class="chip-dot"></span>multi-project 5/7</div>
+        <div class="spec-chip archived"><span class="chip-dot"></span>web-autoconnect</div>
+      </div>
+    </div>
+    <div class="project-group collapsed">
+      <div class="project-header">
+        <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M6 9l6 6 6-6"/></svg>
+        <svg class="folder-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"/></svg>
+        <span class="project-name">my-blog</span>
+      </div>
+    </div>
+    <button class="add-project"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 5v14M5 12h14"/></svg><span>添加项目</span></button>
+  </div>
+  <div class="main">
+    <div class="topbar">
+      <div class="topbar-logo">
+        <svg viewBox="0 0 256 256"><circle cx="128" cy="128" r="112" fill="#22d3ee"/><path d="M96 80L48 128L96 176" stroke="white" stroke-width="24" fill="none"/><path d="M160 80L208 128L160 176" stroke="white" stroke-width="24" fill="none"/></svg>
+        SpecForge
+      </div>
+      <span class="topbar-agent">OpenCode</span>
+    </div>
+    <div class="chat-area">
+      <div class="msg-bubble user"><div class="msg-label">User</div>底部标签条很紧凑</div>
+      <div class="msg-bubble assistant"><div class="msg-label">Agent</div>每个 Spec change 是一个可水平滚动的标签，点击直接跳转该 change 的工作流。</div>
+    </div>
+    <div class="input-bar"><div class="input-mock">输入消息...</div></div>
+  </div>
+</div>
+
+<script>
+document.querySelectorAll('.switcher-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const id = btn.dataset.proto;
+    document.querySelectorAll('.switcher-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    document.querySelectorAll('.proto').forEach(p => p.classList.remove('active'));
+    document.getElementById('proto-' + id).classList.add('active');
+  });
+});
+
+function switchRpTab(btn, tab) {
+  btn.parentElement.querySelectorAll('.rp-tab').forEach(t => {
+    t.classList.remove('active', 'diff');
+  });
+  btn.classList.add('active');
+  if (tab === 'diff') btn.classList.add('diff');
+  document.getElementById('rp-spec').style.display = tab === 'spec' ? '' : 'none';
+  document.getElementById('rp-diff').style.display = tab === 'diff' ? '' : 'none';
+}
+
+function toggleDrawer() {
+  document.getElementById('spec-drawer').classList.toggle('open');
+  document.getElementById('drawer-overlay').classList.toggle('open');
+}
+
+function switchSeg(btn, contentId) {
+  const control = btn.parentElement;
+  control.querySelectorAll('.seg-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  const group = control.parentElement;
+  group.querySelectorAll('.seg-content').forEach(c => c.classList.remove('active'));
+  document.getElementById(contentId).classList.add('active');
+}
+</script>
+</body>
+</html>

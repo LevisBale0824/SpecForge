@@ -11,7 +11,6 @@ import { useBackendActivation } from "./useBackendActivation";
 import { useBackendSessionLifecycle } from "./useBackendSessionLifecycle";
 import { useBackendMessageSend } from "./useBackendMessageSend";
 import { useMessages } from "./useMessages";
-import { useDeltaAccumulator } from "./useDeltaAccumulator";
 import { useSessionStatus } from "./useSessionStatus";
 import { useSessions } from "./useSessions";
 import { useModels } from "./useModels";
@@ -123,13 +122,6 @@ function normalizeFileDiffs(value: unknown): FileDiff[] {
 
 function normalizeDirectoryPath(path: string): string {
   return path.trim().replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
-}
-
-function sessionBelongsToActiveDirectory(info: SessionInfo): boolean {
-  const dir = activeDirectory.value;
-  if (!dir) return false;
-  if (!info.directory) return info.id === selectedSessionId.value;
-  return normalizeDirectoryPath(info.directory) === normalizeDirectoryPath(dir);
 }
 
 // ── Sub-composable instances ──────────────────────────────────────────────
@@ -347,7 +339,6 @@ watch(activeDirectory, (dir, previousDir) => {
     msgStore.saveSessionState(selectedSessionId.value);
   }
   msgStore.reset();
-  sessionsStore.reset();
   selectedSessionId.value = "";
   workspaceDiffs.value = [];
   if (dir && activation.connectionState.value === "ready") {
@@ -393,11 +384,11 @@ const sessionLifecycle = useBackendSessionLifecycle({
 // Track sessions from the backend so the sidebar can list/switch them.
 ge.on("session.created", (payload) => {
   const info = (payload as { info?: SessionInfo })?.info;
-  if (info && sessionBelongsToActiveDirectory(info)) sessionsStore.upsert(info);
+  if (info) sessionsStore.upsert(info);
 });
 ge.on("session.updated", (payload) => {
   const info = (payload as { info?: SessionInfo })?.info;
-  if (info && sessionBelongsToActiveDirectory(info)) sessionsStore.upsert(info);
+  if (info) sessionsStore.upsert(info);
 });
 ge.on("session.deleted", (payload) => {
   const info = (payload as { info?: SessionInfo })?.info;
@@ -521,17 +512,22 @@ async function refreshSessions(): Promise<void> {
   try {
     const adapter = getActiveBackendAdapter();
     if (!adapter.listSessions) return;
-    if (!activeDirectory.value) {
-      sessionsStore.reset();
-      return;
-    }
+    if (!activeDirectory.value) return;
     const result = (await adapter.listSessions({
       directory: activeDirectory.value,
     })) as SessionInfo[] | undefined;
-    if (Array.isArray(result)) {
-      sessionsStore.reset();
-      for (const info of result) {
-        if (sessionBelongsToActiveDirectory(info)) sessionsStore.upsert(info);
+    if (!Array.isArray(result)) return;
+    const freshIds = new Set(result.map((s) => s.id));
+    const activeDirNormalized = normalizeDirectoryPath(activeDirectory.value);
+    for (const info of result) {
+      sessionsStore.upsert(info);
+    }
+    for (const existing of sessionsStore.sessions.value.values()) {
+      if (
+        normalizeDirectoryPath(existing.directory) === activeDirNormalized &&
+        !freshIds.has(existing.id)
+      ) {
+        sessionsStore.remove(existing.id);
       }
     }
   } catch (error) {
@@ -551,7 +547,6 @@ const messageSend = useBackendMessageSend({
 // ── SSE → Message Store binding ──────────────────────────────────────────
 
 const msgStore = useMessages();
-const acc = useDeltaAccumulator();
 const sessionStatus = useSessionStatus(selectedSessionId);
 const hasActiveToolParts = computed(() => msgStore.hasActiveToolParts(selectedSessionId.value));
 const isSessionBusy = computed(() => sessionStatus.isBusy.value || hasActiveToolParts.value);
@@ -657,28 +652,16 @@ function scheduleDiffRefresh(sessionId: string, delayMs = 500): void {
         console.error("[useBackend] refresh session diff failed:", error);
       }
     }
-    const workspace = await refreshWorkspaceDiffs();
-    msgStore.setSessionDiffs(sessionId, workspace.length > 0 ? workspace : sessionDiffs);
+    msgStore.setSessionDiffs(sessionId, sessionDiffs);
   }, delayMs);
 
   pendingDiffRefresh.set(sessionId, timer);
 }
 
-// Bind SSE scope to message store when session changes.
-// NOTE: both `msgStore.bindScope` and `acc.listen` subscribe to delta/part
-// events on the scope. We MUST unbind the previous accumulator before
-// re-binding — otherwise every session switch stacks another listener on
-// the same scope, and deltas get appended N times into the accumulator's
-// module-level Map (which `loadHistory` later merges into the message
-// store, surfacing as duplicated streamed text in the UI).
-let accUnlisten: (() => void) | null = null;
-
 watch(selectedSessionId, (newId) => {
   if (!newId) return;
   const scope = ge.session(selectedSessionId, {}, { isKnownPart: msgStore.hasPart });
   msgStore.bindScope(scope);
-  if (accUnlisten) accUnlisten();
-  accUnlisten = acc.listen(scope);
   scheduleDiffRefresh(newId, 0);
 });
 
@@ -703,26 +686,20 @@ watch(
   { immediate: true },
 );
 
-// ── Electron: auto-connect when project directory is set ──────────────────
+// Electron: main process spawns the server before the window opens.
+// Web: requires `opencode serve` (or cli-bridge) already running; if not,
+// the error state guides the user to Settings to adjust the address.
+activation.startInitialization();
 
-if (electronMode) {
-  // The main process starts the agent server in app.whenReady() before the
-  // window is created, so by the time this module initializes the server is
-  // already listening. Connect immediately rather than waiting for the user
-  // to open a project — this makes the sidebar status accurate on launch and
-  // avoids a confusing "disconnected" state on a healthy backend.
-  activation.startInitialization();
-
-  watch(
-    () => project.state.directoryPath,
-    (path) => {
-      if (!path) return;
-      if (activation.connectionState.value === "disconnected") {
-        activation.startInitialization();
-      }
-    },
-  );
-}
+watch(
+  () => project.state.directoryPath,
+  (path) => {
+    if (!path) return;
+    if (activation.connectionState.value === "disconnected") {
+      activation.startInitialization();
+    }
+  },
+);
 
 // Refresh the sidebar with previously-persisted sessions once the connection
 // is ready. We deliberately do NOT eagerly create a session here: agent

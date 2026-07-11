@@ -117,30 +117,8 @@ const { notifyContentChange, showResumeButton, resumeFollow, pauseFollow, isFoll
     scrollOnSetup: false,
   });
 
-const contentSignature = computed(() => {
-  return allMessages.value
-    .map((message) => {
-      const partSignature = msgStore
-        .getParts(message.id)
-        .map((part) => {
-          if (part.type === "text") return `${part.id}:text:${part.text.length}`;
-          if (part.type === "reasoning") return `${part.id}:reasoning:${part.text.length}`;
-          if (part.type === "tool") {
-            const state = part.state;
-            const outputLength = state.status === "completed" ? state.output.length : 0;
-            const errorLength = state.status === "error" ? state.error.length : 0;
-            return `${part.id}:tool:${part.tool}:${state.status}:${outputLength}:${errorLength}`;
-          }
-          return `${part.id}:${part.type}`;
-        })
-        .join(",");
-      return `${message.id}:${message.role}:${msgStore.getStatus(message.id)}:${partSignature}`;
-    })
-    .join("|");
-});
-
 watch(
-  contentSignature,
+  () => msgStore.contentVersion.value,
   () => {
     if (historyScrollLocked.value) return;
     notifyContentChange(false);
@@ -370,7 +348,7 @@ async function copyMessage(msgId: string) {
               class="mt-0.5 h-9 w-9 flex-shrink-0 rounded-full object-cover ring-1 ring-surface-700/50"
             />
 
-            <div class="group flex min-w-0 max-w-[min(1100px,66%)] flex-col items-start">
+            <div class="group flex min-w-0 max-w-[85%] flex-col items-start">
               <!-- Bubble -->
               <div
                 class="min-w-[180px] rounded-lg bg-surface-800/80 px-4 py-3 text-sm leading-relaxed text-surface-200"
@@ -430,9 +408,7 @@ async function copyMessage(msgId: string) {
           </template>
 
           <template v-else>
-            <div
-              class="group flex min-w-0 max-w-[min(900px,calc(100%_-_3.5rem))] flex-col items-end"
-            >
+            <div class="group flex min-w-0 max-w-[85%] flex-col items-end">
               <!-- Bubble -->
               <div
                 class="min-w-[180px] rounded-lg bg-accent-cyan/10 px-4 py-3 text-sm leading-relaxed text-surface-100"

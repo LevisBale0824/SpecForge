@@ -9,7 +9,7 @@
 // Ported from opencode-visualizer-cn/app/composables/useMessages.ts
 // ---------------------------------------------------------------------------
 
-import { computed, readonly, shallowRef, triggerRef } from "vue";
+import { computed, readonly, ref, shallowRef, triggerRef } from "vue";
 import type { ComputedRef, ShallowRef } from "vue";
 import type {
   MessageAttachment,
@@ -36,7 +36,6 @@ import type {
   UserMessageInfo,
 } from "../types/sse";
 import type { SessionScope } from "./useGlobalEvents";
-import { useDeltaAccumulator } from "./useDeltaAccumulator";
 
 // ── Internal types ────────────────────────────────────────────────────────
 
@@ -71,6 +70,7 @@ function scheduleFlush() {
       pendingCollectionTrigger.value = false;
       triggerRef(messages);
     }
+    contentVersion.value++;
   });
 }
 
@@ -238,10 +238,10 @@ function byTimeThenId(a: MessageInfo, b: MessageInfo): number {
 
 // ── Module-level singleton state ──────────────────────────────────────────
 
-const acc = useDeltaAccumulator();
 const messages = shallowRef(new Map<string, ShallowRef<MessageEntry>>());
 const parts = new Map<string, ShallowRef<MessagePart>>();
 const sessionDiffs = shallowRef(new Map<string, FileDiff[]>());
+const contentVersion = ref(0);
 
 // Tracks how many chars each part has accumulated via `message.part.delta`
 // events. Used by applyPartDelta to detect duplicate deltas — a `part.updated`
@@ -943,17 +943,22 @@ function loadHistory(entries: unknown[]) {
     const partsList = rec.parts;
     if (!isMessageInfo(info)) continue;
 
-    const accumulated = acc.getMessage(info.id);
     const hasMessage = messages.value.has(info.id);
     const messageRef = ensureMessage(info.id, false);
     if (!hasMessage) collectionChanged = true;
 
-    const mergedInfo = accumulated?.info ?? info;
+    const existingInfo = messageRef.value.info;
     if (
-      !messageRef.value.info ||
-      JSON.stringify(messageRef.value.info) !== JSON.stringify(mergedInfo)
+      !existingInfo ||
+      existingInfo.id !== info.id ||
+      (existingInfo.role === "assistant" &&
+        info.role === "assistant" &&
+        (existingInfo.finish !== info.finish ||
+          existingInfo.error?.name !== info.error?.name ||
+          existingInfo.time?.completed !== info.time?.completed)) ||
+      existingInfo.role !== info.role
     ) {
-      messageRef.value.info = mergedInfo;
+      messageRef.value.info = info;
       triggerMessageRef(messageRef);
     }
 
@@ -961,38 +966,26 @@ function loadHistory(entries: unknown[]) {
     let addedPart = false;
     for (const item of partsList) {
       if (!isMessagePart(item)) continue;
-      const merged = accumulated?.parts.get(item.id) ?? item;
-      const key = partLookupKey(merged.messageID, merged.id);
+      const key = partLookupKey(item.messageID, item.id);
       const existingPart = parts.get(key);
       if (existingPart) {
-        if (JSON.stringify(existingPart.value) !== JSON.stringify(merged)) {
-          existingPart.value = merged;
+        const cur = existingPart.value as Record<string, unknown>;
+        const next = item as Record<string, unknown>;
+        if (
+          cur.type !== next.type ||
+          (typeof cur.text === "string" && cur.text !== next.text) ||
+          (cur.state as Record<string, unknown> | undefined)?.status !==
+            (next.state as Record<string, unknown> | undefined)?.status
+        ) {
+          existingPart.value = item;
           triggerRef(existingPart);
         }
         continue;
       }
-      const partRef = shallowRef(merged);
+      const partRef = shallowRef(item);
       parts.set(key, partRef);
       messageRef.value.parts.add(partRef);
       addedPart = true;
-    }
-
-    if (accumulated) {
-      for (const [, accPart] of accumulated.parts) {
-        const key = partLookupKey(accPart.messageID, accPart.id);
-        const existingPart = parts.get(key);
-        if (existingPart) {
-          if (JSON.stringify(existingPart.value) !== JSON.stringify(accPart)) {
-            existingPart.value = accPart;
-            triggerRef(existingPart);
-          }
-          continue;
-        }
-        const partRef = shallowRef(accPart);
-        parts.set(key, partRef);
-        messageRef.value.parts.add(partRef);
-        addedPart = true;
-      }
     }
     if (addedPart) triggerMessageRef(messageRef);
   }
@@ -1124,6 +1117,7 @@ function dispose() {
 export function useMessages() {
   return {
     messages: readonly(messages),
+    contentVersion: readonly(contentVersion),
     roots,
     streaming,
     get,
