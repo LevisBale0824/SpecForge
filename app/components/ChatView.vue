@@ -2,6 +2,7 @@
 import { computed, ref, watch } from "vue";
 import MessageContent from "./MessageContent.vue";
 import TokenBarChart from "./TokenBarChart.vue";
+import SessionDiffPanel from "./SessionDiffPanel.vue";
 import { stripSystemReminder, useMessages } from "../composables/useMessages";
 import { useAutoScroller, type ScrollMode } from "../composables/useAutoScroller";
 import { useDisplayNames } from "../composables/useDisplayNames";
@@ -107,6 +108,23 @@ const segmentTotals = computed(() => {
 });
 
 const tokenPanelCollapsed = ref(false);
+
+// Session-level diff panel: toggleable right-side column showing all file
+// changes in the current session. Reads from msgStore.getSessionDiffs which
+// is kept in sync by useBackend's scheduleDiffRefresh (fires on file.edited,
+// assistant completion, session switch).
+const showDiffPanel = ref(false);
+const diffCount = computed(() => {
+  const sessionId = currentSessionId.value;
+  if (!sessionId) return 0;
+  const diffs = msgStore.getSessionDiffs(sessionId);
+  if (!diffs) return 0;
+  const files = new Set<string>();
+  for (const d of diffs) {
+    if (d.file) files.add(d.file);
+  }
+  return files.size;
+});
 
 const containerEl = ref<HTMLElement>();
 const scrollMode = ref<ScrollMode>("follow");
@@ -477,7 +495,44 @@ async function copyMessage(msgId: string) {
       </div>
     </div>
 
+    <!-- Session-level diff panel -->
+    <SessionDiffPanel
+      v-if="showDiffPanel"
+      :session-id="currentSessionId"
+      @close="showDiffPanel = false"
+    />
+
     <div class="absolute bottom-4 right-4 z-10 flex flex-col gap-1.5">
+      <button
+        type="button"
+        class="inline-flex h-8 w-8 items-center justify-center rounded-full border shadow-lg backdrop-blur transition-colors"
+        :class="
+          showDiffPanel
+            ? 'border-accent-emerald/50 bg-accent-emerald/15 text-accent-emerald'
+            : 'border-surface-700 bg-surface-900/90 text-surface-300 hover:bg-surface-800'
+        "
+        :title="showDiffPanel ? '关闭文件变更面板' : '查看文件变更'"
+        @click="showDiffPanel = !showDiffPanel"
+      >
+        <svg
+          width="15"
+          height="15"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <path d="M16 3h5v5M8 3H3v5M21 16v5h-5M3 16v5h5M10 7l4 10M14 7l-4 10" />
+        </svg>
+        <span
+          v-if="diffCount > 0 && !showDiffPanel"
+          class="absolute -right-1 -top-1 inline-flex h-4 min-w-[16px] items-center justify-center rounded-full bg-accent-emerald px-1 text-[9px] font-bold text-surface-950"
+        >
+          {{ diffCount }}
+        </span>
+      </button>
       <button
         v-if="!showResumeButton"
         type="button"

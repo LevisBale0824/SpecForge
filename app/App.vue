@@ -8,7 +8,6 @@ import InputPanel from "./components/InputPanel.vue";
 import FloatingWindow from "./components/FloatingWindow.vue";
 import SettingsPanel from "./components/SettingsPanel.vue";
 import ConsolePanel from "./components/ConsolePanel.vue";
-import DiffViewer from "./components/DiffViewer.vue";
 import FileViewer from "./components/FileViewer.vue";
 import OpenSpecPanel from "./components/openspec/OpenSpecPanel.vue";
 import SpecDetailView from "./components/openspec/SpecDetailView.vue";
@@ -22,14 +21,12 @@ import { useI18n } from "vue-i18n";
 import { useFloatingWindows } from "./composables/useFloatingWindows";
 import { useProject } from "./composables/useProject";
 import { useBackend } from "./composables/useBackend";
-import { useMessages } from "./composables/useMessages";
 import { computeHiddenStageSessions } from "./utils/stageTitleEncoding";
 import { useOpenSpec } from "./composables/useOpenSpec";
 import { useStageSessions } from "./composables/useStageSessions";
 import { useWorkflow } from "./plugins/workflowPlugin";
 import { useResizable } from "./composables/useResizable";
 import { isElectron, onOpenFolder, selectDirectory } from "./utils/electronBridge";
-import type { MessageDiffEntry } from "./types/message";
 import type { SpecTarget } from "./types/openspec";
 import type { WorkflowTier } from "./types/workflow";
 
@@ -77,10 +74,6 @@ function updateExtent() {
   fw.setExtent(window.innerWidth, window.innerHeight);
 }
 
-// Currently-selected workspace diff, shown in a right-side column instead of
-// a floating window so the user can read it alongside the chat.
-const activeDiff = ref<MessageDiffEntry | null>(null);
-
 // Currently-open file in the FileViewer modal. Set when the user clicks a
 // file entry in the Files tree (the `open-file` event bubbles up through
 // SidePanel). Cleared by closing the modal.
@@ -90,21 +83,6 @@ const activeFilePath = ref<string | null>(null);
 // Remember the chat session before entering workflow so returning to chat
 // restores it instead of surfacing the workflow's stage session (crosstalk).
 const lastChatSessionId = ref("");
-
-const msgStore = useMessages();
-
-watch(
-  () => msgStore.contentVersion.value,
-  () => {
-    if (!activeDiff.value) return;
-    const sessionId = backend.selectedSessionId.value;
-    if (!sessionId) return;
-    const diffs = msgStore.getSessionDiffs(sessionId);
-    if (!diffs) return;
-    const stillExists = diffs.some((d) => d.file === activeDiff.value!.file);
-    if (!stillExists) activeDiff.value = null;
-  },
-);
 
 const project = useProject();
 const openspec = useOpenSpec();
@@ -176,7 +154,6 @@ function onWindowClose(key: string) {
 }
 
 async function onSelectSession(sessionId: string) {
-  activeDiff.value = null;
   activeFilePath.value = null;
   showOpenSpecDialog.value = false;
   specDetailTarget.value = null;
@@ -264,7 +241,6 @@ async function onDeleteActiveChange(changeId: string) {
 }
 
 function onNewSession() {
-  activeDiff.value = null;
   activeFilePath.value = null;
   showOpenSpecDialog.value = false;
   specDetailTarget.value = null;
@@ -307,7 +283,6 @@ watch(
 );
 
 function onOpenChat() {
-  activeDiff.value = null;
   activeFilePath.value = null;
   showOpenSpecDialog.value = false;
   specDetailTarget.value = null;
@@ -322,7 +297,6 @@ function onOpenChat() {
 
 function onOpenWorkflow(changeId?: string, intro = false) {
   lastChatSessionId.value = backend.selectedSessionId.value;
-  activeDiff.value = null;
   activeFilePath.value = null;
   showOpenSpecDialog.value = false;
   specDetailTarget.value = null;
@@ -342,7 +316,6 @@ function onPickTier(tier: WorkflowTier) {
   lastChatSessionId.value = backend.selectedSessionId.value;
   showTierPicker.value = false;
   specDetailTarget.value = null;
-  activeDiff.value = null;
   activeFilePath.value = null;
   wf.requestNewDraft(tier);
   router.push({ name: "workflow" });
@@ -367,10 +340,6 @@ function onCloseFile(path: string) {
 function onCloseAllFiles() {
   openFiles.value = [];
   activeFilePath.value = null;
-}
-
-function onCloseDiff() {
-  activeDiff.value = null;
 }
 
 function toggleConsole() {
@@ -458,7 +427,7 @@ function submitManualPath() {
         <div class="absolute inset-y-0 -left-1 -right-1" />
       </div>
 
-      <!-- Center Content: chat OR diff comparison (mutually exclusive) -->
+      <!-- Center Content: chat OR file viewer (mutually exclusive) -->
       <main class="flex-1 flex flex-col overflow-hidden min-w-0">
         <template v-if="specDetailTarget">
           <SpecDetailView
@@ -467,31 +436,6 @@ function submitManualPath() {
             @navigate="onOpenSpecDetail"
             @open-workflow="onOpenWorkflow"
           />
-        </template>
-        <template v-else-if="activeDiff">
-          <div class="diff-toolbar">
-            <span class="diff-toolbar-title" :title="activeDiff.file">
-              {{ activeDiff.file }}
-            </span>
-            <button type="button" class="diff-toolbar-close" title="??????" @click="onCloseDiff">
-              <svg
-                width="14"
-                height="14"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              >
-                <line x1="18" y1="6" x2="6" y2="18" />
-                <line x1="6" y1="6" x2="18" y2="18" />
-              </svg>
-            </button>
-          </div>
-          <div class="diff-main">
-            <DiffViewer :diff="activeDiff" />
-          </div>
         </template>
         <template v-else-if="activeFilePath">
           <!-- File tabs strip + content -->
@@ -703,53 +647,6 @@ function submitManualPath() {
 </template>
 
 <style scoped>
-.diff-toolbar {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  padding: 0.4rem 0.6rem;
-  background: color-mix(in srgb, var(--color-surface-900, #0f172a) 90%, transparent);
-  border-bottom: 1px solid color-mix(in srgb, var(--color-surface-800, #1e293b) 70%, transparent);
-  flex: 0 0 auto;
-}
-
-.diff-toolbar-title {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-family: var(--font-mono, monospace);
-  font-size: 12px;
-  color: var(--color-surface-200, #e2e8f0);
-}
-
-.diff-toolbar-close {
-  flex: 0 0 auto;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 22px;
-  height: 22px;
-  padding: 0;
-  border: 0;
-  border-radius: 4px;
-  background: transparent;
-  color: var(--color-surface-500, #64748b);
-  cursor: pointer;
-}
-
-.diff-toolbar-close:hover {
-  background: color-mix(in srgb, var(--color-accent-rose, #f43f5e) 22%, transparent);
-  color: var(--color-accent-rose, #f43f5e);
-}
-
-.diff-main {
-  flex: 1;
-  min-height: 0;
-  overflow: hidden;
-}
-
 .openspec-dialog-layer {
   position: fixed;
   inset: 0;
