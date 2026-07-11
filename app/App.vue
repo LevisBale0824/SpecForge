@@ -734,7 +734,7 @@ function submitManualPath() {
 .spec-fab {
   position: fixed;
   bottom: 56px;
-  right: 16px;
+  left: 16px;
   width: 44px;
   height: 44px;
   display: flex;

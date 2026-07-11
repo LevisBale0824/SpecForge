@@ -216,15 +216,15 @@ watch(
 .spec-drawer {
   position: fixed;
   top: 0;
-  right: 0;
+  left: 0;
   bottom: 0;
   width: min(340px, calc(100vw - 40px));
   z-index: 9001;
   display: flex;
   flex-direction: column;
   background: var(--color-surface-900, #0f172a);
-  border-left: 1px solid var(--color-surface-700, #334155);
-  box-shadow: -8px 0 32px rgba(0, 0, 0, 0.4);
+  border-right: 1px solid var(--color-surface-700, #334155);
+  box-shadow: 8px 0 32px rgba(0, 0, 0, 0.4);
 }
 
 .drawer-header {
@@ -477,6 +477,6 @@ watch(
 }
 .spec-drawer-slide-enter-from,
 .spec-drawer-slide-leave-to {
-  transform: translateX(100%);
+  transform: translateX(-100%);
 }
 </style>

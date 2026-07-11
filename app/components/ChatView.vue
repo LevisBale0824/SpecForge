@@ -4,6 +4,7 @@ import MessageContent from "./MessageContent.vue";
 import TokenBarChart from "./TokenBarChart.vue";
 import SessionDiffPanel from "./SessionDiffPanel.vue";
 import { stripSystemReminder, useMessages } from "../composables/useMessages";
+import { extractEditDiffs } from "./ToolWindow/utils";
 import { useAutoScroller, type ScrollMode } from "../composables/useAutoScroller";
 import { useDisplayNames } from "../composables/useDisplayNames";
 import { useBackend } from "../composables/useBackend";
@@ -115,13 +116,19 @@ const tokenPanelCollapsed = ref(false);
 // assistant completion, session switch).
 const showDiffPanel = ref(false);
 const diffCount = computed(() => {
+  void msgStore.contentVersion.value;
   const sessionId = currentSessionId.value;
   if (!sessionId) return 0;
-  const diffs = msgStore.getSessionDiffs(sessionId);
-  if (!diffs) return 0;
   const files = new Set<string>();
-  for (const d of diffs) {
-    if (d.file) files.add(d.file);
+  for (const msg of msgStore.list()) {
+    if (msg.sessionID !== sessionId) continue;
+    for (const part of msgStore.getParts(msg.id)) {
+      if (part.type !== "tool") continue;
+      if (part.state.status === "pending") continue;
+      const diffs = extractEditDiffs(part.tool, part.state.input);
+      if (!diffs) continue;
+      for (const d of diffs) files.add(d.file.replace(/#\d+$/, ""));
+    }
   }
   return files.size;
 });
@@ -347,7 +354,7 @@ async function copyMessage(msgId: string) {
         v-if="allMessages.length === 0"
         class="flex items-center justify-center h-full text-surface-600 text-sm"
       >
-        Start a conversation...
+        开始对话...
       </div>
 
       <!-- Messages -->

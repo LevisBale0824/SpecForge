@@ -2,6 +2,7 @@
 import { computed, ref, watch } from "vue";
 import type { MessageDiffEntry } from "../types/message";
 import { useMessages } from "../composables/useMessages";
+import { extractEditDiffs } from "./ToolWindow/utils";
 import DiffViewer from "./DiffViewer.vue";
 
 const props = defineProps<{
@@ -14,28 +15,6 @@ const emit = defineEmits<{
 
 const msgStore = useMessages();
 
-const diffs = computed<MessageDiffEntry[]>(() => {
-  const sessionId = props.sessionId;
-  if (!sessionId) return [];
-  const list = msgStore.getSessionDiffs(sessionId);
-  if (!list || list.length === 0) return [];
-  const seen = new Set<string>();
-  const out: MessageDiffEntry[] = [];
-  for (const d of list) {
-    if (!d.file || seen.has(d.file)) continue;
-    seen.add(d.file);
-    out.push(d);
-  }
-  return out;
-});
-
-const totalAdditions = computed(() =>
-  diffs.value.reduce((sum, d) => sum + (d.additions ?? countLines(d.diff, "+")), 0),
-);
-const totalDeletions = computed(() =>
-  diffs.value.reduce((sum, d) => sum + (d.deletions ?? countLines(d.diff, "-")), 0),
-);
-
 function countLines(patch: string, sign: string): number {
   if (!patch) return 0;
   let count = 0;
@@ -45,10 +24,60 @@ function countLines(patch: string, sign: string): number {
   return count;
 }
 
+// Aggregate file diffs from edit-family tool calls in the session. The
+// opencode /session/{id}/diff endpoint returns empty in practice, so we build
+// the session-level view directly from the tool inputs already in the store.
+type FileGroup = {
+  file: string;
+  entries: MessageDiffEntry[];
+  additions: number;
+  deletions: number;
+};
+
+const fileGroups = computed<FileGroup[]>(() => {
+  void msgStore.contentVersion.value;
+  const sessionId = props.sessionId;
+  if (!sessionId) return [];
+
+  const messages = msgStore.list().filter((m) => m.sessionID === sessionId);
+  const byFile = new Map<string, MessageDiffEntry[]>();
+
+  for (const msg of messages) {
+    const parts = msgStore.getParts(msg.id);
+    for (const part of parts) {
+      if (part.type !== "tool") continue;
+      if (part.state.status === "pending") continue;
+      const diffs = extractEditDiffs(part.tool, part.state.input);
+      if (!diffs) continue;
+      for (const d of diffs) {
+        const baseFile = d.file.replace(/#\d+$/, "");
+        const existing = byFile.get(baseFile);
+        if (existing) existing.push(d);
+        else byFile.set(baseFile, [d]);
+      }
+    }
+  }
+
+  const groups: FileGroup[] = [];
+  for (const [file, entries] of byFile) {
+    let additions = 0;
+    let deletions = 0;
+    for (const d of entries) {
+      additions += d.additions ?? countLines(d.diff, "+");
+      deletions += d.deletions ?? countLines(d.diff, "-");
+    }
+    groups.push({ file, entries, additions, deletions });
+  }
+  return groups;
+});
+
+const totalAdditions = computed(() => fileGroups.value.reduce((s, g) => s + g.additions, 0));
+const totalDeletions = computed(() => fileGroups.value.reduce((s, g) => s + g.deletions, 0));
+
 const expanded = ref<Set<string>>(new Set());
 
 watch(
-  () => diffs.value.map((d) => d.file),
+  () => fileGroups.value.map((g) => g.file),
   (files) => {
     const next = new Set<string>();
     for (const f of files) {
@@ -68,7 +97,7 @@ function toggle(file: string) {
 }
 
 function expandAll() {
-  expanded.value = new Set(diffs.value.map((d) => d.file));
+  expanded.value = new Set(fileGroups.value.map((g) => g.file));
 }
 
 function collapseAll() {
@@ -103,13 +132,13 @@ function dirname(file: string): string {
           <path d="M16 3h5v5M8 3H3v5M21 16v5h-5M3 16v5h5M10 7l4 10M14 7l-4 10" />
         </svg>
         <span class="sdp-title">文件变更</span>
-        <span class="sdp-file-count">{{ diffs.length }}</span>
+        <span class="sdp-file-count">{{ fileGroups.length }}</span>
         <div class="sdp-totals">
           <span class="sdp-add">+{{ totalAdditions }}</span>
           <span class="sdp-del">−{{ totalDeletions }}</span>
         </div>
         <button
-          v-if="diffs.length > 1"
+          v-if="fileGroups.length > 1"
           type="button"
           class="sdp-expand-btn"
           title="全部展开"
@@ -169,15 +198,15 @@ function dirname(file: string): string {
     </header>
 
     <div class="sdp-body">
-      <div v-if="diffs.length === 0" class="sdp-empty">当前会话暂无文件变更</div>
+      <div v-if="fileGroups.length === 0" class="sdp-empty">当前会话暂无文件变更</div>
       <template v-else>
-        <div v-for="d in diffs" :key="d.file" class="sdp-file">
+        <div v-for="g in fileGroups" :key="g.file" class="sdp-file">
           <button
             type="button"
             class="sdp-file-header"
-            :class="{ expanded: expanded.has(d.file) }"
-            :title="d.file"
-            @click="toggle(d.file)"
+            :class="{ expanded: expanded.has(g.file) }"
+            :title="g.file"
+            @click="toggle(g.file)"
           >
             <span class="sdp-chevron">
               <svg
@@ -194,16 +223,24 @@ function dirname(file: string): string {
               </svg>
             </span>
             <span class="sdp-file-info">
-              <span class="sdp-file-basename">{{ basename(d.file) }}</span>
-              <span v-if="dirname(d.file)" class="sdp-file-dirname">{{ dirname(d.file) }}</span>
+              <span class="sdp-file-basename">{{ basename(g.file) }}</span>
+              <span v-if="dirname(g.file)" class="sdp-file-dirname">{{ dirname(g.file) }}</span>
             </span>
+            <span v-if="g.entries.length > 1" class="sdp-edit-count"
+              >{{ g.entries.length }}× 编辑</span
+            >
             <span class="sdp-file-stats">
-              <span class="sdp-stat-add">+{{ d.additions ?? countLines(d.diff, "+") }}</span>
-              <span class="sdp-stat-del">−{{ d.deletions ?? countLines(d.diff, "-") }}</span>
+              <span class="sdp-stat-add">+{{ g.additions }}</span>
+              <span class="sdp-stat-del">−{{ g.deletions }}</span>
             </span>
           </button>
-          <div v-if="expanded.has(d.file)" class="sdp-diff-container">
-            <DiffViewer :diff="d" />
+          <div v-if="expanded.has(g.file)" class="sdp-diff-container">
+            <div v-for="(d, idx) in g.entries" :key="idx" class="sdp-diff-block">
+              <div v-if="g.entries.length > 1" class="sdp-diff-block-label">
+                编辑 #{{ idx + 1 }}
+              </div>
+              <DiffViewer :diff="d" />
+            </div>
           </div>
         </div>
       </template>
@@ -413,6 +450,13 @@ function dirname(file: string): string {
   white-space: nowrap;
 }
 
+.sdp-edit-count {
+  flex-shrink: 0;
+  font-size: 9px;
+  color: var(--color-surface-600, #475569);
+  white-space: nowrap;
+}
+
 .sdp-file-stats {
   display: inline-flex;
   gap: 0.35rem;
@@ -439,6 +483,23 @@ function dirname(file: string): string {
   max-height: 400px;
   display: flex;
   flex-direction: column;
+}
+
+.sdp-diff-block {
+  display: flex;
+  flex-direction: column;
+}
+
+.sdp-diff-block + .sdp-diff-block {
+  border-top: 1px solid color-mix(in srgb, var(--color-surface-800, #1e293b) 60%, transparent);
+}
+
+.sdp-diff-block-label {
+  padding: 0.25rem 0.55rem;
+  font-size: 9px;
+  font-weight: 600;
+  color: var(--color-surface-500, #64748b);
+  background: color-mix(in srgb, var(--color-surface-900, #0f172a) 80%, transparent);
 }
 
 .sdp-diff-container :deep(.diff-viewer) {
