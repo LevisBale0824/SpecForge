@@ -22,8 +22,16 @@ const { showDiffPanel } = useDiffPanel();
 const msgStore = useMessages();
 const backend = useBackend();
 
-// Refresh git diffs when panel opens, and on every focus/visibility change
-// the backend already schedules a refresh — we eagerly trigger one here.
+// Track whether workspace diffs have been loaded (even if empty).
+const wsLoadCount = ref(0);
+watch(
+  () => backend.workspaceDiffs.value,
+  () => {
+    wsLoadCount.value++;
+  },
+);
+
+// Trigger git diff refresh when the panel opens.
 watch(
   () => props.visible && showDiffPanel.value,
   (active) => {
@@ -65,8 +73,9 @@ type FileGroup = {
 const fileGroups = computed<FileGroup[]>(() => {
   if (!showDiffPanel.value || props.visible === false) return [];
 
+  void wsLoadCount.value;
   const wsDiffs = backend.workspaceDiffs.value as FileDiff[];
-  if (wsDiffs.length > 0) {
+  if (wsDiffs.length > 0 || wsLoadCount.value > 0) {
     return wsDiffs.map((d) => ({
       file: d.file,
       entries: [toMessageDiffEntry(d)],
