@@ -510,14 +510,14 @@ async function handleSend() {
 </script>
 
 <template>
-  <div class="relative border-t border-surface-800 bg-surface-900 px-4 py-4">
+  <div class="relative bg-surface-950 px-[80px] py-4 md:px-[120px] lg:px-[540px]">
     <!-- Sub-agent session: replace the input area with a read-only banner.
          The composer (textarea + ModelPicker + AgentPicker + menus) is hidden
          entirely, because none of those controls make sense for a session the
          user can't write to. -->
     <div
       v-if="isChildSession"
-      class="w-full max-w-3xl mx-auto rounded-lg border border-surface-700 bg-surface-800/60 px-4 py-4 flex items-center gap-3"
+      class="w-full rounded-lg border border-surface-700 bg-surface-800/60 px-4 py-4 flex items-center gap-3"
     >
       <svg
         class="w-5 h-5 shrink-0 text-surface-400"
@@ -558,30 +558,75 @@ async function handleSend() {
     </div>
 
     <template v-else>
-      <div class="flex items-center gap-2 w-full max-w-3xl mx-auto mb-2.5">
-        <ModelPicker :session-id="pickerSessionId" />
-        <AgentPicker :session-id="pickerSessionId" />
-      </div>
       <div
-        class="relative flex items-stretch gap-2.5 w-full max-w-3xl mx-auto"
+        class="input-composer relative flex flex-col w-full rounded-xl border bg-surface-800/60 transition-colors"
+        :class="
+          isDragOver
+            ? 'border-accent-cyan bg-surface-800/80'
+            : 'border-surface-700/60 focus-within:border-surface-600'
+        "
         @dragenter="onDragEnter"
         @dragover="onDragOver"
         @dragleave="onDragLeave"
         @drop="onDrop"
       >
+        <div class="flex items-center gap-1 px-3 pt-2.5">
+          <ModelPicker :session-id="pickerSessionId" />
+          <AgentPicker :session-id="pickerSessionId" />
+        </div>
         <textarea
           ref="textareaEl"
           v-model="inputText"
           :placeholder="t('chat.placeholder')"
-          rows="3"
-          class="flex-1 resize-none rounded-lg bg-surface-800 border px-4 py-3 text-base text-surface-100 placeholder:text-surface-600 focus:outline-none focus:border-accent-cyan/50 transition-colors"
-          :class="isDragOver ? 'border-accent-cyan' : 'border-surface-700'"
+          rows="2"
+          class="flex-1 resize-none bg-transparent border-0 px-4 py-2 text-base text-surface-100 placeholder:text-surface-500 focus:outline-none"
           @keydown="handleKeydown"
           @input="handleInput"
         />
+        <div class="flex items-center justify-between px-3 pb-2">
+          <span class="text-[10px] text-surface-500 select-none pl-1"
+            >Enter 发送 · Shift+Enter 换行</span
+          >
+          <div class="flex items-center gap-1.5">
+            <button
+              v-if="!backend.isBusy.value && !backend.isSending.value"
+              :disabled="!inputText.trim()"
+              class="flex items-center justify-center w-8 h-8 rounded-lg bg-accent-cyan/15 text-accent-cyan hover:bg-accent-cyan/25 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              :title="t('chat.send')"
+              @click="handleSend"
+            >
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"
+                />
+              </svg>
+            </button>
+            <button
+              v-else
+              class="flex items-center justify-center w-8 h-8 rounded-lg bg-accent-rose/15 text-accent-rose hover:bg-accent-rose/25 transition-colors"
+              :title="t('chat.abort')"
+              @click="backend.abortSession()"
+            >
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <rect
+                  x="6"
+                  y="6"
+                  width="12"
+                  height="12"
+                  rx="1.5"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                />
+              </svg>
+            </button>
+          </div>
+        </div>
         <div
           v-if="isDragOver"
-          class="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-lg border-2 border-dashed border-accent-cyan/60 bg-surface-900/80 backdrop-blur-sm"
+          class="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-xl border-2 border-dashed border-accent-cyan/60 bg-surface-900/80 backdrop-blur-sm"
         >
           <div class="flex items-center gap-2 text-sm text-accent-cyan">
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -595,40 +640,6 @@ async function handleSend() {
             <span>{{ t("chat.dropHint") }}</span>
           </div>
         </div>
-        <button
-          v-if="!backend.isBusy.value && !backend.isSending.value"
-          :disabled="!inputText.trim()"
-          class="flex items-center justify-center self-stretch px-5 rounded-lg bg-accent-cyan/15 text-accent-cyan hover:bg-accent-cyan/25 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-          :title="t('chat.send')"
-          @click="handleSend"
-        >
-          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"
-            />
-          </svg>
-        </button>
-        <button
-          v-else
-          class="flex items-center justify-center self-stretch px-5 rounded-lg bg-accent-rose/15 text-accent-rose hover:bg-accent-rose/25 transition-colors"
-          :title="t('chat.abort')"
-          @click="backend.abortSession()"
-        >
-          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <rect
-              x="6"
-              y="6"
-              width="12"
-              height="12"
-              rx="1.5"
-              stroke-linejoin="round"
-              stroke-width="2"
-            />
-          </svg>
-        </button>
       </div>
 
       <CommandMenu

@@ -2,9 +2,7 @@
 import { computed, ref, watch } from "vue";
 import MessageContent from "./MessageContent.vue";
 import TokenBarChart from "./TokenBarChart.vue";
-import SessionDiffPanel from "./SessionDiffPanel.vue";
 import { stripSystemReminder, useMessages } from "../composables/useMessages";
-import { extractEditDiffs } from "./ToolWindow/utils";
 import { useAutoScroller, type ScrollMode } from "../composables/useAutoScroller";
 import { useDisplayNames } from "../composables/useDisplayNames";
 import { useBackend } from "../composables/useBackend";
@@ -110,29 +108,6 @@ const segmentTotals = computed(() => {
 
 const tokenPanelCollapsed = ref(false);
 
-// Session-level diff panel: toggleable right-side column showing all file
-// changes in the current session. Reads from msgStore.getSessionDiffs which
-// is kept in sync by useBackend's scheduleDiffRefresh (fires on file.edited,
-// assistant completion, session switch).
-const showDiffPanel = ref(false);
-const diffCount = computed(() => {
-  void msgStore.contentVersion.value;
-  const sessionId = currentSessionId.value;
-  if (!sessionId) return 0;
-  const files = new Set<string>();
-  for (const msg of msgStore.list()) {
-    if (msg.sessionID !== sessionId) continue;
-    for (const part of msgStore.getParts(msg.id)) {
-      if (part.type !== "tool") continue;
-      if (part.state.status === "pending") continue;
-      const diffs = extractEditDiffs(part.tool, part.state.input);
-      if (!diffs) continue;
-      for (const d of diffs) files.add(d.file.replace(/#\d+$/, ""));
-    }
-  }
-  return files.size;
-});
-
 const containerEl = ref<HTMLElement>();
 const scrollMode = ref<ScrollMode>("follow");
 const historyScrollLocked = ref(true);
@@ -217,11 +192,11 @@ async function copyMessage(msgId: string) {
   <div class="relative flex min-h-0 flex-1">
     <div
       ref="containerEl"
-      class="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-5 pb-5 md:px-10 lg:px-14 [overscroll-behavior:contain] [overflow-anchor:none]"
+      class="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-[80px] pb-5 md:px-[120px] lg:px-[540px] [overscroll-behavior:contain] [overflow-anchor:none]"
     >
       <!-- Token usage sticky header (collapsible) -->
       <div
-        class="sticky top-0 z-10 -mx-5 mb-3 border-b border-surface-800/80 bg-surface-950/95 px-5 backdrop-blur transition-[padding] duration-200 md:-mx-10 md:px-10 lg:-mx-14 lg:px-14"
+        class="sticky top-0 z-10 -mx-[80px] mb-3 bg-surface-950/95 px-[80px] backdrop-blur transition-[padding] duration-200 md:-mx-[120px] md:px-[120px] lg:-mx-[540px] lg:px-[540px]"
         :class="tokenPanelCollapsed ? 'py-1.5' : 'py-3'"
       >
         <!-- Collapsed: single compact line -->
@@ -358,27 +333,26 @@ async function copyMessage(msgId: string) {
       </div>
 
       <!-- Messages -->
-      <div v-else class="w-full space-y-5">
+      <div v-else class="w-full space-y-1.5">
         <div
           v-for="msg in allMessages"
           :key="msg.id"
-          class="flex w-full items-start gap-3"
-          :class="msg.role === 'user' ? 'justify-end' : 'justify-start'"
+          class="relative flex w-full items-start gap-2"
         >
           <template v-if="msg.role === 'assistant'">
             <!-- Avatar -->
             <img
               :src="agentAvatarSrc"
               alt="Agent"
-              class="mt-0.5 h-9 w-9 flex-shrink-0 rounded-full object-cover ring-1 ring-surface-700/50"
+              class="mt-0.5 h-10 w-10 flex-shrink-0 rounded-full object-cover ring-1 ring-surface-700/50"
             />
 
-            <div class="group flex min-w-0 max-w-[85%] flex-col items-start">
+            <div class="group flex min-w-0 max-w-[75%] flex-col items-start">
               <!-- Bubble -->
               <div
-                class="min-w-[180px] rounded-lg bg-surface-800/80 px-4 py-3 text-sm leading-relaxed text-surface-200"
+                class="min-w-[180px] rounded-lg bg-surface-800/80 px-3 py-2 text-sm leading-relaxed text-surface-200"
               >
-                <div class="mb-1 flex items-center gap-2">
+                <div class="mb-0.5 flex items-center gap-2">
                   <span class="text-[10px] font-semibold tracking-wider text-accent-emerald">
                     {{ agentName }}
                   </span>
@@ -430,15 +404,28 @@ async function copyMessage(msgId: string) {
                 <span>{{ copiedId === msg.id ? "已复制" : "复制" }}</span>
               </button>
             </div>
+            <!-- Drawer slot: reserved whitespace for future drawer-style content.
+                 flex-1 absorbs remaining width so the bubble never reflows
+                 when content is injected here. -->
+            <div
+              class="msg-drawer-slot min-w-0 flex-1 rounded-md transition-colors hover:bg-surface-900/40"
+              :data-message-id="msg.id"
+            ></div>
           </template>
 
           <template v-else>
-            <div class="group flex min-w-0 max-w-[85%] flex-col items-end">
+            <!-- Drawer slot: reserved whitespace for future drawer-style content.
+                 flex-1 absorbs remaining width so the bubble never reflows. -->
+            <div
+              class="msg-drawer-slot min-w-0 flex-1 rounded-md transition-colors hover:bg-surface-900/40"
+              :data-message-id="msg.id"
+            ></div>
+            <div class="group flex min-w-0 max-w-[75%] flex-col items-end">
               <!-- Bubble -->
               <div
-                class="min-w-[180px] rounded-lg bg-accent-cyan/10 px-4 py-3 text-sm leading-relaxed text-surface-100"
+                class="min-w-[180px] rounded-lg bg-accent-cyan/10 px-3 py-2 text-sm leading-relaxed text-surface-100"
               >
-                <div class="mb-1 flex items-center gap-2">
+                <div class="mb-0.5 flex items-center gap-2">
                   <span class="text-[10px] font-semibold tracking-wider text-accent-cyan">
                     {{ userName }}
                   </span>
@@ -495,93 +482,56 @@ async function copyMessage(msgId: string) {
             <img
               :src="userAvatarSrc"
               alt="User"
-              class="mt-0.5 h-9 w-9 flex-shrink-0 rounded-full object-cover ring-1 ring-surface-700/50"
+              class="mt-0.5 h-10 w-10 flex-shrink-0 rounded-full object-cover ring-1 ring-surface-700/50"
             />
           </template>
         </div>
       </div>
-    </div>
 
-    <!-- Session-level diff panel -->
-    <SessionDiffPanel
-      v-if="showDiffPanel"
-      :session-id="currentSessionId"
-      @close="showDiffPanel = false"
-    />
-
-    <div class="absolute bottom-4 right-4 z-10 flex flex-col gap-1.5">
-      <button
-        type="button"
-        class="inline-flex h-8 w-8 items-center justify-center rounded-full border shadow-lg backdrop-blur transition-colors"
-        :class="
-          showDiffPanel
-            ? 'border-accent-emerald/50 bg-accent-emerald/15 text-accent-emerald'
-            : 'border-surface-700 bg-surface-900/90 text-surface-300 hover:bg-surface-800'
-        "
-        :title="showDiffPanel ? '关闭文件变更面板' : '查看文件变更'"
-        @click="showDiffPanel = !showDiffPanel"
-      >
-        <svg
-          width="15"
-          height="15"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-          stroke-linecap="round"
-          stroke-linejoin="round"
+      <div class="sticky bottom-4 ml-auto w-fit z-10 flex flex-col gap-1.5">
+        <button
+          v-if="!showResumeButton"
+          type="button"
+          class="inline-flex h-8 w-8 items-center justify-center rounded-full border border-surface-700 bg-surface-900/90 text-surface-300 shadow-lg backdrop-blur transition-colors hover:bg-surface-800"
+          title="Jump to top"
+          @click="jumpToTop"
         >
-          <path d="M16 3h5v5M8 3H3v5M21 16v5h-5M3 16v5h5M10 7l4 10M14 7l-4 10" />
-        </svg>
-        <span
-          v-if="diffCount > 0 && !showDiffPanel"
-          class="absolute -right-1 -top-1 inline-flex h-4 min-w-[16px] items-center justify-center rounded-full bg-accent-emerald px-1 text-[9px] font-bold text-surface-950"
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <line x1="12" y1="19" x2="12" y2="5" />
+            <polyline points="5 12 12 5 19 12" />
+          </svg>
+        </button>
+        <button
+          v-if="showResumeButton"
+          type="button"
+          class="inline-flex h-8 w-8 items-center justify-center rounded-full border border-accent-cyan/50 bg-surface-900/90 text-accent-cyan shadow-lg backdrop-blur transition-colors hover:bg-accent-cyan/15"
+          title="Jump to latest"
+          @click="jumpToLatest"
         >
-          {{ diffCount }}
-        </span>
-      </button>
-      <button
-        v-if="!showResumeButton"
-        type="button"
-        class="inline-flex h-8 w-8 items-center justify-center rounded-full border border-surface-700 bg-surface-900/90 text-surface-300 shadow-lg backdrop-blur transition-colors hover:bg-surface-800"
-        title="Jump to top"
-        @click="jumpToTop"
-      >
-        <svg
-          width="14"
-          height="14"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-        >
-          <line x1="12" y1="19" x2="12" y2="5" />
-          <polyline points="5 12 12 5 19 12" />
-        </svg>
-      </button>
-      <button
-        v-if="showResumeButton"
-        type="button"
-        class="inline-flex h-8 w-8 items-center justify-center rounded-full border border-accent-cyan/50 bg-surface-900/90 text-accent-cyan shadow-lg backdrop-blur transition-colors hover:bg-accent-cyan/15"
-        title="Jump to latest"
-        @click="jumpToLatest"
-      >
-        <svg
-          width="14"
-          height="14"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-        >
-          <line x1="12" y1="5" x2="12" y2="19" />
-          <polyline points="19 12 12 19 5 12" />
-        </svg>
-      </button>
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <line x1="12" y1="5" x2="12" y2="19" />
+            <polyline points="19 12 12 19 5 12" />
+          </svg>
+        </button>
+      </div>
     </div>
   </div>
 </template>
