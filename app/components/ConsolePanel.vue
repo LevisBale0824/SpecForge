@@ -11,10 +11,9 @@ interface LogEntry {
 }
 
 const props = defineProps<{
-  /** Default working directory for spawned commands. */
   cwd?: string;
-  /** Bound panel height in px — supports v-model:height via emit. */
   modelHeight?: number;
+  fill?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -420,9 +419,15 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div ref="rootEl" class="console-root" :style="{ height: `${dragHeight}px` }" @click="focus">
-    <!-- Drag handle: top edge -->
-    <div class="console-resize" @mousedown="onDragStart" />
+  <div
+    ref="rootEl"
+    class="console-root"
+    :class="{ 'console-fill': fill }"
+    :style="fill ? undefined : { height: `${dragHeight}px` }"
+    @click="focus"
+  >
+    <!-- Drag handle: top edge (hidden in fill mode) -->
+    <div v-if="!fill" class="console-resize" @mousedown="onDragStart" />
 
     <!-- Toolbar -->
     <div class="console-toolbar">
@@ -465,7 +470,7 @@ onUnmounted(() => {
             <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
           </svg>
         </button>
-        <button class="console-action" title="Minimize" @click.stop="emit('minimize')">
+        <button v-if="!fill" class="console-action" title="Minimize" @click.stop="emit('minimize')">
           <svg
             width="13"
             height="13"
@@ -518,6 +523,11 @@ onUnmounted(() => {
   font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
   font-size: 12px;
   color: var(--color-surface-200, #e2e8f0);
+}
+.console-fill {
+  border-top: 0;
+  flex: 1;
+  min-height: 0;
 }
 
 .console-resize {

@@ -9,6 +9,7 @@ import FloatingWindow from "./components/FloatingWindow.vue";
 import SettingsPanel from "./components/SettingsPanel.vue";
 import ConsolePanel from "./components/ConsolePanel.vue";
 import FileViewer from "./components/FileViewer.vue";
+import SessionDiffPanel from "./components/SessionDiffPanel.vue";
 import OpenSpecPanel from "./components/openspec/OpenSpecPanel.vue";
 import SpecDetailView from "./components/openspec/SpecDetailView.vue";
 import TierPickerDialog from "./components/workflow/TierPickerDialog.vue";
@@ -26,6 +27,7 @@ import { useOpenSpec } from "./composables/useOpenSpec";
 import { useStageSessions } from "./composables/useStageSessions";
 import { useWorkflow } from "./plugins/workflowPlugin";
 import { useResizable } from "./composables/useResizable";
+import { useDiffPanel } from "./composables/useDiffPanel";
 import { isElectron, onOpenFolder, selectDirectory } from "./utils/electronBridge";
 import type { SpecTarget } from "./types/openspec";
 import type { WorkflowTier } from "./types/workflow";
@@ -47,7 +49,7 @@ const sidebarResize = useResizable({
 const sidePanelWidth = sidebarResize.size;
 const sidePanelCollapsed = ref(false);
 const effectiveSidePanelWidth = computed(() =>
-  sidePanelCollapsed.value ? 44 : sidePanelWidth.value,
+  sidePanelCollapsed.value ? 0 : sidePanelWidth.value,
 );
 const showSettings = ref(false);
 const showConsole = ref(false);
@@ -65,6 +67,11 @@ const showProjectDialog = ref(false);
 const manualPath = ref("");
 
 const isChatRoute = () => route.name === "chat";
+
+const { showDiffPanel, activeView, setActiveView } = useDiffPanel();
+const diffColumnVisible = computed(
+  () => isChatRoute() && !specDetailTarget.value && !activeFilePath.value,
+);
 
 // Floating window system (kept for tool-call streaming windows)
 const fw = useFloatingWindows();
@@ -395,8 +402,10 @@ function submitManualPath() {
     <TopBar
       :console-active="showConsole"
       :settings-active="showSettings"
+      :sidebar-collapsed="sidePanelCollapsed"
       @toggle-settings="showSettings = !showSettings"
       @toggle-console="toggleConsole"
+      @toggle-sidebar="sidePanelCollapsed = !sidePanelCollapsed"
     />
 
     <!-- Main Content -->
@@ -434,43 +443,60 @@ function submitManualPath() {
       </div>
 
       <!-- Center Content: chat OR file viewer (mutually exclusive) -->
-      <main class="flex-1 flex flex-col overflow-hidden min-w-0">
-        <template v-if="specDetailTarget">
-          <SpecDetailView
-            :target="specDetailTarget"
-            @close="specDetailTarget = null"
-            @navigate="onOpenSpecDetail"
-            @open-workflow="onOpenWorkflow"
-          />
-        </template>
-        <template v-else-if="activeFilePath">
-          <!-- File tabs strip + content -->
-          <div class="flex items-center gap-0.5 border-b border-surface-800 bg-surface-900 px-1">
-            <button
-              v-for="p in openFiles"
-              :key="p"
-              type="button"
-              class="group relative flex max-w-[200px] items-center gap-1.5 truncate px-3 py-2 text-xs transition-colors"
-              :class="
-                p === activeFilePath
-                  ? 'bg-surface-950 text-surface-100'
-                  : 'text-surface-400 hover:bg-surface-800/50 hover:text-surface-200'
-              "
-              :title="p"
-              @click="onSelectFile(p)"
-            >
-              <span
-                class="absolute left-0 top-0 h-0.5 w-full"
-                :class="p === activeFilePath ? 'bg-accent-cyan' : 'bg-transparent'"
-              />
-              <span class="truncate">{{ p.split(/[\\/]/).pop() || p }}</span>
-              <span
-                class="rounded p-0.5 text-surface-500 opacity-0 transition-opacity hover:bg-surface-700 hover:text-surface-100 group-hover:opacity-100"
-                :class="{ '!opacity-100': p === activeFilePath }"
-                title="??"
-                @click.stop="onCloseFile(p)"
+      <main class="flex-1 flex overflow-hidden min-w-0">
+        <div class="flex-1 flex flex-col overflow-hidden min-w-0">
+          <template v-if="specDetailTarget">
+            <SpecDetailView
+              :target="specDetailTarget"
+              @close="specDetailTarget = null"
+              @navigate="onOpenSpecDetail"
+              @open-workflow="onOpenWorkflow"
+            />
+          </template>
+          <template v-else-if="activeFilePath">
+            <!-- File tabs strip + content -->
+            <div class="flex items-center gap-0.5 border-b border-surface-800 bg-surface-900 px-1">
+              <button
+                v-for="p in openFiles"
+                :key="p"
+                type="button"
+                class="group relative flex max-w-[200px] items-center gap-1.5 truncate px-3 py-2 text-xs transition-colors"
+                :class="
+                  p === activeFilePath
+                    ? 'bg-surface-950 text-surface-100'
+                    : 'text-surface-400 hover:bg-surface-800/50 hover:text-surface-200'
+                "
+                :title="p"
+                @click="onSelectFile(p)"
               >
-                <svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <span
+                  class="absolute left-0 top-0 h-0.5 w-full"
+                  :class="p === activeFilePath ? 'bg-accent-cyan' : 'bg-transparent'"
+                />
+                <span class="truncate">{{ p.split(/[\\/]/).pop() || p }}</span>
+                <span
+                  class="rounded p-0.5 text-surface-500 opacity-0 transition-opacity hover:bg-surface-700 hover:text-surface-100 group-hover:opacity-100"
+                  :class="{ '!opacity-100': p === activeFilePath }"
+                  title="??"
+                  @click.stop="onCloseFile(p)"
+                >
+                  <svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2"
+                      d="M6 18L18 6M6 6l12 12"
+                    />
+                  </svg>
+                </span>
+              </button>
+              <button
+                type="button"
+                class="ml-auto rounded px-2 py-1 text-xs text-surface-500 transition-colors hover:bg-surface-800 hover:text-surface-200"
+                title="??????"
+                @click="onCloseAllFiles"
+              >
+                <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path
                     stroke-linecap="round"
                     stroke-linejoin="round"
@@ -478,46 +504,110 @@ function submitManualPath() {
                     d="M6 18L18 6M6 6l12 12"
                   />
                 </svg>
-              </span>
+              </button>
+            </div>
+            <div class="flex-1 overflow-hidden">
+              <FileViewer
+                :key="activeFilePath"
+                :path="activeFilePath"
+                :directory="project.state.directoryPath"
+              />
+            </div>
+          </template>
+          <template v-else>
+            <router-view v-slot="{ Component }">
+              <keep-alive>
+                <component :is="Component" @navigate-session="onSelectSession" />
+              </keep-alive>
+            </router-view>
+            <InputPanel v-if="isChatRoute()" />
+          </template>
+        </div>
+        <!-- View sidebar (right column, full main height) -->
+        <div
+          class="diff-column"
+          :class="{ 'diff-column-hidden': !showDiffPanel || !diffColumnVisible }"
+        >
+          <!-- Selection screen: shown when no view is active -->
+          <div v-if="activeView === null" class="view-selector">
+            <button type="button" class="view-selector-btn" @click="setActiveView('diff')">
+              <svg
+                width="22"
+                height="22"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" />
+                <polyline points="14 2 14 8 20 8" />
+                <path d="m9 15 2 2 4-4" />
+              </svg>
+              <span>审查</span>
+            </button>
+            <button type="button" class="view-selector-btn" @click="setActiveView('console')">
+              <svg
+                width="22"
+                height="22"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <rect x="3" y="4" width="18" height="16" rx="2" />
+                <path d="M7 9l3 3-3 3" />
+                <line x1="13" y1="15" x2="17" y2="15" />
+              </svg>
+              <span>终端</span>
             </button>
             <button
               type="button"
-              class="ml-auto rounded px-2 py-1 text-xs text-surface-500 transition-colors hover:bg-surface-800 hover:text-surface-200"
-              title="??????"
-              @click="onCloseAllFiles"
+              class="view-selector-close"
+              title="关闭"
+              @click="showDiffPanel = false"
             >
-              <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M6 18L18 6M6 6l12 12"
-                />
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
               </svg>
             </button>
           </div>
-          <div class="flex-1 overflow-hidden">
-            <FileViewer
-              :key="activeFilePath"
-              :path="activeFilePath"
-              :directory="project.state.directoryPath"
+
+          <!-- View content -->
+          <template v-else>
+            <SessionDiffPanel
+              v-if="activeView === 'diff'"
+              :session-id="backend.selectedSessionId.value || ''"
+              :visible="diffColumnVisible && showDiffPanel && activeView === 'diff'"
+              @back="setActiveView(null)"
             />
-          </div>
-        </template>
-        <template v-else>
-          <router-view v-slot="{ Component }">
-            <keep-alive>
-              <component :is="Component" @navigate-session="onSelectSession" />
-            </keep-alive>
-          </router-view>
-          <InputPanel v-if="isChatRoute()" />
-        </template>
+            <ConsolePanel
+              v-if="activeView === 'console'"
+              :cwd="project.state.directoryPath"
+              fill
+              @minimize="setActiveView(null)"
+            />
+          </template>
+        </div>
       </main>
     </div>
 
-    <!-- Console Panel (toggleable, sits above the status bar) -->
+    <!-- Console Panel (bottom, hidden when sidebar console is active) -->
     <ConsolePanel
-      v-if="showConsole"
+      v-if="showConsole && !(showDiffPanel && activeView === 'console')"
       ref="consolePanelEl"
       :cwd="project.state.directoryPath"
       v-model:height="consoleHeight"
@@ -655,6 +745,93 @@ function submitManualPath() {
 </template>
 
 <style scoped>
+.diff-column {
+  width: clamp(440px, 36vw, 600px);
+  flex-shrink: 0;
+  border-left: 1px solid color-mix(in srgb, var(--color-surface-800, #1e293b) 60%, transparent);
+  overflow: hidden;
+  contain: layout paint;
+  transition:
+    width 0.2s ease,
+    opacity 0.2s ease;
+  display: flex;
+  flex-direction: column;
+}
+.diff-column-hidden {
+  width: 0;
+  opacity: 0;
+  border-left-width: 0;
+}
+
+.view-selector {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  position: relative;
+  background: color-mix(in srgb, var(--color-surface-950, #020617) 80%, transparent);
+}
+
+.view-selector-btn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 180px;
+  height: 46px;
+  padding: 0 18px;
+  border: 1px solid color-mix(in srgb, var(--color-surface-700, #334155) 50%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--color-surface-900, #0f172a) 60%, transparent);
+  color: var(--color-surface-400, #94a3b8);
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease,
+    color 0.15s ease,
+    transform 0.1s ease;
+}
+.view-selector-btn:hover {
+  border-color: color-mix(in srgb, var(--color-accent-cyan, #22d3ee) 40%, transparent);
+  background: color-mix(
+    in srgb,
+    var(--color-accent-cyan, #22d3ee) 8%,
+    var(--color-surface-900, #0f172a)
+  );
+  color: var(--color-accent-cyan, #22d3ee);
+}
+.view-selector-btn:active {
+  transform: scale(0.97);
+}
+.view-selector-btn span {
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.view-selector-close {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--color-surface-500, #64748b);
+  cursor: pointer;
+  transition:
+    background 0.12s ease,
+    color 0.12s ease;
+}
+.view-selector-close:hover {
+  background: color-mix(in srgb, var(--color-accent-rose, #f43f5e) 15%, transparent);
+  color: var(--color-accent-rose, #f43f5e);
+}
+
 .openspec-dialog-layer {
   position: fixed;
   inset: 0;

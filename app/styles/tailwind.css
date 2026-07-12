@@ -260,7 +260,7 @@ body.resize-active[data-resize="vertical"] {
 /* ── Chat layout: adaptive horizontal padding ───────────────────────────── */
 
 .chat-padding {
-  --chat-pad: 16px;
+  --chat-pad: 48px;
   padding-left: var(--chat-pad);
   padding-right: var(--chat-pad);
 }
@@ -271,13 +271,13 @@ body.resize-active[data-resize="vertical"] {
 
 @media (width >= 768px) {
   .chat-padding {
-    --chat-pad: 32px;
+    --chat-pad: 96px;
   }
 }
 
 @media (width >= 1024px) {
   .chat-padding {
-    --chat-pad: min(540px, calc((100% - 640px) / 2));
+    --chat-pad: clamp(96px, calc((100% - 560px) / 2), 320px);
   }
 }
 

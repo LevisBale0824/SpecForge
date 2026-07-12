@@ -3,6 +3,7 @@ import { computed, onMounted, onUnmounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { useBackend } from "../composables/useBackend";
 import { useUpdate } from "../composables/useUpdate";
+import { useDiffPanel } from "../composables/useDiffPanel";
 import {
   isElectron,
   onWindowMaximizeChange,
@@ -16,19 +17,35 @@ const { t } = useI18n();
 const backend = useBackend();
 const update = useUpdate();
 const inElectron = isElectron();
+const { showDiffPanel, toggleDiffPanel } = useDiffPanel();
 
 const props = withDefaults(
   defineProps<{
     consoleActive?: boolean;
     settingsActive?: boolean;
+    sidebarCollapsed?: boolean;
   }>(),
-  { consoleActive: false, settingsActive: false },
+  { consoleActive: false, settingsActive: false, sidebarCollapsed: false },
 );
 
 const emit = defineEmits<{
   "toggle-settings": [];
   "toggle-console": [];
+  "toggle-sidebar": [];
 }>();
+
+onMounted(() => {
+  if (!inElectron) return;
+  windowIsMaximized().then((v) => {
+    isMaximized.value = v;
+  });
+  unsubMaximize = onWindowMaximizeChange((v) => {
+    isMaximized.value = v;
+  });
+});
+onUnmounted(() => {
+  unsubMaximize?.();
+});
 
 // Show a subtle dot on the settings gear when an update is ready to install.
 const updateReady = computed(() => update.state.value.status === "downloaded");
@@ -103,8 +120,8 @@ onUnmounted(() => {
       <span class="text-sm font-semibold text-surface-200 flex-shrink-0">{{ t("app.title") }}</span>
     </div>
 
-    <!-- Right: Agent label + Settings + Window controls -->
-    <div class="flex items-center gap-1 flex-shrink-0">
+    <!-- Right: Agent label + 面板切换 + Settings + Window controls -->
+    <div class="flex items-center gap-3 flex-shrink-0">
       <span
         class="px-2 py-1 text-xs text-surface-400 flex items-center gap-1 titlebar-nodrag"
         :title="t('topbar.agentLabel')"
@@ -125,18 +142,53 @@ onUnmounted(() => {
       <button
         class="px-2 py-1 text-xs rounded transition-colors titlebar-nodrag"
         :class="
-          props.consoleActive
+          !props.sidebarCollapsed
             ? 'text-accent-cyan bg-accent-cyan/10'
             : 'text-surface-400 hover:text-surface-200 hover:bg-surface-800'
         "
-        :title="t('topbar.console')"
-        :aria-pressed="props.consoleActive"
-        @click="emit('toggle-console')"
+        :title="props.sidebarCollapsed ? '展开项目栏' : '收起项目栏'"
+        :aria-pressed="!props.sidebarCollapsed"
+        @click="emit('toggle-sidebar')"
       >
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <rect x="3" y="4" width="18" height="16" rx="2" stroke-width="2" />
-          <path d="M7 9l3 3-3 3" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
-          <line x1="13" y1="15" x2="17" y2="15" stroke-width="2" stroke-linecap="round" />
+        <svg
+          v-if="!props.sidebarCollapsed"
+          class="w-4 h-4"
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <rect x="3" y="3" width="18" height="18" rx="2" stroke-width="2" />
+          <line x1="9" y1="3" x2="9" y2="21" stroke-width="2" />
+        </svg>
+        <svg v-else class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <rect x="3" y="3" width="18" height="18" rx="2" stroke-width="2" />
+          <line x1="7" y1="3" x2="7" y2="21" stroke-width="2" />
+        </svg>
+      </button>
+      <button
+        class="px-2 py-1 text-xs rounded transition-colors titlebar-nodrag"
+        :class="
+          showDiffPanel
+            ? 'text-accent-cyan bg-accent-cyan/10'
+            : 'text-surface-400 hover:text-surface-200 hover:bg-surface-800'
+        "
+        :title="showDiffPanel ? '收起侧边栏 (Ctrl+Shift+D)' : '展开侧边栏 (Ctrl+Shift+D)'"
+        :aria-pressed="showDiffPanel"
+        @click="toggleDiffPanel"
+      >
+        <svg
+          v-if="showDiffPanel"
+          class="w-4 h-4"
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <rect x="3" y="3" width="18" height="18" rx="2" stroke-width="2" />
+          <line x1="15" y1="3" x2="15" y2="21" stroke-width="2" />
+        </svg>
+        <svg v-else class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <rect x="3" y="3" width="18" height="18" rx="2" stroke-width="2" />
+          <line x1="17" y1="3" x2="17" y2="21" stroke-width="2" />
         </svg>
       </button>
       <button

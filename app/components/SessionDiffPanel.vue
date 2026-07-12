@@ -1,18 +1,22 @@
 <script setup lang="ts">
-import { computed, inject, ref, watch } from "vue";
+import { computed, ref, watch } from "vue";
 import type { MessageDiffEntry } from "../types/message";
-import type { Ref } from "vue";
 import { useMessages } from "../composables/useMessages";
-import { extractEditDiffs } from "./ToolWindow/utils";
+import { useDiffPanel } from "../composables/useDiffPanel";
+import { extractEditDiffs, toolActivitySignature } from "./ToolWindow/utils";
+import { sideBySidePair } from "../utils/parseDiff";
 import DiffViewer from "./DiffViewer.vue";
 
 const props = defineProps<{
   sessionId: string;
+  visible?: boolean;
 }>();
 
-const showDiffPanel = inject<Ref<boolean>>("showDiffPanel")!;
-const toggleDiffPanel = inject<() => void>("toggleDiffPanel")!;
+const emit = defineEmits<{
+  back: [];
+}>();
 
+const { showDiffPanel } = useDiffPanel();
 const msgStore = useMessages();
 
 function countLines(patch: string, sign: string): number {
@@ -22,6 +26,28 @@ function countLines(patch: string, sign: string): number {
     if (line.startsWith(sign) && !line.startsWith(sign + sign)) count += 1;
   }
   return count;
+}
+
+function diffStats(d: MessageDiffEntry): { additions: number; deletions: number } {
+  if (d.additions != null && d.deletions != null) {
+    return { additions: d.additions, deletions: d.deletions };
+  }
+  if (d.diff && d.diff.trim()) {
+    return { additions: countLines(d.diff, "+"), deletions: countLines(d.diff, "-") };
+  }
+  const hasBefore = typeof d.before === "string";
+  const hasAfter = typeof d.after === "string";
+  if (hasBefore || hasAfter) {
+    const pairs = sideBySidePair(
+      hasBefore ? (d.before as string) : "",
+      hasAfter ? (d.after as string) : "",
+    );
+    return {
+      additions: pairs.filter((p) => p.kind === "added").length,
+      deletions: pairs.filter((p) => p.kind === "removed").length,
+    };
+  }
+  return { additions: 0, deletions: 0 };
 }
 
 // Aggregate file diffs from edit-family tool calls in the session. The
@@ -35,11 +61,22 @@ type FileGroup = {
 };
 
 const fileGroups = computed<FileGroup[]>(() => {
-  if (!showDiffPanel.value) return [];
+  if (!showDiffPanel.value || props.visible === false) return [];
   void msgStore.contentVersion.value;
   const sessionId = props.sessionId;
   if (!sessionId) return [];
 
+  const sig = toolActivitySignature(msgStore.list, msgStore.getParts, sessionId);
+  if (sig === _toolSig) return _cachedGroups;
+  _toolSig = sig;
+  _cachedGroups = computeFileGroups(sessionId);
+  return _cachedGroups;
+});
+
+let _toolSig = "";
+let _cachedGroups: FileGroup[] = [];
+
+function computeFileGroups(sessionId: string): FileGroup[] {
   const messages = msgStore.list().filter((m) => m.sessionID === sessionId);
   const byFile = new Map<string, MessageDiffEntry[]>();
 
@@ -64,13 +101,14 @@ const fileGroups = computed<FileGroup[]>(() => {
     let additions = 0;
     let deletions = 0;
     for (const d of entries) {
-      additions += d.additions ?? countLines(d.diff, "+");
-      deletions += d.deletions ?? countLines(d.diff, "-");
+      const stats = diffStats(d);
+      additions += stats.additions;
+      deletions += stats.deletions;
     }
     groups.push({ file, entries, additions, deletions });
   }
   return groups;
-});
+}
 
 const totalAdditions = computed(() => fileGroups.value.reduce((s, g) => s + g.additions, 0));
 const totalDeletions = computed(() => fileGroups.value.reduce((s, g) => s + g.deletions, 0));
@@ -78,13 +116,16 @@ const totalDeletions = computed(() => fileGroups.value.reduce((s, g) => s + g.de
 const expanded = ref<Set<string>>(new Set());
 
 watch(
-  () => fileGroups.value.map((g) => g.file),
-  (files) => {
+  () => fileGroups.value.map((g) => g.file).join("\n"),
+  (filesKey) => {
+    const files = filesKey ? filesKey.split("\n") : [];
     const next = new Set<string>();
     for (const f of files) {
       if (expanded.value.has(f)) next.add(f);
     }
-    if (next.size === 0 && files.length > 0) next.add(files[0]);
+    if (next.size === 0 && files.length > 0) {
+      for (const f of files) next.add(f);
+    }
     expanded.value = next;
   },
   { immediate: true },
@@ -103,6 +144,15 @@ function expandAll() {
 
 function collapseAll() {
   expanded.value = new Set();
+}
+
+const allExpanded = computed(
+  () => fileGroups.value.length > 0 && expanded.value.size >= fileGroups.value.length,
+);
+
+function toggleExpandAll() {
+  if (allExpanded.value) collapseAll();
+  else expandAll();
 }
 
 function basename(file: string): string {
@@ -142,10 +192,25 @@ function dirname(file: string): string {
           v-if="fileGroups.length > 1"
           type="button"
           class="sdp-expand-btn"
-          title="全部展开"
-          @click="expandAll"
+          :title="allExpanded ? '全部折叠' : '全部展开'"
+          @click="toggleExpandAll"
         >
           <svg
+            v-if="allExpanded"
+            width="13"
+            height="13"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <polyline points="17 11 12 6 7 11" />
+            <polyline points="17 18 12 13 7 18" />
+          </svg>
+          <svg
+            v-else
             width="13"
             height="13"
             viewBox="0 0 24 24"
@@ -159,28 +224,7 @@ function dirname(file: string): string {
             <polyline points="7 6 12 11 17 6" />
           </svg>
         </button>
-        <button
-          v-if="expanded.size > 0"
-          type="button"
-          class="sdp-expand-btn"
-          title="全部折叠"
-          @click="collapseAll"
-        >
-          <svg
-            width="13"
-            height="13"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          >
-            <polyline points="17 11 12 6 7 11" />
-            <polyline points="17 18 12 13 7 18" />
-          </svg>
-        </button>
-        <button type="button" class="sdp-close-btn" title="关闭" @click="toggleDiffPanel">
+        <button type="button" class="sdp-close-btn" title="返回" @click="emit('back')">
           <svg
             width="15"
             height="15"

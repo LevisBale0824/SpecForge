@@ -1,5 +1,33 @@
-import type { SessionInfo, ToolState } from "../../types/sse";
+import type { MessageInfo, MessagePart, SessionInfo, ToolState } from "../../types/sse";
 import type { MessageDiffEntry } from "../../types/message";
+
+const EDIT_TOOLS = new Set(["edit", "write", "multiedit", "apply_patch"]);
+
+// Changes only when edit-family tool parts are added/removed/status-changed,
+// never on text-token streaming. Lets callers skip re-aggregation (and
+// downstream LCS) when the diff data hasn't actually changed.
+export function toolActivitySignature(
+  list: () => MessageInfo[],
+  getParts: (id: string) => MessagePart[],
+  sessionId: string,
+): string {
+  if (!sessionId) return "";
+  const messages = list().filter((m) => m.sessionID === sessionId);
+  let count = 0;
+  const statuses: string[] = [];
+  for (const msg of messages) {
+    for (const part of getParts(msg.id)) {
+      if (part.type !== "tool") continue;
+      count++;
+      if (EDIT_TOOLS.has(part.tool)) {
+        // pending tools are excluded from fileGroups; running/completed are
+        // included — must distinguish so pending→running invalidates cache
+        statuses.push(part.state.status === "pending" ? "p" : "d");
+      }
+    }
+  }
+  return `${sessionId}:${messages.length}:${count}:${statuses.join("")}`;
+}
 
 export function extractCommand(input: Record<string, unknown> | undefined): string | undefined {
   const command = typeof input?.command === "string" ? input.command.trim() : "";

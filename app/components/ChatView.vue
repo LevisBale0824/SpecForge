@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
+import { computed, onActivated, onDeactivated, ref, watch } from "vue";
 import MessageContent from "./MessageContent.vue";
 import TokenBarChart from "./TokenBarChart.vue";
 import { stripSystemReminder, useMessages } from "../composables/useMessages";
 import { useAutoScroller, type ScrollMode } from "../composables/useAutoScroller";
 import { useDisplayNames } from "../composables/useDisplayNames";
 import { useBackend } from "../composables/useBackend";
+import { useDiffPanel } from "../composables/useDiffPanel";
 import { useI18n } from "vue-i18n";
 
 defineEmits<{
@@ -105,6 +106,17 @@ const segmentTotals = computed(() => {
   }
   return { input, output, reasoning, cache };
 });
+
+const { toggleDiffPanel } = useDiffPanel();
+
+function onDiffKeydown(e: KeyboardEvent) {
+  if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === "d") {
+    e.preventDefault();
+    toggleDiffPanel();
+  }
+}
+onActivated(() => window.addEventListener("keydown", onDiffKeydown));
+onDeactivated(() => window.removeEventListener("keydown", onDiffKeydown));
 
 const tokenPanelCollapsed = ref(true);
 
@@ -349,7 +361,7 @@ async function copyMessage(msgId: string) {
               class="mt-0.5 h-10 w-10 flex-shrink-0 rounded-full object-cover ring-1 ring-surface-700/50"
             />
 
-            <div class="group flex w-[70%] min-w-0 flex-col items-start">
+            <div class="group flex w-[80%] min-w-0 flex-col items-start">
               <div
                 class="msg-bubble min-w-0 w-full rounded-xl border border-black/5 bg-white/70 px-4 py-3 text-sm leading-relaxed text-zinc-800 shadow-sm backdrop-blur-md"
               >
@@ -406,7 +418,7 @@ async function copyMessage(msgId: string) {
           </template>
 
           <template v-else>
-            <div class="group flex max-w-[70%] min-w-0 flex-col items-end">
+            <div class="group flex max-w-[80%] min-w-0 flex-col items-end">
               <div
                 class="msg-bubble min-w-0 rounded-xl border border-sky-500/20 bg-sky-500/8 px-4 py-3 text-sm leading-relaxed text-zinc-800 shadow-sm backdrop-blur-md"
               >
@@ -521,7 +533,7 @@ async function copyMessage(msgId: string) {
 <style scoped>
 .jump-nav {
   position: absolute;
-  right: 80px;
+  right: 48px;
   bottom: 1rem;
   z-index: 10;
   display: flex;
@@ -530,12 +542,12 @@ async function copyMessage(msgId: string) {
 }
 @media (min-width: 768px) {
   .jump-nav {
-    right: 120px;
+    right: 96px;
   }
 }
 @media (min-width: 1024px) {
   .jump-nav {
-    right: min(540px, calc((100% - 640px) / 2));
+    right: clamp(96px, calc((100% - 560px) / 2), 320px);
   }
 }
 

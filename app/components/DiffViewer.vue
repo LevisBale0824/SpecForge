@@ -12,24 +12,18 @@ const props = defineProps<{
   diff: MessageDiffEntry;
 }>();
 
-// Resolve change pairs.
-//
-// Priority:
-//   1. Patch text (Myers/git diff) → use the hunk structure directly. This
-//      matches git's own diff decision instead of re-running LCS over a lossy
-//      reconstruction.
-//   2. Explicit before/after snapshots → fall back to LCS pairing.
-//   3. Empty array (no renderable content).
-const pairs = computed<SidePair[]>(() => {
-  const diff = props.diff;
+// Content-based cache: fileGroups creates new MessageDiffEntry objects on
+// every contentVersion bump, but the actual before/after/patch strings are
+// identical (tool inputs are set once when the call starts). Without this
+// cache, LCS O(m×n) runs on every token batch during streaming.
+let _diffContentKey = "";
+let _cachedPairs: SidePair[] = [];
 
-  // 1. Patch-first
+function resolvePairs(diff: MessageDiffEntry): SidePair[] {
   if (diff.diff && diff.diff.trim()) {
     const parsed = parseUnifiedDiff(diff.diff);
     if (parsed.hasHunks) return sideBySideFromPatch(diff.diff);
   }
-
-  // 2. Snapshot fallback
   const hasBefore = typeof diff.before === "string";
   const hasAfter = typeof diff.after === "string";
   if (hasBefore || hasAfter) {
@@ -38,8 +32,16 @@ const pairs = computed<SidePair[]>(() => {
       hasAfter ? (diff.after as string) : "",
     );
   }
-
   return [];
+}
+
+const pairs = computed<SidePair[]>(() => {
+  const diff = props.diff;
+  const contentKey = `${diff.diff}\0${diff.before ?? ""}\0${diff.after ?? ""}`;
+  if (contentKey === _diffContentKey) return _cachedPairs;
+  _diffContentKey = contentKey;
+  _cachedPairs = resolvePairs(diff);
+  return _cachedPairs;
 });
 
 // Count additions/deletions from the SAME pairs we render, not from backend-
