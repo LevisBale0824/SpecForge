@@ -5,6 +5,15 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，
 项目遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.2.1] - 2026-07-12
+
+### 修复 (Fixed)
+
+- 🧟 **实例协调器 PID 复用误判**：被系统回收的 PID（如复用给 `steamwebhelper.exe` 等无关程序）会被 `process.kill(pid, 0)` 误判为存活的 SpecForge 兄弟实例，导致最后一个实例退出时误认为「还有其他实例存活」而不清理后端进程。修复：启动时重新引入陈旧文件清理，且所有存活判定均用 `tasklist` / `ps` 全量快照交叉校验进程名，只有可执行文件名匹配的进程才视为兄弟实例；快照失败或文件损坏时保守放行，杜绝竞态。
+- 🔌 **后端服务无法正常停止**：`opencode serve` 以守护进程方式运行，spawn 包装器提前退出使真实 server 成为孤儿进程脱离进程树，`killProcessTree(proc.pid)` 命中的是已退出的包装器 PID。修复：`stopServer` 始终在进程树清理后回退到按端口杀进程，确保真正杀掉监听者。
+
+---
+
 ## [1.2.0] - 2026-07-12
 
 ### 新增 (Added)

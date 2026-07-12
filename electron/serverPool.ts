@@ -330,10 +330,12 @@ export function stopServer(kind: AgentKind = agentConfig.kind): void {
     if (entry.proc && !entry.proc.killed) {
       intentionallyKilled.add(entry.proc);
       killProcessTree(entry.proc);
-    } else {
-      // External/adopted server (no ChildProcess handle) — kill by port.
-      killPidHoldingPort(entry.port);
     }
+    // opencode serve daemonizes: the spawn wrapper exits early and the real
+    // server becomes an orphan outside the wrapper's tree, so
+    // killProcessTree(proc.pid) hits a dead PID. Always fall back to a
+    // port-based kill to reach the actual listener.
+    killPidHoldingPort(entry.port);
     serverPool.delete(kind);
     return;
   }
