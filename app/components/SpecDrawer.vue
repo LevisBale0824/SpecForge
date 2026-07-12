@@ -14,7 +14,12 @@ const route = useRoute();
 const props = defineProps<{
   open: boolean;
   specDetailTarget?: SpecTarget | null;
+  consolePanelHeight?: number;
 }>();
+
+const drawerBottom = computed(() =>
+  props.consolePanelHeight ? `${props.consolePanelHeight}px` : "0",
+);
 
 const emit = defineEmits<{
   close: [];
@@ -68,7 +73,7 @@ watch(
       <div v-if="open" class="spec-drawer-overlay" @click="emit('close')"></div>
     </Transition>
     <Transition name="spec-drawer-slide">
-      <aside v-if="open" class="spec-drawer">
+      <aside v-if="open" class="spec-drawer" :style="{ bottom: drawerBottom }">
         <header class="drawer-header">
           <div class="drawer-title-group">
             <svg

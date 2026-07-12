@@ -5,6 +5,55 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，
 项目遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.2.0] - 2026-07-12
+
+### 新增 (Added)
+
+- 🏗️ **多项目架构重构**：支持多个项目同时管理，项目切换与状态隔离，Spec 探索改为独立抽屉式面板，侧边栏释放更多空间
+- 📋 **会话级文件变更聚合面板**：新增 `SessionDiffPanel` 集中展示当前会话中所有受影响的文件变更，取代之前在 `MessageContent` 中分散展示工具变更的方式
+- 🗂️ **聊天布局紧凑化**：为抽屉式内容预留更多垂直空间，消息列表、输入区等布局优化
+
+### 改进 (Changed)
+
+- 🔧 **diff 面板改用工具调用聚合数据源**：从依赖 `activeDiff` 状态改为统一从消息工具调用提取 before/after，数据源更可靠
+- 🎯 **Spec 探索移至左下角**：从 TopBar 移至侧边栏底部，与工作流入口更接近，操作路径更短
+- 🎨 **Token 用量面板优化**：折叠态显示文字标签与彩色数值，打开会话默认折叠；统一色点/数值/标签/柱状图调色板至 -500 色阶，分段标签加粗放大
+
+### 清理 (Removed)
+
+- 🔥 移除 `MessageFileChanges` 组件及其 `activeDiff` 相关死代码
+
+---
+
+## [1.1.0] - 2026-07-10
+
+### 新增 (Added)
+
+- 📊 **Token 用量统计升级**：会话级分段堆叠柱状图 + 可折叠汇总面板，拆分 reasoning / input / output 三类用量可视化
+- 💭 **思考阶段动态展示 reasoning token 计数**：思考指示器下方实时显示推理 token 数量，明细移至指示器下方
+- 🎯 **Spec 探索增强**：支持删除活跃探索，新增主题化 ConfirmDialog，草稿与 active change 共存于 SidePanel
+- 🧭 **工作流 UI 全面国际化**：所有工作流阶段提示词、按钮、状态描述接入 i18n
+- 🔒 **执行契约强化**：新增 Intent Lock / Out of Scope / Requirements 三大约束，配合 stale 检测防止上下文偏移
+- 🔧 **侧边栏 rail 按钮支持再次点击折叠面板**
+- 📝 **Scenario 级覆盖率追溯**：验收记录细化到 scenario 级别
+- 🗑️ **会话硬删落地**：彻底删除会话及其关联数据
+
+### 改进 (Changed)
+
+- 🔄 **工作流重构**：取消 lean 档位，Plan 阶段合并进 Apply，统一产物与提示词体系
+- 🎨 **Archive 阶段 UI 收敛**：信息上移至主内容区，移除 Apply 阶段的 TDD 状态灯
+- 🧩 **Stage session 隔离增强**：防止 stage session 泄漏到 chat 侧栏列表
+
+### 修复 (Fixed)
+
+- 🔁 **流式输出期间隐藏 input/output token 明细**，避免显示 0 值
+- 🔄 **阶段切换后被后台刷新回跳到上一阶段**
+- 🐛 **Propose 阶段显式判定是否触及 capability 契约层**
+- 🧹 **用户消息气泡改用 justify-content 对齐右侧头像**，提升视觉一致性
+- 🔧 **工作流 session 假结束阻塞修复**与 escape hatch 边界处理
+
+---
+
 ## [1.0.0] - 2026-07-04
 
 ### 新增 (Added)

@@ -510,17 +510,17 @@ async function handleSend() {
 </script>
 
 <template>
-  <div class="relative bg-surface-950 px-[80px] py-4 md:px-[120px] lg:px-[540px]">
+  <div class="chat-padding relative bg-white py-4">
     <!-- Sub-agent session: replace the input area with a read-only banner.
          The composer (textarea + ModelPicker + AgentPicker + menus) is hidden
          entirely, because none of those controls make sense for a session the
          user can't write to. -->
     <div
       v-if="isChildSession"
-      class="w-full rounded-lg border border-surface-700 bg-surface-800/60 px-4 py-4 flex items-center gap-3"
+      class="w-full rounded-xl border border-black/5 bg-white/70 px-4 py-4 flex items-center gap-3 backdrop-blur-md"
     >
       <svg
-        class="w-5 h-5 shrink-0 text-surface-400"
+        class="w-5 h-5 shrink-0 text-zinc-500"
         fill="none"
         stroke="currentColor"
         viewBox="0 0 24 24"
@@ -533,10 +533,10 @@ async function handleSend() {
         />
       </svg>
       <div class="flex-1 min-w-0">
-        <p class="text-sm font-medium text-surface-200">
+        <p class="text-sm font-medium text-zinc-700">
           {{ t("chat.childSession.title") }}
         </p>
-        <p class="text-xs text-surface-500 mt-0.5">
+        <p class="text-xs text-zinc-400 mt-0.5">
           {{ parentExists ? t("chat.childSession.hint") : t("chat.childSession.orphanHint") }}
         </p>
       </div>
@@ -559,12 +559,8 @@ async function handleSend() {
 
     <template v-else>
       <div
-        class="input-composer relative flex flex-col w-full rounded-xl border bg-surface-800/60 transition-colors"
-        :class="
-          isDragOver
-            ? 'border-accent-cyan bg-surface-800/80'
-            : 'border-surface-700/60 focus-within:border-surface-600'
-        "
+        class="input-composer relative flex flex-col w-full rounded-2xl border border-black/5 bg-white/70 shadow-sm backdrop-blur-xl transition-colors"
+        :class="isDragOver ? 'border-sky-500/40 bg-sky-50/60' : 'focus-within:border-sky-500/30'"
         @dragenter="onDragEnter"
         @dragover="onDragOver"
         @dragleave="onDragLeave"
@@ -579,19 +575,19 @@ async function handleSend() {
           v-model="inputText"
           :placeholder="t('chat.placeholder')"
           rows="2"
-          class="flex-1 resize-none bg-transparent border-0 px-4 py-2 text-base text-surface-100 placeholder:text-surface-500 focus:outline-none"
+          class="flex-1 resize-none bg-transparent border-0 px-4 py-2 text-base text-zinc-800 placeholder:text-zinc-400 focus:outline-none"
           @keydown="handleKeydown"
           @input="handleInput"
         />
         <div class="flex items-center justify-between px-3 pb-2">
-          <span class="text-[10px] text-surface-500 select-none pl-1"
+          <span class="text-[10px] text-zinc-400 select-none pl-1"
             >Enter 发送 · Shift+Enter 换行</span
           >
           <div class="flex items-center gap-1.5">
             <button
               v-if="!backend.isBusy.value && !backend.isSending.value"
               :disabled="!inputText.trim()"
-              class="flex items-center justify-center w-8 h-8 rounded-lg bg-accent-cyan/15 text-accent-cyan hover:bg-accent-cyan/25 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              class="flex items-center justify-center w-8 h-8 rounded-lg bg-sky-500/15 text-sky-600 hover:bg-sky-500/25 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
               :title="t('chat.send')"
               @click="handleSend"
             >
@@ -606,7 +602,7 @@ async function handleSend() {
             </button>
             <button
               v-else
-              class="flex items-center justify-center w-8 h-8 rounded-lg bg-accent-rose/15 text-accent-rose hover:bg-accent-rose/25 transition-colors"
+              class="flex items-center justify-center w-8 h-8 rounded-lg bg-rose-500/15 text-rose-400 hover:bg-rose-500/25 transition-colors"
               :title="t('chat.abort')"
               @click="backend.abortSession()"
             >
@@ -626,7 +622,7 @@ async function handleSend() {
         </div>
         <div
           v-if="isDragOver"
-          class="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-xl border-2 border-dashed border-accent-cyan/60 bg-surface-900/80 backdrop-blur-sm"
+          class="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-xl border-2 border-dashed border-sky-500/60 bg-white/80 backdrop-blur-sm"
         >
           <div class="flex items-center gap-2 text-sm text-accent-cyan">
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

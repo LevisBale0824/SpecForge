@@ -48,27 +48,32 @@ export default {
     },
     intro: {
       kicker: "SpecForge",
-      title: "AI coding assistant with a visual interface",
-      sub: "Unifies chat, spec workflow, file browsing and diff in one desktop app — observable and traceable from idea to ship.",
+      title: "AI-assisted development workbench",
+      sub: "Unifies AI chat, spec workflow and project session management — observable and traceable from idea to ship.",
       capabilities: {
-        chat: {
-          title: "Chat",
-          desc: "Freeform collaboration with the Agent, context carries forward",
+        chat: { title: "AI Chat", desc: "Real-time collaboration with OpenCode / Zero Agent" },
+        workflow: {
+          title: "Spec Workflow",
+          desc: "A 4–7 step structured exploration scaled to change size",
         },
-        workflow: { title: "Spec Workflow", desc: "A 4–7 step explore flow scaled to change size" },
+        project: {
+          title: "Project Mgmt",
+          desc: "Multi-project, sessions auto-linked to directories",
+        },
+        agent: { title: "Dual Agent", desc: "OpenCode & Zero, hot-switch with one click" },
       },
       steps: {
-        title: "How to start",
+        title: "Quick start",
         items: [
-          "Pick a Code Agent (opencode or zero)",
-          "Open a local project folder",
-          "Start a session to chat, or enter the workflow from the Spec tab",
+          "Pick a Code Agent below (OpenCode or Zero)",
+          "Click [+] next to the project name to start a new session",
+          "Type your task in the chat — the Agent takes over",
         ],
       },
     },
   },
   chat: {
-    placeholder: "Type a message...",
+    placeholder: "Ask anything — Enter to send, Shift+Enter for newline...",
     send: "Send",
     abort: "Stop",
     thinking: "Thinking...",

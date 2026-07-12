@@ -256,3 +256,38 @@ body.resize-active[data-resize="vertical"] {
   color: var(--color-surface-100);
   font-weight: 600;
 }
+
+/* ── Chat layout: adaptive horizontal padding ───────────────────────────── */
+
+.chat-padding {
+  --chat-pad: 16px;
+  padding-left: var(--chat-pad);
+  padding-right: var(--chat-pad);
+}
+.chat-padding-offset {
+  margin-left: calc(-1 * var(--chat-pad));
+  margin-right: calc(-1 * var(--chat-pad));
+}
+
+@media (width >= 768px) {
+  .chat-padding {
+    --chat-pad: 32px;
+  }
+}
+
+@media (width >= 1024px) {
+  .chat-padding {
+    --chat-pad: min(540px, calc((100% - 640px) / 2));
+  }
+}
+
+/* Force all content inside message bubbles to respect container width */
+.msg-bubble,
+.msg-bubble * {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+.msg-bubble pre,
+.msg-bubble code {
+  white-space: pre-wrap !important;
+}

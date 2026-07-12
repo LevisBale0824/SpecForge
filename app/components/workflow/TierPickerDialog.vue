@@ -121,6 +121,7 @@ watch(
   align-items: center;
   justify-content: center;
   padding: 40px;
+  overflow: auto;
 }
 
 .tp-backdrop {

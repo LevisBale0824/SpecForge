@@ -106,7 +106,7 @@ const segmentTotals = computed(() => {
   return { input, output, reasoning, cache };
 });
 
-const tokenPanelCollapsed = ref(false);
+const tokenPanelCollapsed = ref(true);
 
 const containerEl = ref<HTMLElement>();
 const scrollMode = ref<ScrollMode>("follow");
@@ -189,145 +189,147 @@ async function copyMessage(msgId: string) {
 </script>
 
 <template>
-  <div class="relative flex min-h-0 flex-1">
+  <div class="relative flex min-h-0 flex-1 flex-col bg-white">
+    <!-- Token usage header (collapsible, pinned above the scroll area) -->
     <div
-      ref="containerEl"
-      class="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-[80px] pb-5 md:px-[120px] lg:px-[540px] [overscroll-behavior:contain] [overflow-anchor:none]"
+      class="chat-padding mb-3 flex-shrink-0 transition-[padding] duration-200"
+      :class="tokenPanelCollapsed ? 'py-1.5' : 'py-3'"
     >
-      <!-- Token usage sticky header (collapsible) -->
-      <div
-        class="sticky top-0 z-10 -mx-[80px] mb-3 bg-surface-950/95 px-[80px] backdrop-blur transition-[padding] duration-200 md:-mx-[120px] md:px-[120px] lg:-mx-[540px] lg:px-[540px]"
-        :class="tokenPanelCollapsed ? 'py-1.5' : 'py-3'"
+      <!-- Collapsed: single compact line -->
+      <button
+        v-if="tokenPanelCollapsed"
+        type="button"
+        class="flex w-full items-center justify-between"
+        @click="tokenPanelCollapsed = false"
       >
-        <!-- Collapsed: single compact line -->
-        <button
-          v-if="tokenPanelCollapsed"
-          type="button"
-          class="flex w-full items-center justify-between"
-          @click="tokenPanelCollapsed = false"
-        >
-          <div class="flex items-center gap-2">
-            <span class="font-mono text-sm font-bold tabular-nums text-surface-100">
+        <div class="flex items-center gap-1.5">
+          <span class="text-xs font-medium text-zinc-500">{{
+            t("chat.tokenUsage.sessionTotal")
+          }}</span>
+          <span class="font-mono text-sm font-bold tabular-nums text-zinc-800">
+            {{ sessionStats.totalTokens.toLocaleString() }}
+          </span>
+        </div>
+        <div class="flex items-center gap-3 font-mono text-[11px] tabular-nums">
+          <span class="flex items-center gap-1">
+            <span class="font-semibold text-sky-500">{{ t("chat.tokenUsage.input") }}</span>
+            <span class="seg-val seg-input-val">{{ segmentTotals.input.toLocaleString() }}</span>
+          </span>
+          <span class="flex items-center gap-1">
+            <span class="font-semibold text-emerald-500">{{ t("chat.tokenUsage.output") }}</span>
+            <span class="seg-val seg-output-val">{{ segmentTotals.output.toLocaleString() }}</span>
+          </span>
+          <span class="flex items-center gap-1">
+            <span class="font-semibold text-indigo-500">{{ t("chat.tokenUsage.reasoning") }}</span>
+            <span class="seg-val seg-reasoning-val">{{
+              segmentTotals.reasoning.toLocaleString()
+            }}</span>
+          </span>
+          <span class="flex items-center gap-1">
+            <span class="font-semibold text-zinc-500">{{ t("chat.tokenUsage.cache") }}</span>
+            <span class="seg-val seg-cache-val">{{ segmentTotals.cache.toLocaleString() }}</span>
+          </span>
+          <svg
+            class="text-zinc-400 transition-transform"
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <polyline points="9 18 15 12 9 6" />
+          </svg>
+        </div>
+      </button>
+
+      <!-- Expanded: full panel -->
+      <div v-else class="flex items-center gap-5">
+        <!-- Bar chart -->
+        <div class="min-w-0 flex-1">
+          <TokenBarChart :bars="sessionStats.bars" />
+        </div>
+
+        <!-- Divider -->
+        <div class="h-12 w-px flex-shrink-0 bg-zinc-200" />
+
+        <!-- Stats panel (right) -->
+        <div class="flex flex-shrink-0 flex-col items-end gap-1.5">
+          <!-- Row 1: total + collapse toggle -->
+          <div class="flex items-baseline gap-2">
+            <span class="text-xs font-medium text-zinc-400">{{
+              t("chat.tokenUsage.sessionTotal")
+            }}</span>
+            <span class="font-mono text-xl font-bold leading-none tabular-nums text-zinc-900">
               {{ sessionStats.totalTokens.toLocaleString() }}
             </span>
-            <span class="text-[10px] text-surface-600">{{ t("chat.tokenUsage.tokens") }}</span>
-          </div>
-          <div class="flex items-center gap-3 font-mono text-[10px] tabular-nums text-surface-600">
-            <span class="flex items-center gap-1">
-              <span class="seg-dot seg-input" />
-              {{ segmentTotals.input.toLocaleString() }}
-            </span>
-            <span class="flex items-center gap-1">
-              <span class="seg-dot seg-output" />
-              {{ segmentTotals.output.toLocaleString() }}
-            </span>
-            <span class="flex items-center gap-1">
-              <span class="seg-dot seg-reasoning" />
-              {{ segmentTotals.reasoning.toLocaleString() }}
-            </span>
-            <span class="flex items-center gap-1">
-              <span class="seg-dot seg-cache" />
-              {{ segmentTotals.cache.toLocaleString() }}
-            </span>
-            <svg
-              class="text-surface-600 transition-transform"
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
+            <span class="text-[10px] text-zinc-500">{{ t("chat.tokenUsage.tokens") }}</span>
+            <button
+              type="button"
+              class="ml-1 flex items-center text-zinc-500 transition-colors hover:text-zinc-600"
+              :title="t('chat.tokenUsage.collapse')"
+              @click="tokenPanelCollapsed = true"
             >
-              <polyline points="9 18 15 12 9 6" />
-            </svg>
-          </div>
-        </button>
-
-        <!-- Expanded: full panel -->
-        <div v-else class="flex items-center gap-5">
-          <!-- Bar chart -->
-          <div class="min-w-0 flex-1">
-            <TokenBarChart :bars="sessionStats.bars" />
-          </div>
-
-          <!-- Divider -->
-          <div class="h-12 w-px flex-shrink-0 bg-surface-800" />
-
-          <!-- Stats panel (right) -->
-          <div class="flex flex-shrink-0 flex-col items-end gap-1.5">
-            <!-- Row 1: total + collapse toggle -->
-            <div class="flex items-baseline gap-2">
-              <span class="text-xs font-medium text-surface-500">{{
-                t("chat.tokenUsage.sessionTotal")
-              }}</span>
-              <span class="font-mono text-xl font-bold leading-none tabular-nums text-surface-50">
-                {{ sessionStats.totalTokens.toLocaleString() }}
-              </span>
-              <span class="text-[10px] text-surface-600">{{ t("chat.tokenUsage.tokens") }}</span>
-              <button
-                type="button"
-                class="ml-1 flex items-center text-surface-600 transition-colors hover:text-surface-400"
-                :title="t('chat.tokenUsage.collapse')"
-                @click="tokenPanelCollapsed = true"
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
               >
-                <svg
-                  width="14"
-                  height="14"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                >
-                  <polyline points="6 9 12 15 18 9" />
-                </svg>
-              </button>
-            </div>
-            <!-- Row 2: input + output -->
-            <div class="flex items-center gap-4 font-mono text-xs tabular-nums leading-none">
-              <span class="flex items-center gap-1.5">
-                <span class="seg-dot seg-input" />
-                <span class="text-surface-500">{{ t("chat.tokenUsage.input") }}</span>
-                <span class="seg-val seg-input-val">{{
-                  segmentTotals.input.toLocaleString()
-                }}</span>
-              </span>
-              <span class="flex items-center gap-1.5">
-                <span class="seg-dot seg-output" />
-                <span class="text-surface-500">{{ t("chat.tokenUsage.output") }}</span>
-                <span class="seg-val seg-output-val">{{
-                  segmentTotals.output.toLocaleString()
-                }}</span>
-              </span>
-            </div>
-            <!-- Row 3: reasoning + cache -->
-            <div class="flex items-center gap-4 font-mono text-xs tabular-nums leading-none">
-              <span class="flex items-center gap-1.5">
-                <span class="seg-dot seg-reasoning" />
-                <span class="text-surface-500">{{ t("chat.tokenUsage.reasoning") }}</span>
-                <span class="seg-val seg-reasoning-val">{{
-                  segmentTotals.reasoning.toLocaleString()
-                }}</span>
-              </span>
-              <span class="flex items-center gap-1.5">
-                <span class="seg-dot seg-cache" />
-                <span class="text-surface-500">{{ t("chat.tokenUsage.cache") }}</span>
-                <span class="seg-val seg-cache-val">{{
-                  segmentTotals.cache.toLocaleString()
-                }}</span>
-              </span>
-            </div>
+                <polyline points="6 9 12 15 18 9" />
+              </svg>
+            </button>
+          </div>
+          <!-- Row 2: input + output -->
+          <div class="flex items-center gap-4 font-mono text-[13px] tabular-nums leading-none">
+            <span class="flex items-center gap-1.5">
+              <span class="seg-dot seg-input" />
+              <span class="font-semibold text-sky-500">{{ t("chat.tokenUsage.input") }}</span>
+              <span class="seg-val seg-input-val">{{ segmentTotals.input.toLocaleString() }}</span>
+            </span>
+            <span class="flex items-center gap-1.5">
+              <span class="seg-dot seg-output" />
+              <span class="font-semibold text-emerald-500">{{ t("chat.tokenUsage.output") }}</span>
+              <span class="seg-val seg-output-val">{{
+                segmentTotals.output.toLocaleString()
+              }}</span>
+            </span>
+          </div>
+          <!-- Row 3: reasoning + cache -->
+          <div class="flex items-center gap-4 font-mono text-[13px] tabular-nums leading-none">
+            <span class="flex items-center gap-1.5">
+              <span class="seg-dot seg-reasoning" />
+              <span class="font-semibold text-indigo-500">{{
+                t("chat.tokenUsage.reasoning")
+              }}</span>
+              <span class="seg-val seg-reasoning-val">{{
+                segmentTotals.reasoning.toLocaleString()
+              }}</span>
+            </span>
+            <span class="flex items-center gap-1.5">
+              <span class="seg-dot seg-cache" />
+              <span class="font-semibold text-zinc-500">{{ t("chat.tokenUsage.cache") }}</span>
+              <span class="seg-val seg-cache-val">{{ segmentTotals.cache.toLocaleString() }}</span>
+            </span>
           </div>
         </div>
       </div>
+    </div>
 
+    <div
+      ref="containerEl"
+      class="chat-padding min-h-0 flex-1 overflow-y-auto overflow-x-hidden bg-white pb-5 [overscroll-behavior:contain] [overflow-anchor:none]"
+    >
       <!-- Empty state -->
       <div
         v-if="allMessages.length === 0"
-        class="flex items-center justify-center h-full text-surface-600 text-sm"
+        class="flex items-center justify-center h-full text-slate-500 text-sm"
       >
         开始对话...
       </div>
@@ -338,29 +340,26 @@ async function copyMessage(msgId: string) {
           v-for="msg in allMessages"
           :key="msg.id"
           class="relative flex w-full items-start gap-2"
+          :class="msg.role === 'user' ? 'justify-end' : 'justify-start'"
         >
           <template v-if="msg.role === 'assistant'">
-            <!-- Avatar -->
             <img
               :src="agentAvatarSrc"
               alt="Agent"
               class="mt-0.5 h-10 w-10 flex-shrink-0 rounded-full object-cover ring-1 ring-surface-700/50"
             />
 
-            <div class="group flex min-w-0 max-w-[75%] flex-col items-start">
-              <!-- Bubble -->
+            <div class="group flex w-[70%] min-w-0 flex-col items-start">
               <div
-                class="min-w-[180px] rounded-lg bg-surface-800/80 px-3 py-2 text-sm leading-relaxed text-surface-200"
+                class="msg-bubble min-w-0 w-full rounded-xl border border-black/5 bg-white/70 px-4 py-3 text-sm leading-relaxed text-zinc-800 shadow-sm backdrop-blur-md"
               >
                 <div class="mb-0.5 flex items-center gap-2">
-                  <span class="text-[10px] font-semibold tracking-wider text-accent-emerald">
+                  <span class="text-[10px] font-semibold tracking-wider text-emerald-600">
                     {{ agentName }}
                   </span>
-                  <span
-                    v-if="formatMessageTime(msg.created)"
-                    class="text-[10px] text-surface-500"
-                    >{{ formatMessageTime(msg.created) }}</span
-                  >
+                  <span v-if="formatMessageTime(msg.created)" class="text-[10px] text-zinc-400">{{
+                    formatMessageTime(msg.created)
+                  }}</span>
                 </div>
                 <MessageContent
                   :message-id="msg.id"
@@ -370,7 +369,7 @@ async function copyMessage(msgId: string) {
               <button
                 v-if="messagePlainText(msg.id)"
                 type="button"
-                class="mt-1 inline-flex items-center gap-1 self-start text-[10px] text-surface-500 opacity-0 transition-opacity hover:text-surface-300 group-hover:opacity-100"
+                class="mt-1 inline-flex items-center gap-1 self-start text-[10px] text-zinc-400 opacity-0 transition-opacity hover:text-zinc-700 group-hover:opacity-100"
                 :title="copiedId === msg.id ? '已复制' : '复制'"
                 @click="copyMessage(msg.id)"
               >
@@ -404,36 +403,20 @@ async function copyMessage(msgId: string) {
                 <span>{{ copiedId === msg.id ? "已复制" : "复制" }}</span>
               </button>
             </div>
-            <!-- Drawer slot: reserved whitespace for future drawer-style content.
-                 flex-1 absorbs remaining width so the bubble never reflows
-                 when content is injected here. -->
-            <div
-              class="msg-drawer-slot min-w-0 flex-1 rounded-md transition-colors hover:bg-surface-900/40"
-              :data-message-id="msg.id"
-            ></div>
           </template>
 
           <template v-else>
-            <!-- Drawer slot: reserved whitespace for future drawer-style content.
-                 flex-1 absorbs remaining width so the bubble never reflows. -->
-            <div
-              class="msg-drawer-slot min-w-0 flex-1 rounded-md transition-colors hover:bg-surface-900/40"
-              :data-message-id="msg.id"
-            ></div>
-            <div class="group flex min-w-0 max-w-[75%] flex-col items-end">
-              <!-- Bubble -->
+            <div class="group flex max-w-[70%] min-w-0 flex-col items-end">
               <div
-                class="min-w-[180px] rounded-lg bg-accent-cyan/10 px-3 py-2 text-sm leading-relaxed text-surface-100"
+                class="msg-bubble min-w-0 rounded-xl border border-sky-500/20 bg-sky-500/8 px-4 py-3 text-sm leading-relaxed text-zinc-800 shadow-sm backdrop-blur-md"
               >
                 <div class="mb-0.5 flex items-center gap-2">
-                  <span class="text-[10px] font-semibold tracking-wider text-accent-cyan">
+                  <span class="text-[10px] font-semibold tracking-wider text-sky-600">
                     {{ userName }}
                   </span>
-                  <span
-                    v-if="formatMessageTime(msg.created)"
-                    class="text-[10px] text-surface-500"
-                    >{{ formatMessageTime(msg.created) }}</span
-                  >
+                  <span v-if="formatMessageTime(msg.created)" class="text-[10px] text-zinc-400">{{
+                    formatMessageTime(msg.created)
+                  }}</span>
                 </div>
                 <MessageContent
                   :message-id="msg.id"
@@ -443,7 +426,7 @@ async function copyMessage(msgId: string) {
               <button
                 v-if="messagePlainText(msg.id)"
                 type="button"
-                class="mt-1 inline-flex items-center gap-1 self-start text-[10px] text-surface-500 opacity-0 transition-opacity hover:text-surface-300 group-hover:opacity-100"
+                class="mt-1 inline-flex items-center gap-1 self-start text-[10px] text-zinc-400 opacity-0 transition-opacity hover:text-zinc-700 group-hover:opacity-100"
                 :title="copiedId === msg.id ? '已复制' : '复制'"
                 @click="copyMessage(msg.id)"
               >
@@ -478,7 +461,6 @@ async function copyMessage(msgId: string) {
               </button>
             </div>
 
-            <!-- Avatar -->
             <img
               :src="userAvatarSrc"
               alt="User"
@@ -487,56 +469,76 @@ async function copyMessage(msgId: string) {
           </template>
         </div>
       </div>
+    </div>
 
-      <div class="sticky bottom-4 ml-auto w-fit z-10 flex flex-col gap-1.5">
-        <button
-          v-if="!showResumeButton"
-          type="button"
-          class="inline-flex h-8 w-8 items-center justify-center rounded-full border border-surface-700 bg-surface-900/90 text-surface-300 shadow-lg backdrop-blur transition-colors hover:bg-surface-800"
-          title="Jump to top"
-          @click="jumpToTop"
+    <div class="jump-nav">
+      <button
+        v-if="!showResumeButton"
+        type="button"
+        class="inline-flex h-8 w-8 items-center justify-center rounded-full border border-zinc-200 bg-white/90 text-zinc-500 shadow-sm backdrop-blur transition-colors hover:bg-zinc-100"
+        title="Jump to top"
+        @click="jumpToTop"
+      >
+        <svg
+          width="14"
+          height="14"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
         >
-          <svg
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          >
-            <line x1="12" y1="19" x2="12" y2="5" />
-            <polyline points="5 12 12 5 19 12" />
-          </svg>
-        </button>
-        <button
-          v-if="showResumeButton"
-          type="button"
-          class="inline-flex h-8 w-8 items-center justify-center rounded-full border border-accent-cyan/50 bg-surface-900/90 text-accent-cyan shadow-lg backdrop-blur transition-colors hover:bg-accent-cyan/15"
-          title="Jump to latest"
-          @click="jumpToLatest"
+          <line x1="12" y1="19" x2="12" y2="5" />
+          <polyline points="5 12 12 5 19 12" />
+        </svg>
+      </button>
+      <button
+        v-if="showResumeButton"
+        type="button"
+        class="inline-flex h-8 w-8 items-center justify-center rounded-full border border-sky-500/30 bg-white/90 text-sky-500 shadow-sm backdrop-blur transition-colors hover:bg-sky-50"
+        title="Jump to latest"
+        @click="jumpToLatest"
+      >
+        <svg
+          width="14"
+          height="14"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
         >
-          <svg
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          >
-            <line x1="12" y1="5" x2="12" y2="19" />
-            <polyline points="19 12 12 19 5 12" />
-          </svg>
-        </button>
-      </div>
+          <line x1="12" y1="5" x2="12" y2="19" />
+          <polyline points="19 12 12 19 5 12" />
+        </svg>
+      </button>
     </div>
   </div>
 </template>
 
 <style scoped>
+.jump-nav {
+  position: absolute;
+  right: 80px;
+  bottom: 1rem;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+@media (min-width: 768px) {
+  .jump-nav {
+    right: 120px;
+  }
+}
+@media (min-width: 1024px) {
+  .jump-nav {
+    right: min(540px, calc((100% - 640px) / 2));
+  }
+}
+
 .seg-dot {
   display: inline-block;
   width: 8px;
@@ -545,42 +547,31 @@ async function copyMessage(msgId: string) {
   flex-shrink: 0;
 }
 .seg-dot.seg-output {
-  background: color-mix(in srgb, var(--color-accent-emerald, #34d399) 95%, transparent);
+  background: #10b981;
 }
 .seg-dot.seg-reasoning {
-  background: color-mix(in srgb, var(--color-accent-indigo, #818cf8) 80%, transparent);
+  background: #6366f1;
 }
 .seg-dot.seg-input {
-  background: color-mix(in srgb, var(--color-accent-cyan, #22d3ee) 65%, transparent);
+  background: #0ea5e9;
 }
 .seg-dot.seg-cache {
-  background: color-mix(in srgb, var(--color-surface-600, #52525b) 45%, transparent);
+  background: #71717a;
 }
+
 .seg-val {
   font-weight: 600;
 }
 .seg-output-val {
-  color: color-mix(
-    in srgb,
-    var(--color-accent-emerald, #34d399) 85%,
-    var(--color-surface-200, #e4e4e7)
-  );
+  color: #10b981;
 }
 .seg-reasoning-val {
-  color: color-mix(
-    in srgb,
-    var(--color-accent-indigo, #818cf8) 75%,
-    var(--color-surface-200, #e4e4e7)
-  );
+  color: #6366f1;
 }
 .seg-input-val {
-  color: color-mix(
-    in srgb,
-    var(--color-accent-cyan, #22d3ee) 70%,
-    var(--color-surface-200, #e4e4e7)
-  );
+  color: #0ea5e9;
 }
 .seg-cache-val {
-  color: var(--color-surface-400, #a1a1aa);
+  color: #71717a;
 }
 </style>

@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
+import { computed, inject, ref, watch } from "vue";
 import type { MessageDiffEntry } from "../types/message";
+import type { Ref } from "vue";
 import { useMessages } from "../composables/useMessages";
 import { extractEditDiffs } from "./ToolWindow/utils";
 import DiffViewer from "./DiffViewer.vue";
@@ -9,9 +10,8 @@ const props = defineProps<{
   sessionId: string;
 }>();
 
-const emit = defineEmits<{
-  close: [];
-}>();
+const showDiffPanel = inject<Ref<boolean>>("showDiffPanel")!;
+const toggleDiffPanel = inject<() => void>("toggleDiffPanel")!;
 
 const msgStore = useMessages();
 
@@ -35,6 +35,7 @@ type FileGroup = {
 };
 
 const fileGroups = computed<FileGroup[]>(() => {
+  if (!showDiffPanel.value) return [];
   void msgStore.contentVersion.value;
   const sessionId = props.sessionId;
   if (!sessionId) return [];
@@ -179,7 +180,7 @@ function dirname(file: string): string {
             <polyline points="17 18 12 13 7 18" />
           </svg>
         </button>
-        <button type="button" class="sdp-close-btn" title="关闭" @click="emit('close')">
+        <button type="button" class="sdp-close-btn" title="关闭" @click="toggleDiffPanel">
           <svg
             width="15"
             height="15"
@@ -252,9 +253,7 @@ function dirname(file: string): string {
 .session-diff-panel {
   display: flex;
   flex-direction: column;
-  width: 440px;
-  flex-shrink: 0;
-  border-left: 1px solid color-mix(in srgb, var(--color-surface-800, #1e293b) 80%, transparent);
+  height: 100%;
   background: color-mix(in srgb, var(--color-surface-950, #020617) 80%, transparent);
   overflow: hidden;
 }

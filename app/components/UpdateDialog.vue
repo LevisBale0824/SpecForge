@@ -269,6 +269,7 @@ function handleNotesClick(e: MouseEvent) {
   align-items: center;
   justify-content: center;
   padding: 2rem;
+  overflow: auto;
 }
 
 .ud-backdrop {

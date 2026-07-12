@@ -8,7 +8,7 @@ import { computeHiddenStageSessions } from "../utils/stageTitleEncoding";
 import type { SessionInfo, SessionStatusInfo } from "../types/sse";
 
 const { t } = useI18n();
-const { state: projectState, openedDirectories, switchProject, closeProject } = useProject();
+const { state: projectState, openedDirectories, closeProject } = useProject();
 
 const expandedProjects = ref<Record<string, boolean>>({});
 
@@ -43,6 +43,7 @@ const emit = defineEmits<{
   "delete-session": [sessionId: string];
   "abort-session": [sessionId: string];
   "new-session": [];
+  "show-home": [dirPath: string];
   "open-folder": [];
 }>();
 
@@ -107,7 +108,7 @@ const chatActiveSessionId = computed(() => {
           active: normalizeDir(projectState.directoryPath) === normalizeDir(dirPath),
         }"
       >
-        <button class="project-group-header" @click="switchProject(dirPath)">
+        <button class="project-group-header" @click="emit('show-home', dirPath)">
           <svg
             class="pg-chevron"
             viewBox="0 0 24 24"

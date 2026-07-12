@@ -40,7 +40,7 @@ const { t } = useI18n();
 const sidebarResize = useResizable({
   orientation: "horizontal",
   storageKey: "sidebar.width",
-  defaultSize: 300,
+  defaultSize: 260,
   min: 200,
   max: 600,
 });
@@ -295,6 +295,11 @@ function onOpenChat() {
   router.push({ name: "chat" });
 }
 
+function onShowHome(dirPath: string) {
+  project.switchProject(dirPath);
+  router.push({ name: "home" });
+}
+
 function onOpenWorkflow(changeId?: string, intro = false) {
   lastChatSessionId.value = backend.selectedSessionId.value;
   activeFilePath.value = null;
@@ -411,6 +416,7 @@ function submitManualPath() {
         @abort-session="onAbortSession"
         @new-session="onNewSession"
         @open-chat="onOpenChat"
+        @show-home="onShowHome"
         @open-folder="handleOpenFolder"
         @open-workflow="onOpenWorkflow"
         @open-spec-detail="onOpenSpecDetail"
@@ -587,6 +593,7 @@ function submitManualPath() {
       <button
         v-if="project.state.directoryPath"
         class="spec-fab"
+        :style="showConsole ? { bottom: `${56 + consoleHeight}px` } : {}"
         title="Spec 探索 (Ctrl+Shift+S)"
         @click="showSpecDrawer = true"
       >
@@ -599,6 +606,7 @@ function submitManualPath() {
     <SpecDrawer
       :open="showSpecDrawer"
       :spec-detail-target="specDetailTarget"
+      :console-panel-height="showConsole ? consoleHeight : 0"
       @close="showSpecDrawer = false"
       @open-workflow="onOpenWorkflow"
       @open-spec-detail="onOpenSpecDetail"
@@ -611,7 +619,7 @@ function submitManualPath() {
     <Teleport to="body">
       <div
         v-if="showProjectDialog"
-        class="fixed inset-0 z-[10000] flex items-center justify-center"
+        class="fixed inset-0 z-[10000] flex items-center justify-center overflow-auto"
       >
         <div class="absolute inset-0 bg-black/60" @click="showProjectDialog = false" />
         <div
@@ -655,6 +663,7 @@ function submitManualPath() {
   align-items: center;
   justify-content: center;
   padding: 34px;
+  overflow: auto;
 }
 
 .openspec-dialog-backdrop {
@@ -728,7 +737,7 @@ function submitManualPath() {
 .openspec-dialog-body {
   flex: 1;
   min-height: 0;
-  overflow: hidden;
+  overflow-y: auto;
 }
 
 .spec-fab {

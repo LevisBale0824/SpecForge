@@ -14,7 +14,7 @@ const agentOptions: Array<{ kind: BackendKind; labelKey: string }> = [
   { kind: "zero", labelKey: "welcome.agent.zero" },
 ];
 
-const capabilityKeys = ["chat", "workflow"] as const;
+const capabilityKeys = ["chat", "workflow", "project", "agent"] as const;
 
 async function chooseAgent(kind: BackendKind) {
   if (kind === backend.activeBackendKind.value || switching.value) return;
@@ -74,18 +74,7 @@ async function chooseAgent(kind: BackendKind) {
         </div>
       </div>
 
-      <!-- How to start -->
-      <div class="wc-steps">
-        <div class="wc-steps-title">{{ t("welcome.intro.steps.title") }}</div>
-        <ol class="wc-steps-list">
-          <li v-for="(item, i) in tm('welcome.intro.steps.items') as string[]" :key="i">
-            <span class="wc-step-num">{{ i + 1 }}</span>
-            <span class="wc-step-text">{{ item }}</span>
-          </li>
-        </ol>
-      </div>
-
-      <!-- Agent picker (compact) -->
+      <!-- Agent picker -->
       <div class="wc-agents">
         <span class="wc-agents-label">{{ t("welcome.chooseAgent") }}</span>
         <div class="wc-agents-row">
@@ -129,6 +118,17 @@ async function chooseAgent(kind: BackendKind) {
         <p v-if="backend.errorMessage.value" class="wc-agent-error">
           {{ backend.errorMessage.value }}
         </p>
+      </div>
+
+      <!-- Steps -->
+      <div class="wc-steps">
+        <div class="wc-steps-title">{{ t("welcome.intro.steps.title") }}</div>
+        <ol class="wc-steps-list">
+          <li v-for="(item, i) in tm('welcome.intro.steps.items') as string[]" :key="i">
+            <span class="wc-step-num">{{ i + 1 }}</span>
+            <span class="wc-step-text">{{ item }}</span>
+          </li>
+        </ol>
       </div>
     </div>
   </div>

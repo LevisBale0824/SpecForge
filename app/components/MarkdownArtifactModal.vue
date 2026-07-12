@@ -79,6 +79,7 @@ onUnmounted(() => {
   align-items: center;
   justify-content: center;
   padding: 24px;
+  overflow: auto;
 }
 
 .mam-backdrop {

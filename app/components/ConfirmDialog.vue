@@ -109,6 +109,7 @@ defineExpose({ confirm });
   align-items: center;
   justify-content: center;
   padding: 24px;
+  overflow: auto;
 }
 
 .cd-backdrop {
@@ -121,6 +122,7 @@ defineExpose({ confirm });
 .cd-dialog {
   position: relative;
   width: min(440px, 100%);
+  max-height: calc(100vh - 48px);
   display: flex;
   flex-direction: column;
   gap: 14px;

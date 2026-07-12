@@ -1510,9 +1510,26 @@ function createWindow() {
   }
 }
 
+// ── Single-instance lock ──────────────────────────────────────────────────
+
+const gotTheLock = app.requestSingleInstanceLock();
+if (gotTheLock) {
+  app.on("second-instance", () => {
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.focus();
+    }
+  });
+}
+
 // ── App lifecycle ──────────────────────────────────────────────────────────
 
 app.whenReady().then(async () => {
+  if (!gotTheLock) {
+    app.quit();
+    return;
+  }
+
   // AppImage 集成入口:./SpecForge.AppImage --install
   // 写入 ~/.local/share/applications/specforge.desktop 后立即退出。
   if (process.argv.includes("--install")) {
