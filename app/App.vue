@@ -681,7 +681,7 @@ function submitManualPath() {
     <!-- Spec Drawer FAB + Drawer -->
     <Teleport to="body">
       <button
-        v-if="project.state.directoryPath"
+        v-if="project.state.directoryPath && !sidePanelCollapsed"
         class="spec-fab"
         :style="showConsole ? { bottom: `${56 + consoleHeight}px` } : {}"
         title="Spec 探索 (Ctrl+Shift+S)"

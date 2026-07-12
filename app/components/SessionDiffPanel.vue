@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
+import type { FileDiff } from "../types/sse";
 import type { MessageDiffEntry } from "../types/message";
 import { useMessages } from "../composables/useMessages";
 import { useDiffPanel } from "../composables/useDiffPanel";
+import { useBackend } from "../composables/useBackend";
 import { extractEditDiffs, toolActivitySignature } from "./ToolWindow/utils";
 import { sideBySidePair } from "../utils/parseDiff";
 import DiffViewer from "./DiffViewer.vue";
@@ -18,6 +20,17 @@ const emit = defineEmits<{
 
 const { showDiffPanel } = useDiffPanel();
 const msgStore = useMessages();
+const backend = useBackend();
+
+// Refresh git diffs when panel opens, and on every focus/visibility change
+// the backend already schedules a refresh — we eagerly trigger one here.
+watch(
+  () => props.visible && showDiffPanel.value,
+  (active) => {
+    if (active) backend.scheduleWorkspaceDiffRefresh(0);
+  },
+  { immediate: true },
+);
 
 function countLines(patch: string, sign: string): number {
   if (!patch) return 0;
@@ -28,31 +41,18 @@ function countLines(patch: string, sign: string): number {
   return count;
 }
 
-function diffStats(d: MessageDiffEntry): { additions: number; deletions: number } {
-  if (d.additions != null && d.deletions != null) {
-    return { additions: d.additions, deletions: d.deletions };
-  }
-  if (d.diff && d.diff.trim()) {
-    return { additions: countLines(d.diff, "+"), deletions: countLines(d.diff, "-") };
-  }
-  const hasBefore = typeof d.before === "string";
-  const hasAfter = typeof d.after === "string";
-  if (hasBefore || hasAfter) {
-    const pairs = sideBySidePair(
-      hasBefore ? (d.before as string) : "",
-      hasAfter ? (d.after as string) : "",
-    );
-    return {
-      additions: pairs.filter((p) => p.kind === "added").length,
-      deletions: pairs.filter((p) => p.kind === "removed").length,
-    };
-  }
-  return { additions: 0, deletions: 0 };
+// Convert workspace FileDiff into the MessageDiffEntry shape the DiffViewer expects.
+function toMessageDiffEntry(d: FileDiff): MessageDiffEntry {
+  return {
+    file: d.file,
+    before: d.before,
+    after: d.after,
+    diff: d.patch,
+    additions: d.additions,
+    deletions: d.deletions,
+  };
 }
 
-// Aggregate file diffs from edit-family tool calls in the session. The
-// opencode /session/{id}/diff endpoint returns empty in practice, so we build
-// the session-level view directly from the tool inputs already in the store.
 type FileGroup = {
   file: string;
   entries: MessageDiffEntry[];
@@ -60,12 +60,26 @@ type FileGroup = {
   deletions: number;
 };
 
+// Build file groups from workspace diffs (git status / diff HEAD).
+// Falls back to tool-call diffs when git data is unavailable.
 const fileGroups = computed<FileGroup[]>(() => {
   if (!showDiffPanel.value || props.visible === false) return [];
-  void msgStore.contentVersion.value;
+
+  const wsDiffs = backend.workspaceDiffs.value as FileDiff[];
+  if (wsDiffs.length > 0) {
+    return wsDiffs.map((d) => ({
+      file: d.file,
+      entries: [toMessageDiffEntry(d)],
+      additions: d.additions,
+      deletions: d.deletions,
+    }));
+  }
+
+  // No git data — fall back to tool-call diffs from the session.
   const sessionId = props.sessionId;
   if (!sessionId) return [];
 
+  void msgStore.contentVersion.value;
   const sig = toolActivitySignature(msgStore.list, msgStore.getParts, sessionId);
   if (sig === _toolSig) return _cachedGroups;
   _toolSig = sig;
@@ -77,35 +91,46 @@ let _toolSig = "";
 let _cachedGroups: FileGroup[] = [];
 
 function computeFileGroups(sessionId: string): FileGroup[] {
-  const messages = msgStore.list().filter((m) => m.sessionID === sessionId);
   const byFile = new Map<string, MessageDiffEntry[]>();
-
-  for (const msg of messages) {
-    const parts = msgStore.getParts(msg.id);
-    for (const part of parts) {
+  for (const msg of msgStore.list().filter((m) => m.sessionID === sessionId)) {
+    for (const part of msgStore.getParts(msg.id)) {
       if (part.type !== "tool") continue;
       if (part.state.status === "pending") continue;
       const diffs = extractEditDiffs(part.tool, part.state.input);
       if (!diffs) continue;
       for (const d of diffs) {
-        const baseFile = d.file.replace(/#\d+$/, "");
-        const existing = byFile.get(baseFile);
+        const base = d.file.replace(/#\d+$/, "");
+        const existing = byFile.get(base);
         if (existing) existing.push(d);
-        else byFile.set(baseFile, [d]);
+        else byFile.set(base, [d]);
       }
     }
   }
-
   const groups: FileGroup[] = [];
   for (const [file, entries] of byFile) {
-    let additions = 0;
-    let deletions = 0;
+    let adds = 0;
+    let dels = 0;
     for (const d of entries) {
-      const stats = diffStats(d);
-      additions += stats.additions;
-      deletions += stats.deletions;
+      if (d.additions != null && d.deletions != null) {
+        adds += d.additions;
+        dels += d.deletions;
+      } else if (d.diff) {
+        adds += countLines(d.diff, "+");
+        dels += countLines(d.diff, "-");
+      } else {
+        const hasB = typeof d.before === "string";
+        const hasA = typeof d.after === "string";
+        if (hasB || hasA) {
+          const pairs = sideBySidePair(
+            hasB ? (d.before as string) : "",
+            hasA ? (d.after as string) : "",
+          );
+          adds += pairs.filter((p) => p.kind === "added").length;
+          dels += pairs.filter((p) => p.kind === "removed").length;
+        }
+      }
     }
-    groups.push({ file, entries, additions, deletions });
+    groups.push({ file, entries, additions: adds, deletions: dels });
   }
   return groups;
 }
