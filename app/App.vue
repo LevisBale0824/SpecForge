@@ -537,15 +537,20 @@ function submitManualPath() {
                 viewBox="0 0 24 24"
                 fill="none"
                 stroke="currentColor"
-                stroke-width="2"
+                stroke-width="1.8"
                 stroke-linecap="round"
                 stroke-linejoin="round"
               >
                 <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" />
                 <polyline points="14 2 14 8 20 8" />
-                <path d="m9 15 2 2 4-4" />
+                <line x1="9" y1="10" x2="15" y2="10" />
+                <line x1="12" y1="7" x2="12" y2="13" />
+                <line x1="9" y1="17" x2="15" y2="17" />
               </svg>
-              <span>审查</span>
+              <div class="view-selector-label">
+                <span class="view-selector-name">审查</span>
+                <span class="view-selector-desc">查看当前工作目录中的代码变更</span>
+              </div>
             </button>
             <button type="button" class="view-selector-btn" @click="setActiveView('console')">
               <svg
@@ -562,27 +567,10 @@ function submitManualPath() {
                 <path d="M7 9l3 3-3 3" />
                 <line x1="13" y1="15" x2="17" y2="15" />
               </svg>
-              <span>终端</span>
-            </button>
-            <button
-              type="button"
-              class="view-selector-close"
-              title="关闭"
-              @click="showDiffPanel = false"
-            >
-              <svg
-                width="14"
-                height="14"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              >
-                <line x1="18" y1="6" x2="6" y2="18" />
-                <line x1="6" y1="6" x2="18" y2="18" />
-              </svg>
+              <div class="view-selector-label">
+                <span class="view-selector-name">终端</span>
+                <span class="view-selector-desc">在项目目录中运行终端命令</span>
+              </div>
             </button>
           </div>
 
@@ -593,12 +581,17 @@ function submitManualPath() {
               :session-id="backend.selectedSessionId.value || ''"
               :visible="diffColumnVisible && showDiffPanel && activeView === 'diff'"
               @back="setActiveView(null)"
+              @close="showDiffPanel = false"
             />
             <ConsolePanel
               v-if="activeView === 'console'"
               :cwd="project.state.directoryPath"
               fill
               @minimize="setActiveView(null)"
+              @close="
+                showDiffPanel = false;
+                activeView = null;
+              "
             />
           </template>
         </div>
@@ -777,10 +770,9 @@ function submitManualPath() {
 .view-selector-btn {
   display: flex;
   align-items: center;
-  gap: 10px;
-  width: 180px;
-  height: 46px;
-  padding: 0 18px;
+  gap: 12px;
+  width: 280px;
+  padding: 16px 20px;
   border: 1px solid color-mix(in srgb, var(--color-surface-700, #334155) 50%, transparent);
   border-radius: 10px;
   background: color-mix(in srgb, var(--color-surface-900, #0f172a) 60%, transparent);
@@ -804,32 +796,20 @@ function submitManualPath() {
 .view-selector-btn:active {
   transform: scale(0.97);
 }
-.view-selector-btn span {
-  font-size: 11px;
-  font-weight: 500;
+.view-selector-label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  text-align: left;
 }
-
-.view-selector-close {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 26px;
-  height: 26px;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
+.view-selector-name {
+  font-size: 13px;
+  font-weight: 600;
+}
+.view-selector-desc {
+  font-size: 10px;
   color: var(--color-surface-500, #64748b);
-  cursor: pointer;
-  transition:
-    background 0.12s ease,
-    color 0.12s ease;
-}
-.view-selector-close:hover {
-  background: color-mix(in srgb, var(--color-accent-rose, #f43f5e) 15%, transparent);
-  color: var(--color-accent-rose, #f43f5e);
+  line-height: 1.3;
 }
 
 .openspec-dialog-layer {

@@ -16,6 +16,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   back: [];
+  close: [];
 }>();
 
 const { showDiffPanel } = useDiffPanel();
@@ -210,13 +211,17 @@ function dirname(file: string): string {
           viewBox="0 0 24 24"
           fill="none"
           stroke="currentColor"
-          stroke-width="2"
+          stroke-width="1.8"
           stroke-linecap="round"
           stroke-linejoin="round"
         >
-          <path d="M16 3h5v5M8 3H3v5M21 16v5h-5M3 16v5h5M10 7l4 10M14 7l-4 10" />
+          <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" />
+          <polyline points="14 2 14 8 20 8" />
+          <line x1="8" y1="10" x2="16" y2="10" />
+          <line x1="12" y1="6" x2="12" y2="14" />
+          <line x1="8" y1="17" x2="16" y2="17" />
         </svg>
-        <span class="sdp-title">文件变更</span>
+        <span class="sdp-title">审查</span>
         <span class="sdp-file-count">{{ fileGroups.length }}</span>
         <div class="sdp-totals">
           <span class="sdp-add">+{{ totalAdditions }}</span>
@@ -258,7 +263,7 @@ function dirname(file: string): string {
             <polyline points="7 6 12 11 17 6" />
           </svg>
         </button>
-        <button type="button" class="sdp-close-btn" title="返回" @click="emit('back')">
+        <button type="button" class="sdp-close-btn" title="关闭" @click="emit('close')">
           <svg
             width="15"
             height="15"
@@ -277,7 +282,7 @@ function dirname(file: string): string {
     </header>
 
     <div class="sdp-body">
-      <div v-if="fileGroups.length === 0" class="sdp-empty">当前会话暂无文件变更</div>
+      <div v-if="fileGroups.length === 0" class="sdp-empty">当前工作目录无变更</div>
       <template v-else>
         <div v-for="g in fileGroups" :key="g.file" class="sdp-file">
           <button
@@ -350,8 +355,8 @@ function dirname(file: string): string {
 }
 
 .sdp-icon {
-  width: 15px;
-  height: 15px;
+  width: 18px;
+  height: 18px;
   flex-shrink: 0;
   color: var(--color-surface-400, #94a3b8);
   stroke-width: 1.8;
