@@ -81,7 +81,7 @@ const IGNORED_DIRS = new Set([
 ]);
 
 const IGNORED_FILES = new Set([".DS_Store", "Thumbs.db", ".npmrc", ".gitkeep", ".keep"]);
-const IGNORED_FILE_SUFFIXES = [".log", ".min.js", ".min.css", ".map", ".tsbuildinfo"];
+const IGNORED_FILE_SUFFIXES = [".log", ".min.js", ".min.css", ".map", ".tsbuildinfo", ".class"];
 
 function isIgnoredFile(name: string): boolean {
   if (IGNORED_FILES.has(name)) return true;

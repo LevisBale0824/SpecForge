@@ -72,7 +72,7 @@ const WEB_IGNORED_DIRS = new Set([
 ]);
 
 const WEB_IGNORED_FILES = new Set([".DS_Store", "Thumbs.db", ".npmrc", ".gitkeep", ".keep"]);
-const WEB_IGNORED_FILE_SUFFIXES = [".log", ".min.js", ".min.css", ".map", ".tsbuildinfo"];
+const WEB_IGNORED_FILE_SUFFIXES = [".log", ".min.js", ".min.css", ".map", ".tsbuildinfo", ".class"];
 
 function isIgnoredFile(name: string): boolean {
   if (WEB_IGNORED_FILES.has(name)) return true;
