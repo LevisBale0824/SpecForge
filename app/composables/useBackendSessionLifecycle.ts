@@ -48,38 +48,46 @@ export function useBackendSessionLifecycle(options: SessionLifecycleOptions) {
     }
   }
 
+  // SessionScope drops SSE events for non-active sessions, so cached state
+  // goes stale while a session is backgrounded. Always reconcile with the
+  // server on activation; loadHistory is idempotent so it's a no-op when
+  // nothing changed.
+  async function refreshSessionFromServer(
+    sessionId: string,
+    opts?: {
+      clearBeforeLoad?: boolean;
+    },
+  ): Promise<void> {
+    try {
+      const adapter = getActiveBackendAdapter();
+      if (!adapter.listSessionMessages) return;
+      const messages = await adapter.listSessionMessages(sessionId, {
+        directory: options.activeDirectory.value || undefined,
+      });
+      if (!Array.isArray(messages)) return;
+      if (opts?.clearBeforeLoad) msgStore.reset();
+      msgStore.loadHistory(messages);
+    } catch (error) {
+      console.error("[SessionLifecycle] Failed to load session:", error);
+    }
+  }
+
   async function selectSession(sessionId: string) {
     if (!sessionId) return;
 
-    // Save current session state to cache
     const currentId = options.selectedSessionId.value;
     if (currentId && currentId !== sessionId) {
       msgStore.saveSessionState(currentId);
     }
 
-    // Try loading from cache first
     if (msgStore.tryLoadFromCache(sessionId)) {
       options.selectedSessionId.value = sessionId;
+      void refreshSessionFromServer(sessionId);
       return;
     }
 
-    // Load from backend
-    try {
-      const adapter = getActiveBackendAdapter();
-      options.selectedSessionId.value = sessionId;
-
-      if (adapter.listSessionMessages) {
-        const messages = await adapter.listSessionMessages(sessionId, {
-          directory: options.activeDirectory.value || undefined,
-        });
-        if (Array.isArray(messages)) {
-          msgStore.reset();
-          msgStore.loadHistory(messages);
-        }
-      }
-    } catch (error) {
-      console.error("[SessionLifecycle] Failed to load session:", error);
-    }
+    options.selectedSessionId.value = sessionId;
+    await refreshSessionFromServer(sessionId, { clearBeforeLoad: true });
   }
 
   async function abortSession(sessionId?: string) {
