@@ -48,7 +48,39 @@ const WEB_IGNORED_DIRS = new Set([
   ".cache",
   ".vscode",
   ".idea",
+  "build",
+  "out",
+  "bin",
+  "obj",
+  "target",
+  "coverage",
+  "tmp",
+  "temp",
+  ".gradle",
+  ".turbo",
+  ".parcel-cache",
+  ".vinxi",
+  ".svelte-kit",
+  ".angular",
+  ".astro",
+  ".docusaurus",
+  "__pycache__",
+  ".mypy_cache",
+  ".pytest_cache",
+  ".ruff_cache",
+  ".tsbuildinfo",
 ]);
+
+const WEB_IGNORED_FILES = new Set([".DS_Store", "Thumbs.db", ".npmrc", ".gitkeep", ".keep"]);
+const WEB_IGNORED_FILE_SUFFIXES = [".log", ".min.js", ".min.css", ".map", ".tsbuildinfo"];
+
+function isIgnoredFile(name: string): boolean {
+  if (WEB_IGNORED_FILES.has(name)) return true;
+  for (const suffix of WEB_IGNORED_FILE_SUFFIXES) {
+    if (name.endsWith(suffix)) return true;
+  }
+  return false;
+}
 
 const files = ref<string[]>([]);
 const loaded = ref(false);
@@ -74,7 +106,7 @@ async function walkHandle(
       // Trailing-slash entries mark directories for the @ menu (see walkElectron).
       out.push(`${childPath}/`);
       await walkHandle(child as FileSystemDirectoryHandle, childPath, depth + 1, out);
-    } else {
+    } else if (!isIgnoredFile(name)) {
       out.push(childPath);
     }
   }

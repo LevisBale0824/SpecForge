@@ -57,7 +57,39 @@ const IGNORED_DIRS = new Set([
   ".cache",
   ".vscode",
   ".idea",
+  "build",
+  "out",
+  "bin",
+  "obj",
+  "target",
+  "coverage",
+  "tmp",
+  "temp",
+  ".gradle",
+  ".turbo",
+  ".parcel-cache",
+  ".vinxi",
+  ".svelte-kit",
+  ".angular",
+  ".astro",
+  ".docusaurus",
+  "__pycache__",
+  ".mypy_cache",
+  ".pytest_cache",
+  ".ruff_cache",
+  ".tsbuildinfo",
 ]);
+
+const IGNORED_FILES = new Set([".DS_Store", "Thumbs.db", ".npmrc", ".gitkeep", ".keep"]);
+const IGNORED_FILE_SUFFIXES = [".log", ".min.js", ".min.css", ".map", ".tsbuildinfo"];
+
+function isIgnoredFile(name: string): boolean {
+  if (IGNORED_FILES.has(name)) return true;
+  for (const suffix of IGNORED_FILE_SUFFIXES) {
+    if (name.endsWith(suffix)) return true;
+  }
+  return false;
+}
 
 async function readDirectoryEntries(dirPath: string): Promise<DirEntry[]> {
   const entries = fs.readdirSync(dirPath, { withFileTypes: true });
@@ -1028,8 +1060,12 @@ function registerIpcHandlers() {
             } catch {
               isDir = false;
             }
-            out.push(isDir ? `${childRel}/` : childRel);
-          } else {
+            if (isDir) {
+              out.push(`${childRel}/`);
+            } else if (!isIgnoredFile(name)) {
+              out.push(childRel);
+            }
+          } else if (!isIgnoredFile(name)) {
             out.push(childRel);
           }
         }
