@@ -56,7 +56,7 @@ function toMessageDiffEntry(d: FileDiff): MessageDiffEntry {
     file: d.file,
     before: d.before,
     after: d.after,
-    diff: d.patch,
+    diff: d.patch ?? "",
     additions: d.additions,
     deletions: d.deletions,
   };
