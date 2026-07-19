@@ -78,10 +78,58 @@ const IGNORED_DIRS = new Set([
   ".pytest_cache",
   ".ruff_cache",
   ".tsbuildinfo",
+  "_build",
+  "DerivedData",
+  "Pods",
+  ".stack-work",
+  ".swiftpm",
+  ".dart_tool",
+  ".tox",
+  ".venv",
+  "venv",
+  ".terraform",
+  ".terragrunt-cache",
+  ".bundle",
+  ".sass-cache",
+  ".expo",
+  ".serverless",
 ]);
 
-const IGNORED_FILES = new Set([".DS_Store", "Thumbs.db", ".npmrc", ".gitkeep", ".keep"]);
-const IGNORED_FILE_SUFFIXES = [".log", ".min.js", ".min.css", ".map", ".tsbuildinfo", ".class"];
+const IGNORED_FILES = new Set([
+  ".DS_Store",
+  "Thumbs.db",
+  "desktop.ini",
+  "ehthumbs.db",
+  "ehthumbs_vista.db",
+  ".npmrc",
+  ".gitkeep",
+  ".keep",
+]);
+const IGNORED_FILE_SUFFIXES = [
+  ".log",
+  ".min.js",
+  ".min.css",
+  ".map",
+  ".tsbuildinfo",
+  ".class",
+  ".o",
+  ".obj",
+  ".so",
+  ".dll",
+  ".dylib",
+  ".a",
+  ".lib",
+  ".pyc",
+  ".pyo",
+  ".beam",
+  ".hi",
+  ".swp",
+  ".swo",
+  ".bak",
+  ".tmp",
+  ".user",
+  ".suo",
+];
 
 function isIgnoredFile(name: string): boolean {
   if (IGNORED_FILES.has(name)) return true;
